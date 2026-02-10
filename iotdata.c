@@ -435,7 +435,7 @@ const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
     return &IOTDATA_VARIANT_MAPS[0];
 }
 
-#else
+#elif !defined(IOTDATA_ENABLE_SELECTIVE)
 
 #define IOTDATA_VARIANT_MAPS_DEFAULT_COUNT 1
 

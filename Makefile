@@ -160,7 +160,17 @@ clean:
 
 # Example: encoder-only build for constrained targets
 minimal:
-	$(CC) $(CFLAGS) -DIOTDATA_ENCODE_ONLY -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT -c $(LIB_SRC) -o iotdata_minimal.o
+	@echo "--- Full library ---"
+	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_full.o
+	@size iotdata_full.o
+	@echo "--- Minimal encoder (battery + environment, integer-only) ---"
+	$(CC) $(CFLAGS) \
+		-DIOTDATA_ENCODE_ONLY \
+		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
+		-DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
+		-DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
+		-c $(LIB_SRC) -o iotdata_minimal.o
 	@echo "Minimal object size:"
 	@size iotdata_minimal.o
-	@rm -f iotdata_minimal.o
+	@objdump -t iotdata_minimal.o | grep ' \.data\| \.rodata' | sort -k5 -rn
+	@rm -f iotdata_full.o iotdata_minimal.o
