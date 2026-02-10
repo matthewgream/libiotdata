@@ -149,7 +149,7 @@ static int tests_failed = 0;
     } while (0)
 
 /* Helpers */
-static iotdata_enc_ctx_t enc;
+static iotdata_encoder_t enc;
 static uint8_t pkt[256];
 static size_t pkt_len;
 static iotdata_decoded_t dec;

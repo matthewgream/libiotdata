@@ -11,8 +11,8 @@
  *   NO_PRINT        Exclude iotdata_print / iotdata_print_to_string
  *   NO_DUMP         Exclude iotdata_dump / iotdata_dump_to_string
  *   NO_JSON         Exclude JSON support (no cJSON dependency)
- *   ENCODE_ONLY     Encoder only (no decode/print/dump/JSON)
- *   DECODE_ONLY     Decoder only (no encoder)
+ *   NO_DECODE     Encoder only (no decode/print/dump/JSON)
+ *   NO_ENCODE     Decoder only (no encoder)
  *   NO_FLOATING     Integer-only mode (int32_t scaled values)
  *
  * Compile (example, full variant):
@@ -33,10 +33,10 @@
  * -----------------------------------------------------------------------*/
 
 static const char *build_label(void) {
-#if defined(IOTDATA_ENCODE_ONLY)
-    return "ENCODE_ONLY";
-#elif defined(IOTDATA_DECODE_ONLY)
-    return "DECODE_ONLY";
+#if defined(IOTDATA_NO_DECODE)
+    return "NO_DECODE";
+#elif defined(IOTDATA_NO_ENCODE)
+    return "NO_ENCODE";
 #elif defined(IOTDATA_NO_FLOATING) && defined(IOTDATA_NO_JSON)
     return "NO_FLOATING_NO_JSON";
 #elif defined(IOTDATA_NO_FLOATING)
@@ -67,7 +67,7 @@ static int errors;
     } while (0)
 
 /* -------------------------------------------------------------------------
- * Pre-built packet for DECODE_ONLY
+ * Pre-built packet for NO_ENCODE
  *
  * We cannot encode when the encoder is excluded, so we embed a known-good
  * packet:  variant 0, station 1, sequence 1, pres0 = 0x21 (battery +
@@ -78,7 +78,7 @@ static int errors;
  * If the wire format changes this array must be regenerated.
  * -----------------------------------------------------------------------*/
 
-#if defined(IOTDATA_DECODE_ONLY)
+#if defined(IOTDATA_NO_ENCODE)
 static const uint8_t prebuilt_pkt[] = {
     /* Regenerate with: make test_version_FULL && ./test_version_FULL --dump */
     0x00, 0x00, 0x00, 0x00, 0x00 /* empty packet: var=0 sta=0 seq=0 */
@@ -87,15 +87,15 @@ static const size_t prebuilt_len = sizeof(prebuilt_pkt);
 #endif
 
 /* -------------------------------------------------------------------------
- * Encode a test packet (all modes except DECODE_ONLY)
+ * Encode a test packet (all modes except NO_ENCODE)
  * -----------------------------------------------------------------------*/
 
-#if !defined(IOTDATA_DECODE_ONLY)
+#if !defined(IOTDATA_NO_ENCODE)
 static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
-    iotdata_enc_ctx_t ctx;
+    iotdata_encoder_t enc;
     iotdata_status_t rc;
 
-    rc = iotdata_encode_begin(&ctx, buf, buf_size, 0, 1, 1);
+    rc = iotdata_encode_begin(&enc, buf, buf_size, 0, 1, 1);
     CHECK(rc == IOTDATA_OK, "encode_begin");
     if (rc != IOTDATA_OK)
         return -1;
@@ -104,91 +104,91 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
 
 #if defined(IOTDATA_NO_FLOATING)
     /* Integer mode: iotdata_float_t = int32_t (value × 100) */
-    rc = iotdata_encode_battery(&ctx, 75, true);
+    rc = iotdata_encode_battery(&enc, 75, true);
     CHECK(rc == IOTDATA_OK, "encode_battery");
 
-    rc = iotdata_encode_environment(&ctx, 2250, 1013, 65); /* 22.50 °C */
+    rc = iotdata_encode_environment(&enc, 2250, 1013, 65); /* 22.50 °C */
     CHECK(rc == IOTDATA_OK, "encode_environment");
 
-    rc = iotdata_encode_wind(&ctx, 550, 180, 800); /* 5.50 / 8.00 m/s */
+    rc = iotdata_encode_wind(&enc, 550, 180, 800); /* 5.50 / 8.00 m/s */
     CHECK(rc == IOTDATA_OK, "encode_wind");
 
-    rc = iotdata_encode_rain(&ctx, 5, 20); /* 5 mm/hr, 2.0 mm */
+    rc = iotdata_encode_rain(&enc, 5, 20); /* 5 mm/hr, 2.0 mm */
     CHECK(rc == IOTDATA_OK, "encode_rain");
 
-    rc = iotdata_encode_solar(&ctx, 500, 7);
+    rc = iotdata_encode_solar(&enc, 500, 7);
     CHECK(rc == IOTDATA_OK, "encode_solar");
 
-    rc = iotdata_encode_link(&ctx, -90, 50); /* 5.00 dB */
+    rc = iotdata_encode_link(&enc, -90, 50); /* 5.00 dB */
     CHECK(rc == IOTDATA_OK, "encode_link");
 
     /* --- pres1 fields --- */
 
-    rc = iotdata_encode_flags(&ctx, 0x42);
+    rc = iotdata_encode_flags(&enc, 0x42);
     CHECK(rc == IOTDATA_OK, "encode_flags");
 
-    rc = iotdata_encode_air_quality(&ctx, 75);
+    rc = iotdata_encode_air_quality(&enc, 75);
     CHECK(rc == IOTDATA_OK, "encode_air_quality");
 
-    rc = iotdata_encode_clouds(&ctx, 4);
+    rc = iotdata_encode_clouds(&enc, 4);
     CHECK(rc == IOTDATA_OK, "encode_clouds");
 
-    rc = iotdata_encode_radiation(&ctx, 100, 50); /* 0.50 µSv/h */
+    rc = iotdata_encode_radiation(&enc, 100, 50); /* 0.50 µSv/h */
     CHECK(rc == IOTDATA_OK, "encode_radiation");
 
-    rc = iotdata_encode_position(&ctx, 515072220, -1275000); /* × 1e7 */
+    rc = iotdata_encode_position(&enc, 515072220, -1275000); /* × 1e7 */
     CHECK(rc == IOTDATA_OK, "encode_position");
 
-    rc = iotdata_encode_datetime(&ctx, 86400);
+    rc = iotdata_encode_datetime(&enc, 86400);
     CHECK(rc == IOTDATA_OK, "encode_datetime");
 #else
     /* Float mode */
-    rc = iotdata_encode_battery(&ctx, 75, true);
+    rc = iotdata_encode_battery(&enc, 75, true);
     CHECK(rc == IOTDATA_OK, "encode_battery");
 
-    rc = iotdata_encode_environment(&ctx, 22.5f, 1013, 65);
+    rc = iotdata_encode_environment(&enc, 22.5f, 1013, 65);
     CHECK(rc == IOTDATA_OK, "encode_environment");
 
-    rc = iotdata_encode_wind(&ctx, 5.5f, 180, 8.0f);
+    rc = iotdata_encode_wind(&enc, 5.5f, 180, 8.0f);
     CHECK(rc == IOTDATA_OK, "encode_wind");
 
-    rc = iotdata_encode_rain(&ctx, 5, 20);
+    rc = iotdata_encode_rain(&enc, 5, 20);
     CHECK(rc == IOTDATA_OK, "encode_rain");
 
-    rc = iotdata_encode_solar(&ctx, 500, 7);
+    rc = iotdata_encode_solar(&enc, 500, 7);
     CHECK(rc == IOTDATA_OK, "encode_solar");
 
-    rc = iotdata_encode_link(&ctx, -90, 5.0f);
+    rc = iotdata_encode_link(&enc, -90, 5.0f);
     CHECK(rc == IOTDATA_OK, "encode_link");
 
     /* --- pres1 fields --- */
 
-    rc = iotdata_encode_flags(&ctx, 0x42);
+    rc = iotdata_encode_flags(&enc, 0x42);
     CHECK(rc == IOTDATA_OK, "encode_flags");
 
-    rc = iotdata_encode_air_quality(&ctx, 75);
+    rc = iotdata_encode_air_quality(&enc, 75);
     CHECK(rc == IOTDATA_OK, "encode_air_quality");
 
-    rc = iotdata_encode_clouds(&ctx, 4);
+    rc = iotdata_encode_clouds(&enc, 4);
     CHECK(rc == IOTDATA_OK, "encode_clouds");
 
-    rc = iotdata_encode_radiation(&ctx, 100, 0.50f);
+    rc = iotdata_encode_radiation(&enc, 100, 0.50f);
     CHECK(rc == IOTDATA_OK, "encode_radiation");
 
-    rc = iotdata_encode_position(&ctx, 51.5072220, -0.1275000);
+    rc = iotdata_encode_position(&enc, 51.5072220, -0.1275000);
     CHECK(rc == IOTDATA_OK, "encode_position");
 
-    rc = iotdata_encode_datetime(&ctx, 86400);
+    rc = iotdata_encode_datetime(&enc, 86400);
     CHECK(rc == IOTDATA_OK, "encode_datetime");
 #endif
 
-    rc = iotdata_encode_end(&ctx, out_len);
+    rc = iotdata_encode_end(&enc, out_len);
     CHECK(rc == IOTDATA_OK, "encode_end");
     CHECK(*out_len > 0, "encoded length > 0");
 
     return (rc == IOTDATA_OK) ? 0 : -1;
 }
-#endif /* !DECODE_ONLY */
+#endif /* !NO_ENCODE */
 
 /* -------------------------------------------------------------------------
  * Main
@@ -203,7 +203,7 @@ int main(void) {
 
     /* ---- Encode (or load prebuilt) ---- */
 
-#if defined(IOTDATA_DECODE_ONLY)
+#if defined(IOTDATA_NO_ENCODE)
     memcpy(buf, prebuilt_pkt, prebuilt_len);
     len = prebuilt_len;
 #else
@@ -215,7 +215,7 @@ int main(void) {
 
     /* ---- Decode ---- */
 
-#if !defined(IOTDATA_ENCODE_ONLY)
+#if !defined(IOTDATA_NO_DECODE)
     {
         iotdata_decoded_t decoded;
         iotdata_status_t rc;
@@ -224,7 +224,7 @@ int main(void) {
         rc = iotdata_decode(buf, len, &decoded);
         CHECK(rc == IOTDATA_OK, "decode");
         CHECK(decoded.variant == 0, "variant == 0");
-#if !defined(IOTDATA_DECODE_ONLY)
+#if !defined(IOTDATA_NO_ENCODE)
         CHECK(decoded.station_id == 1, "station_id == 1");
         CHECK(decoded.sequence == 1, "sequence == 1");
 #endif
@@ -233,7 +233,7 @@ int main(void) {
 
     /* ---- Print ---- */
 
-#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_ENCODE_ONLY)
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
     {
         char str[4096];
         iotdata_status_t rc;
@@ -246,7 +246,7 @@ int main(void) {
 
     /* ---- Dump ---- */
 
-#if !defined(IOTDATA_NO_DUMP) && !defined(IOTDATA_ENCODE_ONLY)
+#if !defined(IOTDATA_NO_DUMP) && !defined(IOTDATA_NO_DECODE)
     {
         char str[8192];
         iotdata_status_t rc;
@@ -259,7 +259,7 @@ int main(void) {
 
     /* ---- JSON round-trip ---- */
 
-#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_ENCODE_ONLY) && !defined(IOTDATA_DECODE_ONLY)
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE) && !defined(IOTDATA_NO_ENCODE)
     {
         char *json = NULL;
         iotdata_status_t rc;

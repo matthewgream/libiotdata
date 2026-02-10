@@ -89,7 +89,7 @@ static int tests_failed = 0;
     } while (0)
 
 /* Helpers */
-static iotdata_enc_ctx_t enc;
+static iotdata_encoder_t enc;
 static uint8_t pkt[256];
 static size_t pkt_len;
 static iotdata_decoded_t dec;
@@ -523,15 +523,15 @@ static void test_error_conditions(void) {
     ASSERT_ERR(iotdata_encode_battery(&enc, 60, true), IOTDATA_ERR_CTX_DUPLICATE_FIELD, "bat dup");
 
     /* Variant limits */
-    iotdata_enc_ctx_t ctx2;
-    ASSERT_ERR(iotdata_encode_begin(&ctx2, pkt, sizeof(pkt), 15, 1, 1), IOTDATA_ERR_HDR_VARIANT_RESERVED, "var 15");
-    ASSERT_ERR(iotdata_encode_begin(&ctx2, pkt, sizeof(pkt), 16, 1, 1), IOTDATA_ERR_HDR_VARIANT_HIGH, "var 16");
+    iotdata_encoder_t enc2;
+    ASSERT_ERR(iotdata_encode_begin(&enc2, pkt, sizeof(pkt), 15, 1, 1), IOTDATA_ERR_HDR_VARIANT_RESERVED, "var 15");
+    ASSERT_ERR(iotdata_encode_begin(&enc2, pkt, sizeof(pkt), 16, 1, 1), IOTDATA_ERR_HDR_VARIANT_HIGH, "var 16");
 
     /* Station ID too high */
-    ASSERT_ERR(iotdata_encode_begin(&ctx2, pkt, sizeof(pkt), 0, 5000, 1), IOTDATA_ERR_HDR_STATION_HIGH, "station high");
+    ASSERT_ERR(iotdata_encode_begin(&enc2, pkt, sizeof(pkt), 0, 5000, 1), IOTDATA_ERR_HDR_STATION_HIGH, "station high");
 
-    /* NULL ctx */
-    ASSERT_ERR(iotdata_encode_begin(NULL, pkt, sizeof(pkt), 0, 1, 1), IOTDATA_ERR_CTX_NULL, "null ctx");
+    /* NULL enc */
+    ASSERT_ERR(iotdata_encode_begin(NULL, pkt, sizeof(pkt), 0, 1, 1), IOTDATA_ERR_CTX_NULL, "null enc");
 
     PASS();
 }

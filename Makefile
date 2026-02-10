@@ -11,18 +11,26 @@
 #   clean         - Remove build artifacts
 #
 # Compile-time options (pass via EXTRA=):
-#   IOTDATA_VARIANT_MAPS_DEFAULT    - Auto-enable weather station elements
-#   IOTDATA_ENABLE_SELECTIVE       - Only compile explicitly enabled elements
-#   IOTDATA_NO_FLOATING_DOUBLES     - Use float instead of double for position
-#   IOTDATA_NO_FLOATING             - Integer-only mode (no float/double)
-#   IOTDATA_ENCODE_ONLY             - Exclude decoder, JSON, print, dump
-#   IOTDATA_DECODE_ONLY             - Exclude encoder
+#   IOTDATA_VARIANT_MAPS_DEFAULT   Default variant maps (weather station)
+#   IOTDATA_VARIANT_MAPS <sym>     Custom variant maps array symbol
+#   IOTDATA_VARIANT_MAPS_COUNT <n> Number of entries in custom maps
+#   IOTDATA_ENABLE_SELECTIVE       Only compile explicitly enabled elements
+#   IOTDATA_ENABLE_xxx             Enable individual field types
+#   IOTDATA_ENABLE_TLV             Enable TLV
+#   IOTDATA_NO_DECODE              Exclude decoder
+#   IOTDATA_NO_ENCODE              Exclude encoder
+#   IOTDATA_NO_PRINT               Exclude Print output support
+#   IOTDATA_NO_DUMP                Exclude Dump output support
+#   IOTDATA_NO_JSON                Exclude JSON support
+#   IOTDATA_NO_ERROR_STRINGS       Exclude error strings (iotdata_strerror)
+#   IOTDATA_NO_FLOATING_DOUBLES    Use float instead of double for position
+#   IOTDATA_NO_FLOATING            Integer-only mode (no float/double)
 #
 # Examples:
 #   make                            # Full build with all elements
 #   make test                       # Build and run both test suites
 #   make test-versions              # Build all compile-time variants
-#   make EXTRA=-DIOTDATA_ENCODE_ONLY  # Encoder-only build (no tests)
+#   make EXTRA=-DIOTDATA_NO_DECODE  # Encoder-only build (no tests)
 #   make minimal                    # Measure minimal encoder-only build
 
 CC=gcc
@@ -44,14 +52,15 @@ CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
 # CFLAGS_OPT=-Os
 CFLAGS_OPT=-O6
 CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT)
-CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
+# CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
+CFLAGS_NO_FLOATING_POINT=
 AR      = ar
 LDFLAGS =
 LIBS      = -lm -lcjson
 LIBS_NOJSON = -lm
 LIBS_NOJSON_NO_MATH =
 LIBS_NO_MATH=-lcjson
-EXTRA   = -DIOTDATA_VARIANT_MAPS_DEFAULT
+EXTRA   ?= -DIOTDATA_VARIANT_MAPS_DEFAULT
 
 LIB_SRC    = iotdata.c
 LIB_OBJ    = iotdata.o
@@ -71,8 +80,8 @@ VERSION_BINS = \
     test_version_NO_PRINT \
     test_version_NO_DUMP \
     test_version_NO_JSON \
-    test_version_ENCODE_ONLY \
-    test_version_DECODE_ONLY \
+    test_version_NO_DECODE \
+    test_version_NO_ENCODE \
     test_version_NO_FLOATING \
     test_version_NO_FLOATING_NO_JSON
 
@@ -122,11 +131,11 @@ test_version_NO_DUMP: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 test_version_NO_JSON: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_JSON \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS_NOJSON) -o $@
-test_version_ENCODE_ONLY: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
-	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_ENCODE_ONLY \
+test_version_NO_DECODE: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
+	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_DECODE \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-test_version_DECODE_ONLY: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
-	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_DECODE_ONLY \
+test_version_NO_ENCODE: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
+	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_ENCODE \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
 test_version_NO_FLOATING: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_FLOATING \
@@ -155,7 +164,7 @@ minimal:
 	@size iotdata_full.o
 	@echo "--- Minimal encoder (battery + environment, integer-only) ---"
 	$(CC) $(CFLAGS) \
-		-DIOTDATA_ENCODE_ONLY \
+		-DIOTDATA_NO_DECODE \
 		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
 		-DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
 		-DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \

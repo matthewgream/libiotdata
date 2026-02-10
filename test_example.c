@@ -301,28 +301,28 @@ static void encode_and_display(sensor_state_t *s, int full) {
     print_pre_encode(s, full);
 
     iotdata_status_t rc;
-    iotdata_enc_ctx_t ctx;
-    if ((rc = iotdata_encode_begin(&ctx, buf, sizeof(buf), 0, 42, s->sequence)) != IOTDATA_OK) {
+    iotdata_encoder_t enc;
+    if ((rc = iotdata_encode_begin(&enc, buf, sizeof(buf), 0, 42, s->sequence)) != IOTDATA_OK) {
         fprintf(stderr, "\n  encode_begin: %s\n", iotdata_strerror(rc));
         return;
     }
     /* pres0: always */
-    iotdata_encode_battery(&ctx, (uint8_t)lround(s->battery), s->charging);
-    iotdata_encode_link(&ctx, (int16_t)s->link_rssi, (float)s->link_snr);
-    iotdata_encode_environment(&ctx, (float)s->temperature, (uint16_t)s->pressure, (uint8_t)s->humidity);
-    iotdata_encode_wind(&ctx, (float)s->wind_speed, (uint16_t)s->wind_dir, (float)s->wind_gust);
-    iotdata_encode_rain(&ctx, (uint8_t)s->rain_rate, (uint8_t)(s->rain_size * 10.0));
-    iotdata_encode_solar(&ctx, (uint16_t)s->solar_irrad, (uint8_t)s->solar_uv);
+    iotdata_encode_battery(&enc, (uint8_t)lround(s->battery), s->charging);
+    iotdata_encode_link(&enc, (int16_t)s->link_rssi, (float)s->link_snr);
+    iotdata_encode_environment(&enc, (float)s->temperature, (uint16_t)s->pressure, (uint8_t)s->humidity);
+    iotdata_encode_wind(&enc, (float)s->wind_speed, (uint16_t)s->wind_dir, (float)s->wind_gust);
+    iotdata_encode_rain(&enc, (uint8_t)s->rain_rate, (uint8_t)(s->rain_size * 10.0));
+    iotdata_encode_solar(&enc, (uint16_t)s->solar_irrad, (uint8_t)s->solar_uv);
     /* pres1: every 5 minutes */
     if (full) {
-        iotdata_encode_air_quality(&ctx, (uint16_t)s->air_quality);
-        iotdata_encode_clouds(&ctx, (uint8_t)s->clouds);
-        iotdata_encode_radiation(&ctx, (uint16_t)s->rad_cpm, (float)s->rad_dose);
-        iotdata_encode_position(&ctx, s->pos_lat, s->pos_lon);
-        iotdata_encode_datetime(&ctx, seconds_from_year_start());
-        iotdata_encode_flags(&ctx, s->flags);
+        iotdata_encode_air_quality(&enc, (uint16_t)s->air_quality);
+        iotdata_encode_clouds(&enc, (uint8_t)s->clouds);
+        iotdata_encode_radiation(&enc, (uint16_t)s->rad_cpm, (float)s->rad_dose);
+        iotdata_encode_position(&enc, s->pos_lat, s->pos_lon);
+        iotdata_encode_datetime(&enc, seconds_from_year_start());
+        iotdata_encode_flags(&enc, s->flags);
     }
-    if ((rc = iotdata_encode_end(&ctx, &len)) != IOTDATA_OK) {
+    if ((rc = iotdata_encode_end(&enc, &len)) != IOTDATA_OK) {
         fprintf(stderr, "\n  encode_end: %s\n", iotdata_strerror(rc));
         return;
     }

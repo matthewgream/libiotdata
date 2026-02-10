@@ -1330,18 +1330,18 @@ packs lazily (in one pass, knowing the complete field set).
 #define IOTDATA_VARIANT_MAPS_DEFAULT
 #include "iotdata.h"
 
-iotdata_enc_ctx_t ctx;
+iotdata_encoder_t enc;
 uint8_t buf[64];
 size_t len;
 
-iotdata_encode_begin(&ctx, buf, sizeof(buf), 0, 42, seq++);
-iotdata_encode_battery(&ctx, 84, false);
-iotdata_encode_link(&ctx, -95, 8.5f);
-iotdata_encode_environment(&ctx, 21.5f, 1013, 45);
-iotdata_encode_wind(&ctx, 5.2f, 180.0f, 8.7f);
-iotdata_encode_rain(&ctx, 3, 15); // x10 units
-iotdata_encode_solar(&ctx, 850, 7);
-iotdata_encode_end(&ctx, &len);
+iotdata_encode_begin(&enc, buf, sizeof(buf), 0, 42, seq++);
+iotdata_encode_battery(&enc, 84, false);
+iotdata_encode_link(&enc, -95, 8.5f);
+iotdata_encode_environment(&enc, 21.5f, 1013, 45);
+iotdata_encode_wind(&enc, 5.2f, 180.0f, 8.7f);
+iotdata_encode_rain(&enc, 3, 15); // x10 units
+iotdata_encode_solar(&enc, 850, 7);
+iotdata_encode_end(&enc, &len);
 /* buf[0..len-1] is now a 15-byte packet */
 ```
 
@@ -1401,8 +1401,8 @@ In particular, avoidance of the TLV element will save considerable footprint.
 
 | Define                          | Effect |
 |---------------------------------|--------|
-| `IOTDATA_ENCODE_ONLY`           | Exclude decoder, JSON, print, dump functions |
-| `IOTDATA_DECODE_ONLY`           | Exclude encoder functions |
+| `IOTDATA_NO_DECODE`             | Exclude decoder, JSON, print, dump functions |
+| `IOTDATA_NO_ENCODE`             | Exclude encoder functions |
 | `IOTDATA_NO_PRINT`              | Exclude print functions |
 | `IOTDATA_NO_DUMP`               | Exclude dump functions |
 | `IOTDATA_NO_JSON`               | Exclude JSON functions |
@@ -1452,7 +1452,7 @@ gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototype
   84718     448    4096   89262   15cae iotdata_full.o
 --- Minimal encoder (battery + environment, integer-only) ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -O6 -fstack-protector-strong \
-        -DIOTDATA_ENCODE_ONLY \
+        -DIOTDATA_NO_DECODE \
         -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
         -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
         -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
@@ -1469,7 +1469,7 @@ gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototype
   25178     448    4096   29722    741a iotdata_full.o
 --- Minimal encoder (battery + environment, integer-only) ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -Os \
-        -DIOTDATA_ENCODE_ONLY \
+        -DIOTDATA_NO_DECODE \
         -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
         -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
         -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
@@ -1684,27 +1684,27 @@ demonstrates encoding a full weather station telemetry packet:
 /* Encode a full weather station packet (variant 0) */
 void encode_full_packet(uint8_t *buf, size_t buf_size, size_t *out_len)
 {
-    iotdata_enc_ctx_t ctx;
+    iotdata_encoder_t enc;
 
-    iotdata_encode_begin(&ctx, buf, buf_size, 0, 42, 50000);
+    iotdata_encode_begin(&enc, buf, buf_size, 0, 42, 50000);
 
     /* Pres0 fields — most common, smallest packet when only these */
-    iotdata_encode_battery(&ctx, 95, true);
-    iotdata_encode_link(&ctx, -76, 10.0f);
-    iotdata_encode_environment(&ctx, -2.75f, 1005, 95);
-    iotdata_encode_wind(&ctx, 12.0f, 270, 18.5f);
-    iotdata_encode_rain(&ctx, 3, 15); // x10 units
-    iotdata_encode_solar(&ctx, 450, 7);
+    iotdata_encode_battery(&enc, 95, true);
+    iotdata_encode_link(&enc, -76, 10.0f);
+    iotdata_encode_environment(&enc, -2.75f, 1005, 95);
+    iotdata_encode_wind(&enc, 12.0f, 270, 18.5f);
+    iotdata_encode_rain(&enc, 3, 15); // x10 units
+    iotdata_encode_solar(&enc, 450, 7);
 
     /* Pres1 fields — trigger extension byte */
-    iotdata_encode_cloud(&ctx, 6);
-    iotdata_encode_air_quality(&ctx, 75);
-    iotdata_encode_radiation(&ctx, 100, 0.50f);
-    iotdata_encode_position(&ctx, 59.334591, 18.063240);
-    iotdata_encode_datetime(&ctx, 3251120);
-    iotdata_encode_flags(&ctx, 0x42);
+    iotdata_encode_cloud(&enc, 6);
+    iotdata_encode_air_quality(&enc, 75);
+    iotdata_encode_radiation(&enc, 100, 0.50f);
+    iotdata_encode_position(&enc, 59.334591, 18.063240);
+    iotdata_encode_datetime(&enc, 3251120);
+    iotdata_encode_flags(&enc, 0x42);
 
-    iotdata_encode_end(&ctx, out_len);
+    iotdata_encode_end(&enc, out_len);
     /* Result: 32 bytes for all 12 fields */
 }
 ```
@@ -2015,7 +2015,7 @@ smaller due to pointer size):
 
 | Structure          | Size   | Purpose                                     |
 |--------------------|--------|---------------------------------------------|
-| `iotdata_enc_ctx_t`| 288 B  | Encoder context (all fields + TLV pointers) |
+| `iotdata_encoder_t`| 288 B  | Encoder context (all fields + TLV pointers) |
 | `iotdata_decoded_t`| 4200 B | Decoded packet (includes TLV data buffers)  |
 
 The encoder context (288 bytes) is dominated by the TLV pointer
@@ -2039,10 +2039,10 @@ most considerable level of savings if resource constrained.
 The current encoder uses a "store then pack" strategy:
 
 ```c
-iotdata_encode_begin(&ctx, buf, sizeof(buf), variant, station, seq);
-iotdata_encode_battery(&ctx, 84, false);    /* stores values */
-iotdata_encode_environment(&ctx, 21.5f, 1013, 45);
-iotdata_encode_end(&ctx, &out_len);         /* packs all at once */
+iotdata_encode_begin(&enc, buf, sizeof(buf), variant, station, seq);
+iotdata_encode_battery(&enc, 84, false);    /* stores values */
+iotdata_encode_environment(&enc, 21.5f, 1013, 45);
+iotdata_encode_end(&enc, &out_len);         /* packs all at once */
 ```
 
 **Advantages:**
@@ -2126,9 +2126,9 @@ static inline functions specifically to enable compile-time stripping:
 ```c
 #ifdef IOTDATA_ENABLE_SOLAR
 static inline void pack_solar(uint8_t *buf, size_t *bp,
-                               const iotdata_enc_ctx_t *ctx) {
-    bits_write(buf, bp, ctx->solar_irradiance, 10);
-    bits_write(buf, bp, ctx->solar_ultraviolet, 4);
+                              const iotdata_encoder_t *enc) {
+    bits_write(buf, bp, enc->solar_irradiance, 10);
+    bits_write(buf, bp, enc->solar_ultraviolet, 4);
 }
 static inline void unpack_solar(...) { ... }
 /* ...4 more functions... */

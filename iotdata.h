@@ -21,8 +21,8 @@
  *   IOTDATA_ENABLE_SELECTIVE       Only compile explicitly enabled elements
  *   IOTDATA_ENABLE_xxx             Enable individual field types
  *   IOTDATA_ENABLE_TLV             Enable TLV
- *   IOTDATA_ENCODE_ONLY            Exclude decoder/JSON/print/dump
- *   IOTDATA_DECODE_ONLY            Exclude encoder
+ *   IOTDATA_NO_DECODE              Exclude decoder
+ *   IOTDATA_NO_ENCODE              Exclude encoder
  *   IOTDATA_NO_PRINT               Exclude Print output support
  *   IOTDATA_NO_DUMP                Exclude Dump output support
  *   IOTDATA_NO_JSON                Exclude JSON support
@@ -435,7 +435,7 @@ typedef enum {
  * Encoder context
  * -------------------------------------------------------------------------*/
 
-#if !defined(IOTDATA_DECODE_ONLY)
+#if !defined(IOTDATA_NO_ENCODE)
 #define IOTDATA_MAGIC 0xDA7AB175
 typedef struct {
     uint32_t _magic;
@@ -536,14 +536,14 @@ typedef struct {
 
     size_t packed_bits;
     size_t packed_bytes;
-} iotdata_enc_ctx_t;
-#endif /* !IOTDATA_DECODE_ONLY */
+} iotdata_encoder_t;
+#endif /* !IOTDATA_NO_ENCODE */
 
 /* ---------------------------------------------------------------------------
  * Decoded packet (always has all fields — no element guards)
  * -------------------------------------------------------------------------*/
 
-#if !defined(IOTDATA_ENCODE_ONLY)
+#if !defined(IOTDATA_NO_DECODE)
 typedef struct {
     uint8_t variant;
     uint16_t station_id;
@@ -598,7 +598,7 @@ typedef struct {
     size_t total_bits;
     size_t total_bytes;
 } iotdata_decoded_t;
-#endif /* !IOTDATA_ENCODE_ONLY */
+#endif /* !IOTDATA_NO_DECODE */
 
 #if !defined(IOTDATA_NO_DUMP)
 typedef struct {
@@ -618,97 +618,97 @@ typedef struct {
     size_t total_bits;
     size_t total_bytes;
 } iotdata_dump_t;
-#endif /* !IOTDATA_DUMP_ONLY */
+#endif /* !IOTDATA_NO_DUMP */
 
 /* ---------------------------------------------------------------------------
  * Encoder
  * -------------------------------------------------------------------------*/
 
-#if !defined(IOTDATA_DECODE_ONLY)
-iotdata_status_t iotdata_encode_begin(iotdata_enc_ctx_t *ctx, uint8_t *buf, size_t buf_size, uint8_t variant, uint16_t station_id, uint16_t sequence);
-iotdata_status_t iotdata_encode_end(iotdata_enc_ctx_t *ctx, size_t *out_bytes);
+#if !defined(IOTDATA_NO_ENCODE)
+iotdata_status_t iotdata_encode_begin(iotdata_encoder_t *enc, uint8_t *buf, size_t buf_size, uint8_t variant, uint16_t station_id, uint16_t sequence);
+iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes);
 #ifdef IOTDATA_ENABLE_TLV
-iotdata_status_t iotdata_encode_tlv(iotdata_enc_ctx_t *ctx, uint8_t type, const uint8_t *data, uint8_t length);
-iotdata_status_t iotdata_encode_tlv_string(iotdata_enc_ctx_t *ctx, uint8_t type, const char *str);
+iotdata_status_t iotdata_encode_tlv(iotdata_encoder_t *enc, uint8_t type, const uint8_t *data, uint8_t length);
+iotdata_status_t iotdata_encode_tlv_string(iotdata_encoder_t *enc, uint8_t type, const char *str);
 #endif
 #ifdef IOTDATA_ENABLE_BATTERY
-iotdata_status_t iotdata_encode_battery(iotdata_enc_ctx_t *ctx, uint8_t level_percent, bool charging);
+iotdata_status_t iotdata_encode_battery(iotdata_encoder_t *enc, uint8_t level_percent, bool charging);
 #endif
 #ifdef IOTDATA_ENABLE_LINK
-iotdata_status_t iotdata_encode_link(iotdata_enc_ctx_t *ctx, int16_t rssi_dbm, iotdata_float_t snr_db);
+iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int16_t rssi_dbm, iotdata_float_t snr_db);
 #endif
 #ifdef IOTDATA_ENABLE_ENVIRONMENT
-iotdata_status_t iotdata_encode_environment(iotdata_enc_ctx_t *ctx, iotdata_float_t temp_c, uint16_t pressure_hpa, uint8_t humidity_pct);
+iotdata_status_t iotdata_encode_environment(iotdata_encoder_t *enc, iotdata_float_t temp_c, uint16_t pressure_hpa, uint8_t humidity_pct);
 #endif
 #ifdef IOTDATA_ENABLE_TEMPERATURE
-iotdata_status_t iotdata_encode_temperature(iotdata_enc_ctx_t *ctx, iotdata_float_t temperature_c);
+iotdata_status_t iotdata_encode_temperature(iotdata_encoder_t *enc, iotdata_float_t temperature_c);
 #endif
 #ifdef IOTDATA_ENABLE_PRESSURE
-iotdata_status_t iotdata_encode_pressure(iotdata_enc_ctx_t *ctx, uint16_t pressure_hpa);
+iotdata_status_t iotdata_encode_pressure(iotdata_encoder_t *enc, uint16_t pressure_hpa);
 #endif
 #ifdef IOTDATA_ENABLE_HUMIDITY
-iotdata_status_t iotdata_encode_humidity(iotdata_enc_ctx_t *ctx, uint8_t humidity_pct);
+iotdata_status_t iotdata_encode_humidity(iotdata_encoder_t *enc, uint8_t humidity_pct);
 #endif
 #ifdef IOTDATA_ENABLE_WIND
-iotdata_status_t iotdata_encode_wind(iotdata_enc_ctx_t *ctx, iotdata_float_t speed_ms, uint16_t direction_deg, iotdata_float_t gust_ms);
+iotdata_status_t iotdata_encode_wind(iotdata_encoder_t *enc, iotdata_float_t speed_ms, uint16_t direction_deg, iotdata_float_t gust_ms);
 #endif
 #ifdef IOTDATA_ENABLE_WIND_SPEED
-iotdata_status_t iotdata_encode_wind_speed(iotdata_enc_ctx_t *ctx, iotdata_float_t speed_ms);
+iotdata_status_t iotdata_encode_wind_speed(iotdata_encoder_t *enc, iotdata_float_t speed_ms);
 #endif
 #ifdef IOTDATA_ENABLE_WIND_DIRECTION
-iotdata_status_t iotdata_encode_wind_direction(iotdata_enc_ctx_t *ctx, uint16_t direction_deg);
+iotdata_status_t iotdata_encode_wind_direction(iotdata_encoder_t *enc, uint16_t direction_deg);
 #endif
 #ifdef IOTDATA_ENABLE_WIND_GUST
-iotdata_status_t iotdata_encode_wind_gust(iotdata_enc_ctx_t *ctx, iotdata_float_t gust_ms);
+iotdata_status_t iotdata_encode_wind_gust(iotdata_encoder_t *enc, iotdata_float_t gust_ms);
 #endif
 #ifdef IOTDATA_ENABLE_RAIN
-iotdata_status_t iotdata_encode_rain(iotdata_enc_ctx_t *ctx, uint8_t rate_mmhr, uint8_t size_mmd);
+iotdata_status_t iotdata_encode_rain(iotdata_encoder_t *enc, uint8_t rate_mmhr, uint8_t size_mmd);
 #endif
 #ifdef IOTDATA_ENABLE_RAIN_RATE
-iotdata_status_t iotdata_encode_rain_rate(iotdata_enc_ctx_t *ctx, uint8_t rate_mmhr);
+iotdata_status_t iotdata_encode_rain_rate(iotdata_encoder_t *enc, uint8_t rate_mmhr);
 #endif
 #ifdef IOTDATA_ENABLE_RAIN_SIZE
-iotdata_status_t iotdata_encode_rain_size(iotdata_enc_ctx_t *ctx, uint8_t size_mmd);
+iotdata_status_t iotdata_encode_rain_size(iotdata_encoder_t *enc, uint8_t size_mmd);
 #endif
 #ifdef IOTDATA_ENABLE_SOLAR
-iotdata_status_t iotdata_encode_solar(iotdata_enc_ctx_t *ctx, uint16_t irradiance_wm2, uint8_t ultraviolet_index);
+iotdata_status_t iotdata_encode_solar(iotdata_encoder_t *enc, uint16_t irradiance_wm2, uint8_t ultraviolet_index);
 #endif
 #ifdef IOTDATA_ENABLE_CLOUDS
-iotdata_status_t iotdata_encode_clouds(iotdata_enc_ctx_t *ctx, uint8_t okta);
+iotdata_status_t iotdata_encode_clouds(iotdata_encoder_t *enc, uint8_t okta);
 #endif
 #ifdef IOTDATA_ENABLE_AIR_QUALITY
-iotdata_status_t iotdata_encode_air_quality(iotdata_enc_ctx_t *ctx, uint16_t aqi);
+iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aqi);
 #endif
 #ifdef IOTDATA_ENABLE_RADIATION
-iotdata_status_t iotdata_encode_radiation(iotdata_enc_ctx_t *ctx, uint16_t cpm, iotdata_float_t usvh);
+iotdata_status_t iotdata_encode_radiation(iotdata_encoder_t *enc, uint16_t cpm, iotdata_float_t usvh);
 #endif
 #ifdef IOTDATA_ENABLE_RADIATION_CPM
-iotdata_status_t iotdata_encode_radiation_cpm(iotdata_enc_ctx_t *ctx, uint16_t cpm);
+iotdata_status_t iotdata_encode_radiation_cpm(iotdata_encoder_t *enc, uint16_t cpm);
 #endif
 #ifdef IOTDATA_ENABLE_RADIATION_DOSE
-iotdata_status_t iotdata_encode_radiation_dose(iotdata_enc_ctx_t *ctx, iotdata_float_t usvh);
+iotdata_status_t iotdata_encode_radiation_dose(iotdata_encoder_t *enc, iotdata_float_t usvh);
 #endif
 #ifdef IOTDATA_ENABLE_DEPTH
-iotdata_status_t iotdata_encode_depth(iotdata_enc_ctx_t *ctx, uint16_t depth_cm);
+iotdata_status_t iotdata_encode_depth(iotdata_encoder_t *enc, uint16_t depth_cm);
 #endif
 #ifdef IOTDATA_ENABLE_POSITION
-iotdata_status_t iotdata_encode_position(iotdata_enc_ctx_t *ctx, iotdata_double_t latitude, iotdata_double_t longitude);
+iotdata_status_t iotdata_encode_position(iotdata_encoder_t *enc, iotdata_double_t latitude, iotdata_double_t longitude);
 #endif
 #ifdef IOTDATA_ENABLE_DATETIME
-iotdata_status_t iotdata_encode_datetime(iotdata_enc_ctx_t *ctx, uint32_t seconds_from_year_start);
+iotdata_status_t iotdata_encode_datetime(iotdata_encoder_t *enc, uint32_t seconds_from_year_start);
 #endif
 #ifdef IOTDATA_ENABLE_FLAGS
-iotdata_status_t iotdata_encode_flags(iotdata_enc_ctx_t *ctx, uint8_t flags);
+iotdata_status_t iotdata_encode_flags(iotdata_encoder_t *enc, uint8_t flags);
 #endif
-#endif /* !IOTDATA_DECODE_ONLY */
+#endif /* !IOTDATA_NO_ENCODE */
 
 /* ---------------------------------------------------------------------------
  * Decoder
  * -------------------------------------------------------------------------*/
 
-#if !defined(IOTDATA_ENCODE_ONLY)
+#if !defined(IOTDATA_NO_DECODE)
 iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_t *out);
-#endif /* !IOTDATA_ENCODE_ONLY */
+#endif /* !IOTDATA_NO_DECODE */
 
 /* ---------------------------------------------------------------------------
  * JSON, Print, Dump
@@ -726,12 +726,12 @@ iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *o
 #endif /* !IOTDATA_NO_PRINT */
 
 #if !defined(IOTDATA_NO_JSON)
-#if !defined(IOTDATA_ENCODE_ONLY)
+#if !defined(IOTDATA_NO_DECODE)
 iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out);
-#endif /* !IOTDATA_ENCODE_ONLY */
-#if !defined(IOTDATA_DECODE_ONLY)
+#endif /* !IOTDATA_NO_DECODE */
+#if !defined(IOTDATA_NO_ENCODE)
 iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t buf_size, size_t *out_bytes);
-#endif /* !IOTDATA_DECODE_ONLY */
+#endif /* !IOTDATA_NO_ENCODE */
 #endif /* !IOTDATA_NO_JSON */
 
 /* ---------------------------------------------------------------------------
