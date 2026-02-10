@@ -1436,13 +1436,14 @@ latent in the implementation.
 
 ### 13.4. Build Size
 
-The following measurements are from GCC with `-O6` on x86-64.  ARM
-Cortex-M targets will have smaller code sizes.
+The following measurements are from GCC on x86-64 using the `minimal`
+build target.  ARM Cortex-M platforms will have smaller code sizes.
+With space optimisation, the minimal implementation is less than 2KB.
 
-| Configuration                                       | .text size |
-|-----------------------------------------------------|------------|
-| Full library (all elements, encode + decode + JSON) | ~84 KB     |
-| Encoder-only, battery + environment only            | 6.3 KB     |
+| Configuration                                       | -O6 (.text size) | -Os (.text size) |
+|-----------------------------------------------------|------------------|------------------|
+| Full library (all elements, encode + decode + JSON) | 84 KB            | 25 KB            |
+| Encoder-only, battery + environment only            | 6.4 KB           | 1.3 KB           |
 
 ```
 --- Full library ---
@@ -1460,6 +1461,24 @@ Minimal object size:
    text    data     bss     dec     hex filename
    6393       0       0    6393    18f9 iotdata_minimal.o
 ```
+
+```
+--- Full library ---
+gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -Os -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
+   text    data     bss     dec     hex filename
+  25178     448    4096   29722    741a iotdata_full.o
+--- Minimal encoder (battery + environment, integer-only) ---
+gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -Os \
+        -DIOTDATA_ENCODE_ONLY \
+        -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
+        -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
+        -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
+        -c iotdata.c -o iotdata_minimal.o
+Minimal object size:
+   text    data     bss     dec     hex filename
+   1345       0       0    1345     541 iotdata_minimal.o
+```
+
 
 ### 13.5. Variant Table Extension
 

@@ -41,7 +41,9 @@ CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
     -Wundef \
     -Wunreachable-code -Wunused \
     -Wwrite-strings
-CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) -O6 -fstack-protector-strong
+# CFLAGS_OPT=-Os
+CFLAGS_OPT=-O6
+CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT)
 CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
 AR      = ar
 LDFLAGS =
@@ -72,7 +74,7 @@ VERSION_BINS = \
     test_version_ENCODE_ONLY \
     test_version_DECODE_ONLY \
     test_version_NO_FLOATING \
-	test_version_NO_FLOATING_NO_JSON
+    test_version_NO_FLOATING_NO_JSON
 
 .PHONY: all test test-default test-custom test-example test-versions lib format clean minimal
 
@@ -108,36 +110,27 @@ test-custom: $(TEST_CUSTOM_BIN)
 test-example: $(TEST_EXAMPLE_BIN)
 	./$(TEST_EXAMPLE_BIN)
 
-# --- Build variant smoke tests ------------------------------------------
-
 test_version_FULL: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-
 test_version_NO_PRINT: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_PRINT \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-
 test_version_NO_DUMP: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_DUMP \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-
 test_version_NO_JSON: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_JSON \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS_NOJSON) -o $@
-
 test_version_ENCODE_ONLY: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_ENCODE_ONLY \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-
 test_version_DECODE_ONLY: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_DECODE_ONLY \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-
 test_version_NO_FLOATING: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_FLOATING \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS_NO_MATH) -o $@
-
 test_version_NO_FLOATING_NO_JSON: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_FLOATING -DIOTDATA_NO_JSON \
 		$(CFLAGS_NO_FLOATING_POINT) \
@@ -150,15 +143,12 @@ test-versions: $(VERSION_BINS)
 	@for t in $(VERSION_BINS); do ./$$t; done
 	@echo ""
 
-# -------------------------------------------------------------------------
-
 format:
 	clang-format -i *.[ch]
 
 clean:
 	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS)
 
-# Example: encoder-only build for constrained targets
 minimal:
 	@echo "--- Full library ---"
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_full.o
