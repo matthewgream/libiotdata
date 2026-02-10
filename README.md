@@ -2313,78 +2313,141 @@ MQTT, HTTP, or database insertion.
 ╚══════════════════════════════════════════════════╝
 
 ────────────────────────────────────────────────────────────────────────────────
-  Packet #1  [15:21:56]  *** 5-minute report (with position/datetime) ***
+** Packet #1  [17:29:08]  *** 5-minute report (with position/datetime) ***
 ────────────────────────────────────────────────────────────────────────────────
-  Sensor values:
-    battery:      85.1%
-    link:          -83 dBm   SNR 5.1 dB
-    temperature: +15.18 °C
+
+** Sensor values:
+
+    battery:      85.2%  
+    link:          -85 dBm   SNR 4.8 dB
+    temperature: +14.75 °C
     pressure:     1013 hPa
     humidity:       55 %
-    wind:          5.5 m/s @ 167°  (gust 14.4 m/s)
-    rain:            2 mm/hr, 1.0 mm/d
-    solar:         410 W/m²  UV 4
+    wind:          4.1 m/s @ 172°  (gust 8.7 m/s)
+    rain:            3 mm/hr, 0.5 mm/d
+    solar:         393 W/m²  UV 3
     clouds:          4 okta
-    air quality:    48 AQI
-    radation:       19 CPM,     0.10 µSv/h
-    position:    59.334586, 18.063239
-    datetime:    3511316 s from year start
-    flags:       0x00
+    air quality:    41 AQI
+    radation:       22 CPM,     0.10 µSv/h
+    position:    59.334588, 18.063240
+    datetime:    3518948 s from year start
+    flags:       0x01
 
-  Binary (32 bytes):
-  00 2A 00 01 BF 7E D2 76 ED 1B 71 6E E7 40 89 9A
-  44 18 00 26 00 56 A3 18 7C 66 C2 78 55 B9 B8 00
+** Binary (32 bytes):
 
-  Diagnostic dump:
-Offset        Len        Field                     Raw  Decoded                   Range
-------        ---        -----                     ---  -------                   -----
-           0          4  variant                     0  0                         0-14 (15=rsvd)
-           4         12  station_id                 42  42                        0-4095
-          16         16  sequence                    1  1                         0-65535
-          32          8  presence[0]               191  0xbf                      ext|tlv|6 fields
-          40          8  presence[1]               126  0x7e                      ext|7 fields
-          48          5  battery_level              26  84%                       0..100%%, 5b quant
-          53          1  battery_charging            0  discharging               0/1
-          54          4  link_rssi                   9  -84 dBm                   -120..-60, 4dBm
-          58          2  link_snr                    3  10 dB                     -20..+10, 10dB
-          60          9  temperature               221  15.25 C                   -40..+80C, 0.25C
-          69          8  pressure                  163  1013 hPa                  850..1105 hPa
-          77          7  humidity                   55  55%                       0..100%%
-          84          7  wind_speed                 11  5.5 m/s                   0..63.5, 0.5m/s
-          91          8  wind_direction            119  167 deg                   0..355, ~1.4deg
-          99          7  wind_gust                  29  14.5 m/s                  0..63.5, 0.5m/s
-         106          8  rain_rate                   2  2 mm/hr                   0..255 mm/hr
-         114          4  rain_size                   2  0.8 mm/d                  0..6.3 mm/d
-         118         10  solar_irradiance          410  410 W/m2                  0..1023 W/m2
-         128          4  solar_ultraviolet           4  4                         0..15
-         132          4  clouds                      4  4 okta                    0..8 okta
-         136          9  air_quality                48  48 AQI                    0..500 AQI
-         145         14  radiation_cpm              19  19 CPM                    0..65535 CPM
-         159         14  radiation_dose             10  0.10 uSv/h                0..163.83, 0.01
-         173         24  latitude              13918991  59.334581                 -90..+90
-         197         24  longitude             9230415  18.063230                 -180..+180
-         221         24  datetime               702263  day 40 15:21:55 (3511315s)  5s res
-         245          8  flags                       0  0x00                      8-bit bitmask
+    00 2A 00 01 BF 7E D2 26 DD 1B 71 0F 44 40 C5 89 
+    34 14 80 2C 00 56 A3 18 84 66 C2 78 55 E9 68 08 
+
+** Diagnostic dump:
+
+      Offset     Len  Field                            Raw  Decoded                       Range
+      ------     ---  -----                            ---  -------                       -----
+           0       4  variant                            0  0                             0-14 (15=rsvd)
+           4      12  station_id                        42  42                            0-4095
+          16      16  sequence                           1  1                             0-65535
+          32       8  presence[0]                      191  0xbf                          ext|tlv|6 fields
+          40       8  presence[1]                      126  0x7e                          ext|7 fields
+          48       5  battery_level                     26  84%                           0..100%%, 5b quant
+          53       1  battery_charging                   0  discharging                   0/1
+          54       4  link_rssi                          8  -88 dBm                       -120..-60, 4dBm
+          58       2  link_snr                           2  0 dB                          -20..+10, 10dB
+          60       9  temperature                      219  14.75 C                       -40..+80C, 0.25C
+          69       8  pressure                         163  1013 hPa                      850..1105 hPa
+          77       7  humidity                          55  55%                           0..100%%
+          84       7  wind_speed                         8  4.0 m/s                       0..63.5, 0.5m/s
+          91       8  wind_direction                   122  172 deg                       0..355, ~1.4deg
+          99       7  wind_gust                         17  8.5 m/s                       0..63.5, 0.5m/s
+         106       8  rain_rate                          3  3 mm/hr                       0..255 mm/hr
+         114       4  rain_size                          1  0.4 mm/d                      0..6.3 mm/d
+         118      10  solar_irradiance                 393  393 W/m2                      0..1023 W/m2
+         128       4  solar_ultraviolet                  3  3                             0..15
+         132       4  clouds                             4  4 okta                        0..8 okta
+         136       9  air_quality                       41  41 AQI                        0..500 AQI
+         145      14  radiation_cpm                     22  22 CPM                        0..65535 CPM
+         159      14  radiation_dose                    10  0.10 uSv/h                    0..163.83, 0.01
+         173      24  latitude                    13918992  59.334592                     -90..+90
+         197      24  longitude                    9230415  18.063230                     -180..+180
+         221      24  datetime                      703789  day 40 17:29:05 (3518945s)    5s res
+         245       8  flags                              1  0x01                          8-bit bitmask
 
 Total: 253 bits (32 bytes)
 
-  Decoded:
+** Decoded:
+
 Station 42 seq=1 var=0 (weather_station) [253 bits, 32 bytes]
   battery:             84% (discharging)
-  link:                -84 dBm RSSI, 10 dB SNR
-  environment:         15.25 C, 1013 hPa, 55%
-  wind:                5.5 m/s, 167 deg, gust 14.5 m/s
-  rain:                2 mm/hr, 0.8 mm/d
-  solar:               410 W/m2, UV 4
+  link:                -88 dBm RSSI, 0 dB SNR
+  environment:         14.75 C, 1013 hPa, 55%
+  wind:                4.0 m/s, 172 deg, gust 8.5 m/s
+  rain:                3 mm/hr, 0.4 mm/d
+  solar:               393 W/m2, UV 3
   clouds:              4 okta
-  air_quality:         48 AQI
-  radiation:           19 CPM, 0.10 uSv/h
-  position:            59.334581, 18.063230
-  datetime:            day 40 15:21:55 (3511315s)
-  flags:               0x00
+  air_quality:         41 AQI
+  radiation:           22 CPM, 0.10 uSv/h
+  position:            59.334592, 18.063230
+  datetime:            day 40 17:29:05 (3518945s)
+  flags:               0x01
 
-  JSON:
-{"variant":0,"station_id":42,"sequence":1,"packed_bits":253,"packed_bytes":32,"battery":{"level":84,"charging":false},"link":{"rssi":-84,"snr":10},"environment":{"temperature":15.25,"pressure":1013,"humidity":55},"wind":{"speed":5.5,"direction":167,"gust":14.5},"rain":{"rate":2,"size":8},"solar":{"irradiance":410,"ultraviolet":4},"clouds":4,"air_quality":48,"radiation":{"cpm":19,"dose":0.099999994039535522},"position":{"latitude":59.334581454669319,"longitude":18.06323039908591},"datetime":3511315,"flags":0}
+** JSON:
+
+{"variant":0,"station_id":42,"sequence":1,"packed_bits":253,"packed_bytes":32,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":0},"environment":{"temperature":14.75,"pressure":1013,"humidity":55},"wind":{"speed":4,"direction":172,"gust":8.5},"rain":{"rate":3,"size":4},"solar":{"irradiance":393,"ultraviolet":3},"clouds":4,"air_quality":41,"radiation":{"cpm":22,"dose":0.099999994039535522},"position":{"latitude":59.334592183506032,"longitude":18.06323039908591},"datetime":3518945,"flags":1}
+
+────────────────────────────────────────────────────────────────────────────────
+** Packet #2  [17:29:38]  30-second report
+────────────────────────────────────────────────────────────────────────────────
+
+** Sensor values:
+
+    battery:      84.9%  
+    link:          -85 dBm   SNR 5.5 dB
+    temperature: +14.48 °C
+    pressure:     1013 hPa
+    humidity:       55 %
+    wind:          3.6 m/s @ 171°  (gust 7.2 m/s)
+    rain:            5 mm/hr, 0.0 mm/d
+    solar:         390 W/m²  UV 3
+
+** Binary (16 bytes):
+
+    00 2A 00 02 3F D2 36 D5 1B 70 EF 43 81 41 86 30 
+
+** Diagnostic dump:
+
+      Offset     Len  Field                            Raw  Decoded                       Range
+      ------     ---  -----                            ---  -------                       -----
+           0       4  variant                            0  0                             0-14 (15=rsvd)
+           4      12  station_id                        42  42                            0-4095
+          16      16  sequence                           2  2                             0-65535
+          32       8  presence[0]                       63  0x3f                          ext|tlv|6 fields
+          40       5  battery_level                     26  84%                           0..100%%, 5b quant
+          45       1  battery_charging                   0  discharging                   0/1
+          46       4  link_rssi                          8  -88 dBm                       -120..-60, 4dBm
+          50       2  link_snr                           3  10 dB                         -20..+10, 10dB
+          52       9  temperature                      218  14.50 C                       -40..+80C, 0.25C
+          61       8  pressure                         163  1013 hPa                      850..1105 hPa
+          69       7  humidity                          55  55%                           0..100%%
+          76       7  wind_speed                         7  3.5 m/s                       0..63.5, 0.5m/s
+          83       8  wind_direction                   122  172 deg                       0..355, ~1.4deg
+          91       7  wind_gust                         14  7.0 m/s                       0..63.5, 0.5m/s
+          98       8  rain_rate                          5  5 mm/hr                       0..255 mm/hr
+         106       4  rain_size                          0  0.0 mm/d                      0..6.3 mm/d
+         110      10  solar_irradiance                 390  390 W/m2                      0..1023 W/m2
+         120       4  solar_ultraviolet                  3  3                             0..15
+
+Total: 124 bits (16 bytes)
+
+** Decoded:
+
+Station 42 seq=2 var=0 (weather_station) [124 bits, 16 bytes]
+  battery:             84% (discharging)
+  link:                -88 dBm RSSI, 10 dB SNR
+  environment:         14.50 C, 1013 hPa, 55%
+  wind:                3.5 m/s, 172 deg, gust 7.0 m/s
+  rain:                5 mm/hr, 0.0 mm/d
+  solar:               390 W/m2, UV 3
+
+** JSON:
+{"variant":0,"station_id":42,"sequence":2,"packed_bits":124,"packed_bytes":16,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":10},"environment":{"temperature":14.5,"pressure":1013,"humidity":55},"wind":{"speed":3.5,"direction":172,"gust":7},"rain":{"rate":5,"size":0},"solar":{"irradiance":390,"ultraviolet":3}}
 ```
 
 ---

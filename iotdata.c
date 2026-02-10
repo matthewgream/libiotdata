@@ -2453,11 +2453,11 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
 }
 
 static void dump_format(const iotdata_dump_t *dump, FILE *fp) {
-    fprintf(fp, "%-12s  %-9s  %-20s  %7s  %-24s  %s\n", "Offset", "Len", "Field", "Raw", "Decoded", "Range");
-    fprintf(fp, "%-12s  %-9s  %-20s  %7s  %-24s  %s\n", "------", "---", "-----", "---", "-------", "-----");
+    fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "Offset", "Len", "Field", "Raw", "Decoded", "Range");
+    fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "------", "---", "-----", "---", "-------", "-----");
     for (size_t i = 0; i < dump->count; i++) {
         const iotdata_dump_entry_t *e = &dump->entries[i];
-        fprintf(fp, "%12zu  %9zu  %-20s  %7u  %-24s  %s\n", e->bit_offset, e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
+        fprintf(fp, "%12zu  %6zu  %-24s  %10u  %-28s  %s\n", e->bit_offset, e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
     }
     fprintf(fp, "\nTotal: %zu bits (%zu bytes)\n", dump->total_bits, dump->total_bytes);
 }
