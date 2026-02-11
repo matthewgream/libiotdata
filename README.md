@@ -1464,11 +1464,10 @@ The following measurements are from GCC on x86-64 and aarch64 using
 the `minimal` build target. With space optimisation, the minimal
 implementation is less than 2KB.
 
-| Configuration                                       | x86-64   | x86-64   | aarch64  | aarch64  |
-|                                                     | -O6      | -Os      | -O6      | -Os      |
-|-----------------------------------------------------|----------|----------|----------|----------|
-| Full library (all elements, encode + decode + JSON) | ~84 KB   | ~29 KB   | ~86 KB   | ~31 KB   |
-| Encoder-only, battery + environment only            | ~5.7 KB  | ~1.1 KB  | ~5.7 KB  | ~1.1 KB  |
+| Configuration                                       | x86-64 -O6 | x86-64 -Os | aarch64 -O6 | aarch64 -Os |
+|-----------------------------------------------------|------------|------------|-------------|-------------|
+| Full library (all elements, encode + decode + JSON) | ~84 KB     | ~29 KB     | ~86 KB      | ~31 KB      |
+| Encoder-only, battery + environment only            | ~5.7 KB    | ~1.1 KB    | ~5.7 KB     | ~1.1 KB     |
 
 **x86-64 minimal builds**
 
