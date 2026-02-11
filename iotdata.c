@@ -28,31 +28,13 @@
  * Field operations table — types and registration macros
  * ========================================================================= */
 
-#if !defined(IOTDATA_NO_ENCODE)
-typedef void (*iotdata_pack_fn)(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc);
-#endif
-#if !defined(IOTDATA_NO_DECODE)
-typedef void (*iotdata_unpack_fn)(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out);
-#endif
-#if !defined(IOTDATA_NO_DUMP)
-typedef int (*iotdata_dump_fn)(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label);
-#endif
-#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
-typedef void (*iotdata_print_fn)(const iotdata_decoded_t *d, FILE *fp, const char *l);
-#endif
-#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-typedef void (*iotdata_json_set_fn)(void *root, const void *d, const char *label);
-#endif
-#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
-typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const char *label);
-#endif
-
 #define _IOTDATA_FIELD_OP_NAME // const char *name;
 #define _IOTDATA_OP_NAME(nm)   // unused
 #define _IOTDATA_FIELD_OP_BITS // uint16_t bits;
 #define _IOTDATA_OP_BITS(bt)   // unused
 
 #if !defined(IOTDATA_NO_ENCODE)
+typedef void (*iotdata_pack_fn)(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc);
 #define _IOTDATA_FIELD_OP_PACK iotdata_pack_fn pack;
 #define _IOTDATA_OP_PACK(fn)   .pack = (fn),
 #else
@@ -61,6 +43,7 @@ typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const cha
 #endif
 
 #if !defined(IOTDATA_NO_DECODE)
+typedef void (*iotdata_unpack_fn)(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out);
 #define _IOTDATA_FIELD_OP_UNPACK iotdata_unpack_fn unpack;
 #define _IOTDATA_OP_UNPACK(fn)   .unpack = (fn),
 #else
@@ -69,6 +52,7 @@ typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const cha
 #endif
 
 #if !defined(IOTDATA_NO_DUMP)
+typedef int (*iotdata_dump_fn)(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label);
 #define _IOTDATA_FIELD_OP_DUMP iotdata_dump_fn dump;
 #define _IOTDATA_OP_DUMP(fn)   .dump = (fn),
 #else
@@ -77,6 +61,7 @@ typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const cha
 #endif
 
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+typedef void (*iotdata_print_fn)(const iotdata_decoded_t *d, FILE *fp, const char *l);
 #define _IOTDATA_FIELD_OP_PRINT iotdata_print_fn print;
 #define _IOTDATA_OP_PRINT(fn)   .print = (fn),
 #else
@@ -85,6 +70,7 @@ typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const cha
 #endif
 
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+typedef void (*iotdata_json_set_fn)(void *root, const void *d, const char *label);
 #define _IOTDATA_FIELD_OP_JSON_SET iotdata_json_set_fn json_set;
 #define _IOTDATA_OP_JSON_SET(fn)   .json_set = (iotdata_json_set_fn)(fn),
 #else
@@ -93,6 +79,7 @@ typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const cha
 #endif
 
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
+typedef iotdata_status_t (*iotdata_json_get_fn)(void *root, void *enc, const char *label);
 #define _IOTDATA_FIELD_OP_JSON_GET iotdata_json_get_fn json_get;
 #define _IOTDATA_OP_JSON_GET(fn)   .json_get = (iotdata_json_get_fn)(fn),
 #else
@@ -399,7 +386,7 @@ static inline int fmt_scaled10000000(char *buf, size_t sz, int32_t val, const ch
 #endif /* !IOTDATA_NO_DUMP */
 
 /* =========================================================================
- * BATTERY
+ * Field BATTERY
  * ========================================================================= */
 
 #if defined(IOTDATA_ENABLE_BATTERY)
@@ -425,7 +412,6 @@ static inline uint32_t quantise_battery_level(uint8_t pct) {
 static inline uint8_t dequantise_battery_level(uint32_t raw) {
     return (uint8_t)((raw * IOTDATA_BATTERY_LEVEL_MAX + 15) / ((1 << IOTDATA_BATTERY_LEVEL_BITS) - 1));
 }
-
 static inline uint32_t quantise_battery_state(bool charging) {
     return (uint32_t)(charging ? 1 : 0);
 }
@@ -446,8 +432,7 @@ static inline void unpack_battery(const uint8_t *buf, size_t bb, size_t *bp, iot
 }
 #endif
 
-#if !defined(IOTDATA_NO_JSON)
-#if !defined(IOTDATA_NO_ENCODE)
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
 static inline iotdata_status_t json_get_battery(cJSON *root, iotdata_encoder_t *enc, const char *label) {
     cJSON *j = cJSON_GetObjectItem(root, label);
     if (!j)
@@ -455,13 +440,12 @@ static inline iotdata_status_t json_get_battery(cJSON *root, iotdata_encoder_t *
     return iotdata_encode_battery(enc, (uint8_t)cJSON_GetObjectItem(j, "level")->valueint, cJSON_IsTrue(cJSON_GetObjectItem(j, "charging")));
 }
 #endif
-#if !defined(IOTDATA_NO_DECODE)
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
 static inline void json_set_battery(cJSON *root, const iotdata_decoded_t *d, const char *label) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "level", d->battery_level);
     cJSON_AddBoolToObject(obj, "charging", d->battery_charging);
 }
-#endif
 #endif
 
 #if !defined(IOTDATA_NO_DUMP)
@@ -480,15 +464,35 @@ static inline int dump_battery(const uint8_t *buf, size_t bb, size_t *bp, iotdat
 }
 #endif
 
-#if !defined(IOTDATA_NO_PRINT)
-#if !defined(IOTDATA_NO_DECODE)
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static inline void print_battery(const iotdata_decoded_t *d, FILE *fp, const char *l) {
     fprintf(fp, "  %s:%s %u%% %s\n", l, _padd(l), d->battery_level, d->battery_charging ? "(charging)" : "(discharging)");
 }
 #endif
-#endif
 
 #endif
+
+// clang-format off
+#if defined(IOTDATA_ENABLE_BATTERY)
+static const iotdata_field_ops_t _iotdata_field_def_battery = {
+    _IOTDATA_OP_NAME("battery")
+    _IOTDATA_OP_BITS(IOTDATA_BATTERY_LEVEL_BITS + IOTDATA_BATTERY_CHARGE_BITS)
+    _IOTDATA_OP_PACK(pack_battery)
+    _IOTDATA_OP_UNPACK(unpack_battery)
+    _IOTDATA_OP_DUMP(dump_battery)
+    _IOTDATA_OP_PRINT(print_battery)
+    _IOTDATA_OP_JSON_SET(json_set_battery)
+    _IOTDATA_OP_JSON_GET(json_get_battery)
+};
+#define _IOTDATA_ENT_BATTERY [IOTDATA_FIELD_BATTERY] = &_iotdata_field_def_battery,
+#else
+#define _IOTDATA_ENT_BATTERY
+#endif
+// clang-format on
+
+/* =========================================================================
+ * Fleld LINK
+ * ========================================================================= */
 
 /* =========================================================================
  * Quantisation
@@ -995,7 +999,7 @@ iotdata_status_t iotdata_encode_tlv(iotdata_encoder_t *enc, uint8_t type, const 
         return IOTDATA_ERR_TLV_DATA_NULL;
     /* length is uint8_t, max 255 == IOTDATA_TLV_DATA_MAX, always in range */
 #endif
-    if (enc->tlv_count >= IOTDATA_MAX_TLV)
+    if (enc->tlv_count >= IOTDATA_TLV_MAX)
         return IOTDATA_ERR_TLV_FULL;
     const int idx = enc->tlv_count++;
     enc->tlv[idx].format = IOTDATA_TLV_FMT_RAW;
@@ -1024,7 +1028,7 @@ iotdata_status_t iotdata_encode_tlv_string(iotdata_encoder_t *enc, uint8_t type,
     if (slen > IOTDATA_TLV_STR_LEN_MAX)
         slen = IOTDATA_TLV_STR_LEN_MAX;
 #endif
-    if (enc->tlv_count >= IOTDATA_MAX_TLV)
+    if (enc->tlv_count >= IOTDATA_TLV_MAX)
         return IOTDATA_ERR_TLV_FULL;
     const int idx = enc->tlv_count++;
     enc->tlv[idx].format = IOTDATA_TLV_FMT_STRING;
@@ -1981,22 +1985,6 @@ static inline void print_clouds(const iotdata_decoded_t *d, FILE *fp, const char
 
 // clang-format off
 
-#if defined(IOTDATA_ENABLE_BATTERY)
-static const iotdata_field_ops_t _iotdata_field_def_battery = {
-    _IOTDATA_OP_NAME("battery")
-    _IOTDATA_OP_BITS(IOTDATA_BATTERY_LEVEL_BITS + IOTDATA_BATTERY_CHARGE_BITS)
-    _IOTDATA_OP_PACK(pack_battery)
-    _IOTDATA_OP_UNPACK(unpack_battery)
-    _IOTDATA_OP_DUMP(dump_battery)
-    _IOTDATA_OP_PRINT(print_battery)
-    _IOTDATA_OP_JSON_SET(json_set_battery)
-    _IOTDATA_OP_JSON_GET(json_get_battery)
-};
-#define _IOTDATA_ENT_BATTERY [IOTDATA_FIELD_BATTERY] = &_iotdata_field_def_battery,
-#else
-#define _IOTDATA_ENT_BATTERY
-#endif
-
 #if defined(IOTDATA_ENABLE_LINK)
 static const iotdata_field_ops_t _iotdata_field_def_link = {
     _IOTDATA_OP_NAME("link")
@@ -2501,7 +2489,6 @@ iotdata_status_t iotdata_encode_begin(iotdata_encoder_t *enc, uint8_t *buf, size
     enc->station = station;
     enc->sequence = sequence;
     enc->state = IOTDATA_STATE_BEGUN;
-    memset(buf, 0, buf_size);
     return IOTDATA_OK;
 }
 #pragma GCC diagnostic pop
@@ -2510,7 +2497,6 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
     CHECK_CTX_ACTIVE(enc);
 
     const iotdata_variant_def_t *vdef = iotdata_get_variant(enc->variant);
-    const int nfields = _iotdata_field_count(vdef->num_pres_bytes);
     size_t bp = 0;
 
     /* Header */
@@ -2522,10 +2508,10 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
     uint8_t pres[IOTDATA_PRES_MAXIMUM];
     memset(pres, 0, sizeof(pres));
     int max_pres_needed = 1; /* always have pres0 */
-    for (int si = 0; si < nfields; si++)
+    for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(enc->fields, vdef->fields[si].type)) {
-            const int pb = _iotdata_field_pres_byte(si), bit = _iotdata_field_pres_bit(si);
-            pres[pb] |= (1U << bit);
+            const int pb = _iotdata_field_pres_byte(si);
+            pres[pb] |= (1U << _iotdata_field_pres_bit(si));
             if (pb + 1 > max_pres_needed)
                 max_pres_needed = pb + 1;
         }
@@ -2537,7 +2523,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
         bits_write(enc->buf, &bp, pres[i] | (i < (max_pres_needed - 1) ? IOTDATA_PRES_EXT : 0), 8);
 
     /* Fields */
-    for (int si = 0; si < nfields; si++)
+    for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type)) {
             const int pb = _iotdata_field_pres_byte(si);
             if (pb < max_pres_needed && pres[pb] & (1U << _iotdata_field_pres_bit(si)))
@@ -2546,7 +2532,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
 
 #if defined(IOTDATA_ENABLE_TLV)
     /* TLV */
-    if (IOTDATA_FIELD_PRESENT(enc->fields, IOTDATA_FIELD_TLV)) {
+    if (IOTDATA_FIELD_PRESENT(enc->fields, IOTDATA_FIELD_TLV))
         for (int i = 0; i < enc->tlv_count; i++) {
             bits_write(enc->buf, &bp, enc->tlv[i].format, IOTDATA_TLV_FMT_BITS);
             bits_write(enc->buf, &bp, enc->tlv[i].type, IOTDATA_TLV_TYPE_BITS);
@@ -2559,7 +2545,6 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
                 for (int j = 0; j < enc->tlv[i].length; j++)
                     bits_write(enc->buf, &bp, (uint32_t)char_to_sixbit(enc->tlv[i].str[j]), IOTDATA_TLV_CHAR_BITS);
         }
-    }
 #endif
 
     enc->packed_bits = bp;
@@ -2610,53 +2595,39 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
     memset(pres, 0, sizeof(pres));
     pres[0] = (uint8_t)bits_read(buf, bb, &bp, 8);
     int num_pres = 1;
-    bool has_ext = (pres[0] & IOTDATA_PRES_EXT) != 0;
-#if defined(IOTDATA_ENABLE_TLV)
-    bool has_tlv = (pres[0] & IOTDATA_PRES_TLV) != 0;
-#endif
-    while (has_ext && num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb) {
-        pres[num_pres] = (uint8_t)bits_read(buf, bb, &bp, 8);
-        has_ext = (pres[num_pres] & IOTDATA_PRES_EXT) != 0;
-        num_pres++;
-    }
+    while (num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb && (pres[num_pres - 1] & IOTDATA_PRES_EXT) != 0)
+        pres[num_pres++] = (uint8_t)bits_read(buf, bb, &bp, 8);
 
     /* Fields */
     const iotdata_variant_def_t *vdef = iotdata_get_variant(out->variant);
-    const int nfields = _iotdata_field_count(num_pres);
-    for (int si = 0; si < nfields && si < IOTDATA_MAX_DATA_FIELDS; si++)
-        if (IOTDATA_FIELD_VALID(vdef->fields[si].type)) {
-            const int pb = _iotdata_field_pres_byte(si);
-            if (pb < num_pres && pres[pb] & (1U << _iotdata_field_pres_bit(si))) {
-                IOTDATA_FIELD_SET(out->fields, vdef->fields[si].type);
-                unpack_field(buf, bb, &bp, out, vdef->fields[si].type);
-            }
+    for (int si = 0; si < _iotdata_field_count(num_pres) && si < IOTDATA_MAX_DATA_FIELDS; si++)
+        if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && _iotdata_field_pres_byte(si) < num_pres && pres[_iotdata_field_pres_byte(si)] & (1U << _iotdata_field_pres_bit(si))) {
+            IOTDATA_FIELD_SET(out->fields, vdef->fields[si].type);
+            unpack_field(buf, bb, &bp, out, vdef->fields[si].type);
         }
 
 #if defined(IOTDATA_ENABLE_TLV)
     /* TLV */
-    if (has_tlv) {
+    if ((pres[0] & IOTDATA_PRES_TLV) != 0) {
         IOTDATA_FIELD_SET(out->fields, IOTDATA_FIELD_TLV);
         bool more = true;
-        while (more && out->tlv_count < IOTDATA_MAX_TLV && bp + IOTDATA_TLV_HEADER_BITS <= bb) {
+        while (more && out->tlv_count < IOTDATA_TLV_MAX && bp + IOTDATA_TLV_HEADER_BITS <= bb) {
             const uint8_t format = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_FMT_BITS);
             const uint8_t type = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_TYPE_BITS);
             more = bits_read(buf, bb, &bp, IOTDATA_TLV_MORE_BITS) != 0;
             const uint8_t length = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_LENGTH_BITS);
-            const int idx = out->tlv_count;
+            const int idx = out->tlv_count++;
             out->tlv[idx].format = format;
             out->tlv[idx].type = type;
             out->tlv[idx].length = length;
-            if (format == IOTDATA_TLV_FMT_RAW) {
-                for (int j = 0; j < length && bp + 8 <= bb; j++)
-                    out->tlv[idx].data[j] = (uint8_t)bits_read(buf, bb, &bp, 8);
-                out->tlv[idx].str[0] = '\0';
-            } else {
+            if (format == IOTDATA_TLV_FMT_STRING) {
                 for (int j = 0; j < length && bp + IOTDATA_TLV_CHAR_BITS <= bb; j++)
                     out->tlv[idx].str[j] = sixbit_to_char((uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_CHAR_BITS));
                 out->tlv[idx].str[length] = '\0';
-                memset(out->tlv[idx].data, 0, sizeof(out->tlv[idx].data));
+            } else {
+                for (int j = 0; j < length && bp + 8 <= bb; j++)
+                    out->tlv[idx].raw[j] = (uint8_t)bits_read(buf, bb, &bp, 8);
             }
-            out->tlv_count++;
         }
     }
 #endif
@@ -2713,8 +2684,7 @@ iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **j
 
     /* Fields */
     const iotdata_variant_def_t *vdef = iotdata_get_variant(dec.variant);
-    const int nfields = _iotdata_field_count(vdef->num_pres_bytes);
-    for (int si = 0; si < nfields; si++)
+    for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(dec.fields, vdef->fields[si].type))
             json_set_field(root, &dec, vdef->fields[si].type, vdef->fields[si].label);
 
@@ -2726,12 +2696,12 @@ iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **j
             cJSON *item = cJSON_CreateObject();
             cJSON_AddNumberToObject(item, "type", dec.tlv[i].type);
             cJSON_AddStringToObject(item, "format", dec.tlv[i].format == IOTDATA_TLV_FMT_STRING ? "string" : "raw");
-            if (dec.tlv[i].format == IOTDATA_TLV_FMT_RAW) {
-                char hex_buf[512];
-                hex_encode(dec.tlv[i].data, dec.tlv[i].length, hex_buf);
-                cJSON_AddStringToObject(item, "data", hex_buf);
-            } else {
+            if (dec.tlv[i].format == IOTDATA_TLV_FMT_STRING) {
                 cJSON_AddStringToObject(item, "data", dec.tlv[i].str);
+            } else {
+                char hex_buf[(IOTDATA_TLV_DATA_MAX * 2) + 1];
+                hex_encode(dec.tlv[i].raw, dec.tlv[i].length, hex_buf);
+                cJSON_AddStringToObject(item, "data", hex_buf);
             }
             cJSON_AddItemToArray(arr, item);
         }
@@ -2786,8 +2756,7 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
 
     /* Fields */
     const iotdata_variant_def_t *vdef = iotdata_get_variant(enc.variant);
-    const int nfields = _iotdata_field_count(vdef->num_pres_bytes);
-    for (int si = 0; si < nfields; si++)
+    for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type))
             if ((rc = json_get_field(root, &enc, vdef->fields[si].type, vdef->fields[si].label)) != IOTDATA_OK) {
                 cJSON_Delete(root);
@@ -2798,12 +2767,12 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
     /* TLV */
     cJSON *j_diag = cJSON_GetObjectItem(root, "data");
     if (j_diag && cJSON_IsArray(j_diag)) {
-        static uint8_t tlv_raw_scratch[IOTDATA_MAX_TLV][IOTDATA_TLV_DATA_MAX];
-        static char tlv_str_scratch[IOTDATA_MAX_TLV][IOTDATA_TLV_STR_LEN_MAX + 1];
+        static uint8_t tlv_raw_scratch[IOTDATA_TLV_MAX][IOTDATA_TLV_DATA_MAX];
+        static char tlv_str_scratch[IOTDATA_TLV_MAX][IOTDATA_TLV_STR_LEN_MAX + 1];
         cJSON *item;
         int tidx = 0;
         cJSON_ArrayForEach(item, j_diag) {
-            if (tidx >= IOTDATA_MAX_TLV)
+            if (tidx >= IOTDATA_TLV_MAX)
                 break;
             const uint8_t type = (uint8_t)cJSON_GetObjectItem(item, "type")->valueint;
             cJSON *format = cJSON_GetObjectItem(item, "format");
@@ -2823,8 +2792,9 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
     }
 #endif
 
+    rc = iotdata_encode_end(&enc, out_bytes);
     cJSON_Delete(root);
-    return iotdata_encode_end(&enc, out_bytes);
+    return rc;
 }
 
 #endif /* !IOTDATA_NO_ENCODE */
@@ -2895,30 +2865,26 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
     snprintf(dec_buf, sizeof(dec_buf), "0x%02x", pres[0]);
     n = dump_add(dump, n, s, 8, pres[0], dec_buf, "ext|tlv|6 fields", "presence[0]");
     int num_pres = 1;
-    bool has_ext = (pres[0] & IOTDATA_PRES_EXT) != 0;
-    bool has_tlv = (pres[0] & IOTDATA_PRES_TLV) != 0;
-    while (has_ext && num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb) {
+    while (num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb && (pres[num_pres - 1] & IOTDATA_PRES_EXT) != 0) {
         s = bp;
         pres[num_pres] = (uint8_t)bits_read(buf, bb, &bp, 8);
         char pname[24];
         snprintf(pname, sizeof(pname), "presence[%d]", num_pres);
         snprintf(dec_buf, sizeof(dec_buf), "0x%02x", pres[num_pres]);
         n = dump_add(dump, n, s, 8, pres[num_pres], dec_buf, "ext|7 fields", pname);
-        has_ext = (pres[num_pres] & IOTDATA_PRES_EXT) != 0;
         num_pres++;
     }
 
     /* Fields */
     const iotdata_variant_def_t *vdef = iotdata_get_variant(variant);
-    const int nfields = _iotdata_field_count(num_pres);
-    for (int si = 0; si < nfields && si < IOTDATA_MAX_DATA_FIELDS; si++)
+    for (int si = 0; si < _iotdata_field_count(num_pres) && si < IOTDATA_MAX_DATA_FIELDS; si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type))
             if (_iotdata_field_pres_byte(si) < num_pres && pres[_iotdata_field_pres_byte(si)] & (1U << _iotdata_field_pres_bit(si)))
                 n = dump_field(buf, bb, &bp, dump, n, vdef->fields[si].type, vdef->fields[si].label);
 
 #if defined(IOTDATA_ENABLE_TLV)
     /* TLV */
-    if (has_tlv) {
+    if ((pres[0] & IOTDATA_PRES_TLV) != 0) {
         bool more = true;
         int tlv_idx = 0;
         while (more && bp + IOTDATA_TLV_HEADER_BITS <= bb) {
@@ -2937,7 +2903,7 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
             n = dump_add(dump, n, s, IOTDATA_TLV_LENGTH_BITS, length, dec_buf, "0..255", name_buf);
             if (length > 0) {
                 s = bp;
-                const size_t data_bits = (format == IOTDATA_TLV_FMT_RAW) ? (size_t)length * 8 : (size_t)length * IOTDATA_TLV_CHAR_BITS;
+                const size_t data_bits = (format == IOTDATA_TLV_FMT_STRING) ? (size_t)length * IOTDATA_TLV_CHAR_BITS : (size_t)length * 8;
                 snprintf(name_buf, sizeof(name_buf), "tlv[%d].data", tlv_idx);
                 snprintf(dec_buf, sizeof(dec_buf), "(%zu bits)", data_bits);
                 n = dump_add(dump, n, s, data_bits, 0, dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", name_buf);
@@ -2954,7 +2920,7 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
     return IOTDATA_OK;
 }
 
-static void dump_decoded(const iotdata_dump_t *dump, FILE *fp) {
+static iotdata_status_t dump_decoded_to_file(const iotdata_dump_t *dump, FILE *fp) {
     fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "Offset", "Len", "Field", "Raw", "Decoded", "Range");
     fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "------", "---", "-----", "---", "-------", "-----");
     for (size_t i = 0; i < dump->count; i++) {
@@ -2962,15 +2928,15 @@ static void dump_decoded(const iotdata_dump_t *dump, FILE *fp) {
         fprintf(fp, "%12zu  %6zu  %-24s  %10u  %-28s  %s\n", e->bit_offset, e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
     }
     fprintf(fp, "\nTotal: %zu bits (%zu bytes)\n", dump->packed_bits, dump->packed_bytes);
+    return IOTDATA_OK;
 }
 
-iotdata_status_t iotdata_dump(const uint8_t *buf, size_t len, FILE *fp) {
+iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp) {
     iotdata_dump_t dump;
     iotdata_status_t rc;
     if ((rc = iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
         return rc;
-    dump_decoded(&dump, fp);
-    return IOTDATA_OK;
+    return dump_decoded_to_file(&dump, fp);
 }
 
 iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size) {
@@ -2981,9 +2947,9 @@ iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *ou
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_DUMP_ALLOC;
-    dump_decoded(&dump, fp);
+    rc = dump_decoded_to_file(&dump, fp);
     fclose(fp);
-    return IOTDATA_OK;
+    return rc;
 }
 
 #endif /* !IOTDATA_NO_DUMP */
@@ -3001,13 +2967,12 @@ static inline void print_field(const iotdata_decoded_t *d, FILE *fp, iotdata_fie
         ops->print(d, fp, label);
 }
 
-iotdata_status_t print_decoded(const iotdata_decoded_t *dec, FILE *fp) {
+iotdata_status_t print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp) {
     const iotdata_variant_def_t *vdef = iotdata_get_variant(dec->variant);
-    const int nfields = _iotdata_field_count(vdef->num_pres_bytes);
 
     fprintf(fp, "Station %u seq=%u var=%u (%s) [%zu bits, %zu bytes]\n", dec->station, dec->sequence, dec->variant, vdef->name, dec->packed_bits, dec->packed_bytes);
 
-    for (int si = 0; si < nfields; si++)
+    for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(dec->fields, vdef->fields[si].type))
             print_field(dec, fp, vdef->fields[si].type, vdef->fields[si].label);
 
@@ -3020,7 +2985,7 @@ iotdata_status_t print_decoded(const iotdata_decoded_t *dec, FILE *fp) {
             } else {
                 fprintf(fp, "    [%d] type=%u raw(%u)=", i, dec->tlv[i].type, dec->tlv[i].length);
                 for (int j = 0; j < dec->tlv[i].length && j < 16; j++)
-                    fprintf(fp, "%02x", dec->tlv[i].data[j]);
+                    fprintf(fp, "%02x", dec->tlv[i].raw[j]);
                 if (dec->tlv[i].length > 16)
                     fprintf(fp, "...");
                 fprintf(fp, "\n");
@@ -3037,17 +3002,17 @@ iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, c
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_PRINT_ALLOC;
-    rc = print_decoded(dec, fp);
+    rc = print_decoded_to_file(dec, fp);
     fclose(fp);
     return rc;
 }
 
-iotdata_status_t iotdata_print(const uint8_t *buf, size_t len, FILE *fp) {
+iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp) {
     iotdata_decoded_t dec;
     iotdata_status_t rc;
     if ((rc = iotdata_decode(buf, len, &dec)) != IOTDATA_OK)
         return rc;
-    return print_decoded(&dec, fp);
+    return print_decoded_to_file(&dec, fp);
 }
 
 iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size) {
@@ -3058,7 +3023,7 @@ iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *o
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_PRINT_ALLOC;
-    rc = print_decoded(&dec, fp);
+    rc = print_decoded_to_file(&dec, fp);
     fclose(fp);
     return rc;
 }

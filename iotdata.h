@@ -360,7 +360,10 @@ extern "C" {
 
 #if defined(IOTDATA_ENABLE_TLV)
 
-#define IOTDATA_MAX_TLV 8
+#define IOTDATA_TLV_MAX         8
+
+#define IOTDATA_TLV_DATA_MAX    255
+#define IOTDATA_TLV_STR_LEN_MAX 255
 
 #if !defined(IOTDATA_NO_ENCODE)
 #define IOTDATA_TLV_FIELDS_ENCODE \
@@ -371,7 +374,7 @@ extern "C" {
         uint8_t length; \
         const uint8_t *data; \
         const char *str; \
-    } tlv[IOTDATA_MAX_TLV];
+    } tlv[IOTDATA_TLV_MAX];
 #else
 #define IOTDATA_TLV_FIELDS_ENCODE
 #endif
@@ -382,9 +385,11 @@ extern "C" {
         uint8_t format; \
         uint8_t type; \
         uint8_t length; \
-        uint8_t data[256]; \
-        char str[256]; \
-    } tlv[IOTDATA_MAX_TLV];
+        union { \
+            uint8_t raw[IOTDATA_TLV_DATA_MAX]; \
+            char str[IOTDATA_TLV_STR_LEN_MAX + 1]; \
+        }; \
+    } tlv[IOTDATA_TLV_MAX];
 #else
 #define IOTDATA_TLV_FIELDS_DECODE
 #endif
@@ -395,11 +400,9 @@ extern "C" {
 #define IOTDATA_TLV_MORE_BITS   1
 #define IOTDATA_TLV_LENGTH_BITS 8
 #define IOTDATA_TLV_HEADER_BITS (IOTDATA_TLV_FMT_BITS + IOTDATA_TLV_TYPE_BITS + IOTDATA_TLV_MORE_BITS + IOTDATA_TLV_LENGTH_BITS)
-#define IOTDATA_TLV_DATA_MAX    255
 #define IOTDATA_TLV_FMT_RAW     0
 #define IOTDATA_TLV_FMT_STRING  1
 #define IOTDATA_TLV_CHAR_BITS   6
-#define IOTDATA_TLV_STR_LEN_MAX 255
 
 #define IOTDATA_TLV_UPTIME      0x01
 #define IOTDATA_TLV_RESETS      0x02
@@ -918,17 +921,17 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_DUMP)
-iotdata_status_t iotdata_dump(const uint8_t *buf, size_t len, FILE *fp);
+iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp);
 iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size);
 iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump_t *dump);
 #endif /* !IOTDATA_NO_DUMP */
 
 #if !defined(IOTDATA_NO_PRINT)
 #if !defined(IOTDATA_NO_DECODE)
-iotdata_status_t iotdata_print_decoded(const iotdata_decoded_t *dec, FILE *fp);
+iotdata_status_t iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp);
 iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, char *out, size_t out_size);
 #endif
-iotdata_status_t iotdata_print(const uint8_t *buf, size_t len, FILE *fp);
+iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp);
 iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size);
 #endif /* !IOTDATA_NO_PRINT */
 

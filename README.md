@@ -2049,10 +2049,10 @@ smaller due to pointer size):
 
 | Structure          | Size   | Purpose                                     |
 |--------------------|--------|---------------------------------------------|
-| `iotdata_encoder_t`| 288 B  | Encoder context (all fields + TLV pointers) |
-| `iotdata_decoded_t`| 4200 B | Decoded packet (includes TLV data buffers)  |
+| `iotdata_encoder_t`| 328 B  | Encoder context (all fields + TLV pointers) |
+| `iotdata_decoded_t`| 2176 B | Decoded packet (includes TLV data buffers)  |
 
-The encoder context (288 bytes) is dominated by the TLV pointer
+The encoder context (328 bytes) is dominated by the TLV pointer
 array (8 entries × 2 pointers × 8 bytes = 128 bytes on 64-bit).  The
 core sensor fields occupy approximately 60 bytes.  On a 32-bit MCU:
 
@@ -2060,8 +2060,8 @@ core sensor fields occupy approximately 60 bytes.  On a 32-bit MCU:
   - Encoder context without TLV: ~72 bytes
   - Core sensor fields alone: ~50 bytes
 
-The decoded struct (4200 bytes) is dominated by the TLV data buffers
-(8 entries × 512 bytes = 4096 bytes).  This structure is designed for
+The decoded struct (2176 bytes) is dominated by the TLV data buffers
+(8 entries × 256 bytes = 2048 bytes).  This structure is designed for
 gateway/server use and is NOT appropriate for Class 1 or 2 devices.
 A minimal decoder that ignores TLV data needs approximately 60 bytes.
 
@@ -2302,19 +2302,24 @@ sections, though calling it from a main-loop context is more typical.
 
 ### E.11. Platform-Specific Notes
 
-**ESP32-C3 (Class 3, primary target):**  The reference implementation
-runs unmodified.  The ESP32-C3 has 400 KB SRAM, hardware single-
-precision FPU (but not double-precision — position quantisation uses
-`double` and will be software-emulated), and 4 MB flash.  Both the
-encoder and decoder, including JSON functions, fit comfortably.
-The ESP-IDF build system supports `#ifdef` stripping via
-`menuconfig` or `sdkconfig` defines.
+**Raspberry Pi / Linux (Class 4):**  The full implementation runs
+unmodified, including JSON conversion, print, dump, and all 8 field
+types.  Typically used as a gateway, receiving packets via LoRa HAT
+or USB-connected radio module, decoding to JSON, and forwarding via
+MQTT, HTTP, or database insertion.
 
-**STM32L0 (Class 2):**  With 20 KB RAM and 64-192 KB flash, the
-full encoder context (288 bytes) fits on the stack with care.  The
-decoded struct (4200 bytes) does NOT fit; use a streaming decoder or
-decode fields individually.  Exclude JSON, print, and dump functions.
-Use `-ffunction-sections -fdata-sections -Wl,--gc-sections` to strip
+**ESP32-C3 (Class 3, primary target):**  The reference implementation
+runs unmodified.  The ESP32-C3 has 400 KB SRAM and 4 MB flash but no
+hardware FPU — both single- and double-precision arithmetic is
+software-emulated.  Use `IOTDATA_NO_FLOATING` for best performance.
+Both the encoder and decoder, including JSON functions, fit
+comfortably.  The ESP-IDF build system supports `#ifdef` stripping
+via `menuconfig` or `sdkconfig` defines.
+
+**STM32L0 (Class 2):**  With 20 KB RAM and 64-192 KB flash, both the
+encoder context (328 bytes) and decoded struct (2176 bytes) fit on the
+stack comfortably.  Exclude JSON, print, and dump functions.  Use
+`-ffunction-sections -fdata-sections -Wl,--gc-sections` to strip
 unused code.
 
 **PIC18F (Class 2):**  Similar constraints to STM32L0 but with
@@ -2329,12 +2334,6 @@ full encoder context does not fit.  Use pack-as-you-go with backfill
 (Section E.4, Approach A), integer-only APIs (Section E.6), and
 aggressive `#ifdef` stripping (Section E.5).  Target flash budget:
 2-3 KB for a battery + environment + depth encoder.
-
-**Raspberry Pi / Linux (Class 4):**  The full implementation runs
-unmodified, including JSON conversion, print, dump, and all 8 field
-types.  Typically used as a gateway, receiving packets via LoRa HAT
-or USB-connected radio module, decoding to JSON, and forwarding via
-MQTT, HTTP, or database insertion.
 
 ## Appendix F. Example Weather Station Output
 

@@ -217,7 +217,6 @@ int main(void) {
         iotdata_decoded_t decoded;
         iotdata_status_t rc;
 
-        memset(&decoded, 0, sizeof(decoded));
         rc = iotdata_decode(buf, len, &decoded);
         CHECK(rc == IOTDATA_OK, "decode");
         CHECK(decoded.variant == 0, "variant == 0");
@@ -269,6 +268,7 @@ int main(void) {
             uint8_t buf2[256];
             size_t len2;
 
+            memset(buf2, 0, sizeof(buf2));
             rc = iotdata_encode_from_json(json, buf2, sizeof(buf2), &len2);
             CHECK(rc == IOTDATA_OK, "encode_from_json");
             CHECK(len == len2, "json round-trip length match");

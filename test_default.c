@@ -649,8 +649,8 @@ static void test_tlv_round_trip(void) {
     ASSERT_EQ(dec.tlv[0].format, IOTDATA_TLV_FMT_RAW, "fmt0");
     ASSERT_EQ(dec.tlv[0].type, 1, "type0");
     ASSERT_EQ(dec.tlv[0].length, 4, "len0");
-    ASSERT_EQ(dec.tlv[0].data[0], 0xDE, "raw0");
-    ASSERT_EQ(dec.tlv[0].data[3], 0xEF, "raw3");
+    ASSERT_EQ(dec.tlv[0].raw[0], 0xDE, "raw0");
+    ASSERT_EQ(dec.tlv[0].raw[3], 0xEF, "raw3");
     ASSERT_EQ(dec.tlv[1].format, IOTDATA_TLV_FMT_STRING, "fmt1");
     ASSERT_EQ(strcmp(dec.tlv[1].str, "hello world"), 0, "str1");
     PASS();
