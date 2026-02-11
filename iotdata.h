@@ -26,6 +26,8 @@
  *   IOTDATA_NO_PRINT               Exclude Print output support
  *   IOTDATA_NO_DUMP                Exclude Dump output support
  *   IOTDATA_NO_JSON                Exclude JSON support
+ *   IOTDATA_NO_CHECKS_STATE        Remove runtime state checks
+ *   IOTDATA_NO_CHECKS_TYPES        Remove runtime type checks (e.g. temp limits)
  *   IOTDATA_NO_ERROR_STRINGS       Exclude error strings (iotdata_strerror)
  *   IOTDATA_NO_FLOATING_DOUBLES    Use float instead of double for position
  *   IOTDATA_NO_FLOATING            Integer-only mode (no float/double)
@@ -358,7 +360,7 @@ extern "C" {
 
 #if defined(IOTDATA_ENABLE_TLV)
 
-#define IOTDATA_MAX_TLV         8
+#define IOTDATA_MAX_TLV 8
 
 #if !defined(IOTDATA_NO_ENCODE)
 #define IOTDATA_TLV_FIELDS_ENCODE \
@@ -429,13 +431,13 @@ typedef float iotdata_float_t;
  * -------------------------------------------------------------------------*/
 
 #define IOTDATA_VARIANT_BITS      4
-#define IOTDATA_STATION_BITS   12
+#define IOTDATA_STATION_BITS      12
 #define IOTDATA_SEQUENCE_BITS     16
 #define IOTDATA_HEADER_BITS       (IOTDATA_VARIANT_BITS + IOTDATA_STATION_BITS + IOTDATA_SEQUENCE_BITS)
 
 #define IOTDATA_VARIANT_MAX       14
 #define IOTDATA_VARIANT_RESERVED  15
-#define IOTDATA_STATION_MAX    4095
+#define IOTDATA_STATION_MAX       4095
 #define IOTDATA_SEQUENCE_MAX      65535
 
 /* ---------------------------------------------------------------------------
@@ -457,11 +459,18 @@ typedef float iotdata_float_t;
  * -------------------------------------------------------------------------*/
 
 #define IOTDATA_PRES_TLV          (1U << 6)
-#define IOTDATA_PRES_EXT    (1U << 7)
+#define IOTDATA_PRES_EXT          (1U << 7)
 #define IOTDATA_PRES0_DATA_FIELDS 6
 #define IOTDATA_PRESN_DATA_FIELDS 7
-#define IOTDATA_MAX_PRES_BYTES    4
-#define IOTDATA_MAX_DATA_FIELDS   (IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (IOTDATA_MAX_PRES_BYTES - 1))
+#define IOTDATA_PRES_MINIMUM      1
+#define IOTDATA_PRES_MAXIMUM      4
+#define IOTDATA_MAX_DATA_FIELDS   (IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (IOTDATA_PRES_MAXIMUM - 1))
+
+/* ---------------------------------------------------------------------------
+ * Packet
+ * -------------------------------------------------------------------------*/
+
+#define IOTDATA_PACKET_MINIMUM    ((IOTDATA_HEADER_BITS / 8) + IOTDATA_PRES_MINIMUM)
 
 /* ---------------------------------------------------------------------------
  * Field types

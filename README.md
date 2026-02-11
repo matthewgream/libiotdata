@@ -1407,10 +1407,33 @@ In particular, avoidance of the TLV element will save considerable footprint.
 | `IOTDATA_NO_PRINT`              | Exclude print functions |
 | `IOTDATA_NO_DUMP`               | Exclude dump functions |
 | `IOTDATA_NO_JSON`               | Exclude JSON functions |
+| `IOTDATA_NO_CHECKS_STATE`       | Exclude state checking logic |
+| `IOTDATA_NO_CHECKS_TYPES`       | Exclude type checking logic |
 | `IOTDATA_NO_ERROR_STRINGS`      | Exclude error strings (and iotdata_strerror) |
 
 These allow building an encoder-only image for a sensor node
 (smallest possible footprint) or a decoder-only image for a gateway.
+
+Be aware that `IOTDATA_NO_CHECKS_STATE` will cease verification of
+non null `iotdata_encoder_t*` and the ordering of the encoding calls
+(i.e.  that `begin` must be first, followed by individual `encode_`
+functions before a final `end`. This is moderately safe, and
+acceptable to turn on during development and off for production. 
+It will also turn off null checks for buffers passed into the
+`dump`, `print` and `json` function.s
+
+`IOTDATA_NO_CHECKS_TYPES` will cease verification of type boundaries
+on calls to `encode_` functions, for example that temperatures passed
+are between quantisable minimum and maximum values. This is less safe,
+but results only in bad data (and badly quantised data) passed over
+the wire: this may fail to interped bad data obtained from sensors.
+This option will turn off length checking in TLV encoded strings (and
+worst case, truncate them) as we as TLV encoded string validity (and
+worst case, transmit these as spaces).
+
+Unless there are considerable space constraints, such as on Class 1
+microcontrollers (Appendix E), it is not recommended to engage either
+of the `NO_CHECKS` options.
 
 **Floating-point control:**
 

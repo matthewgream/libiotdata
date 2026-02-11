@@ -7,8 +7,10 @@
 #   test-custom   - Build and run custom variant tests
 #   test-example  - Build and run example default variant test
 #   test-versions - Build and run all compile-time variant smoke tests
+#   minimal       - Build and show full versus minimal build sizes
 #   lib           - Build static library
 #   clean         - Remove build artifacts
+#   format        - Run clang-format across the code
 #
 # Compile-time options (pass via EXTRA=):
 #   IOTDATA_VARIANT_MAPS_DEFAULT   Default variant maps (weather station)
@@ -22,16 +24,12 @@
 #   IOTDATA_NO_PRINT               Exclude Print output support
 #   IOTDATA_NO_DUMP                Exclude Dump output support
 #   IOTDATA_NO_JSON                Exclude JSON support
+#   IOTDATA_NO_CHECKS_STATE        Remove runtime state checks
+#   IOTDATA_NO_CHECKS_TYPES        Remove runtime type checks (e.g. temp limits)
 #   IOTDATA_NO_ERROR_STRINGS       Exclude error strings (iotdata_strerror)
 #   IOTDATA_NO_FLOATING_DOUBLES    Use float instead of double for position
 #   IOTDATA_NO_FLOATING            Integer-only mode (no float/double)
 #
-# Examples:
-#   make                            # Full build with all elements
-#   make test                       # Build and run both test suites
-#   make test-versions              # Build all compile-time variants
-#   make EXTRA=-DIOTDATA_NO_DECODE  # Encoder-only build (no tests)
-#   make minimal                    # Measure minimal encoder-only build
 
 CC=gcc
 CFLAGS_DEFINES=-D_GNU_SOURCE
@@ -167,9 +165,10 @@ minimal:
 		-DIOTDATA_NO_DECODE \
 		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
 		-DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
-		-DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
+		-DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
 		-c $(LIB_SRC) -o iotdata_minimal.o
 	@echo "Minimal object size:"
 	@size iotdata_minimal.o
 	@objdump -t iotdata_minimal.o | grep ' \.data\| \.rodata' | sort -k5 -rn
 	@rm -f iotdata_full.o iotdata_minimal.o
+
