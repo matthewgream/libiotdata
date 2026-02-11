@@ -16,10 +16,8 @@
  *   cc -DIOTDATA_VARIANT_MAPS_DEFAULT test_example.c iotdata.c -lm -lcjson -o test_example
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "iotdata.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

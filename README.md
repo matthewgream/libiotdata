@@ -1464,43 +1464,51 @@ The following measurements are from GCC on x86-64 using the `minimal`
 build target.  ARM Cortex-M platforms will have smaller code sizes.
 With space optimisation, the minimal implementation is less than 2KB.
 
-| Configuration                                       | -O6 (.text size) | -Os (.text size) |
-|-----------------------------------------------------|------------------|------------------|
-| Full library (all elements, encode + decode + JSON) | 84 KB            | 25 KB            |
-| Encoder-only, battery + environment only            | 6.4 KB           | 1.3 KB           |
+| Configuration                                       | -O6          | -Os          |
+|-----------------------------------------------------|--------------|--------------|
+| Full library (all elements, encode + decode + JSON) | ~84 KB       | ~29 KB       |
+| Encoder-only, battery + environment only            | ~5.7 KB      | ~1.1 KB      |
 
 ```
 --- Full library ---
-gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -O6 -fstack-protector-strong -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
+gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -O6 -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
    text    data     bss     dec     hex filename
-  84718     448    4096   89262   15cae iotdata_full.o
+  84699    2096    4096   90891   1630b iotdata_full.o
 --- Minimal encoder (battery + environment, integer-only) ---
-gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -O6 -fstack-protector-strong \
+gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -O6 -mno-sse -mno-mmx -mno-80387 \
         -DIOTDATA_NO_DECODE \
         -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
         -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
-        -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
+        -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
         -c iotdata.c -o iotdata_minimal.o
 Minimal object size:
    text    data     bss     dec     hex filename
-   6393       0       0    6393    18f9 iotdata_minimal.o
+   5718      32       0    5750    1676 iotdata_minimal.o
+0000000000000000 l     O .data.rel.ro.local     0000000000000010 _iotdata_field_ops
+0000000000000018 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_battery
+0000000000000010 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_environment
+0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
 ```
 
 ```
 --- Full library ---
-gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -Os -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
+gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -Os -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
    text    data     bss     dec     hex filename
-  25178     448    4096   29722    741a iotdata_full.o
+  29570    2096    4096   35762    8bb2 iotdata_full.o
 --- Minimal encoder (battery + environment, integer-only) ---
-gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings -D_GNU_SOURCE -Os \
+gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -Os -mno-sse -mno-mmx -mno-80387 \
         -DIOTDATA_NO_DECODE \
         -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
         -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
-        -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS \
+        -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
         -c iotdata.c -o iotdata_minimal.o
 Minimal object size:
    text    data     bss     dec     hex filename
-   1345       0       0    1345     541 iotdata_minimal.o
+   1125      32       0    1157     485 iotdata_minimal.o
+0000000000000000 l     O .data.rel.ro.local     0000000000000010 _iotdata_field_ops
+0000000000000018 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_battery
+0000000000000010 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_environment
+0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
 ```
 
 

@@ -11,9 +11,6 @@
  * defines to allow compile-time exclusion on constrained targets.
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "iotdata.h"
 
 #include <stdlib.h>
@@ -22,6 +19,7 @@
 #if !defined(IOTDATA_NO_FLOATING)
 #include <math.h>
 #endif
+
 #if !defined(IOTDATA_NO_JSON)
 #include <cjson/cJSON.h>
 #endif

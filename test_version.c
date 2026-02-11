@@ -19,9 +19,6 @@
  *   cc -DIOTDATA_VARIANT_MAPS_DEFAULT test_version.c iotdata.c -lm -lcjson -o test_version_FULL
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "iotdata.h"
 
 #include <stdio.h>
@@ -293,11 +290,10 @@ int main(void) {
 
     /* ---- Result ---- */
 
-    if (errors == 0) {
+    if (errors == 0)
         printf("PASS\n");
-    } else {
+    else
         printf("FAIL (%d errors)\n", errors);
-    }
 
     return errors > 0 ? 1 : 0;
 }

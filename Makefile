@@ -32,7 +32,7 @@
 #
 
 CC=gcc
-CFLAGS_DEFINES=-D_GNU_SOURCE
+CFLAGS_DEFINES=
 CFLAGS_COMMON=-Wall -Wextra -Wpedantic
 CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
     -Wstrict-prototypes \
@@ -47,11 +47,10 @@ CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
     -Wundef \
     -Wunreachable-code -Wunused \
     -Wwrite-strings
-CFLAGS_OPT=-Os
-# CFLAGS_OPT=-O6
+# CFLAGS_OPT=-Os
+CFLAGS_OPT=-O6
 CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT)
 CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
-# CFLAGS_NO_FLOATING_POINT=
 AR      = ar
 LDFLAGS =
 LIBS      = -lm -lcjson
@@ -59,6 +58,17 @@ LIBS_NOJSON = -lm
 LIBS_NOJSON_NO_MATH =
 LIBS_NO_MATH=-lcjson
 EXTRA   ?= -DIOTDATA_VARIANT_MAPS_DEFAULT
+
+CC_MACHINE := $(shell $(CC) -dumpmachine)
+ifneq ($(findstring x86_64,$(CC_MACHINE)),)
+    CFLAGS_NO_FLOATING_POINT = -mno-sse -mno-mmx -mno-80387
+else ifneq ($(findstring i686,$(CC_MACHINE)),)
+    CFLAGS_NO_FLOATING_POINT = -mno-sse -mno-mmx -mno-80387
+else ifneq ($(findstring i386,$(CC_MACHINE)),)
+    CFLAGS_NO_FLOATING_POINT = -mno-sse -mno-mmx -mno-80387
+else
+    CFLAGS_NO_FLOATING_POINT =
+endif
 
 LIB_SRC    = iotdata.c
 LIB_OBJ    = iotdata.o
@@ -72,6 +82,8 @@ TEST_CUSTOM_BIN  = test_custom
 TEST_EXAMPLE_SRC = test_example.c
 TEST_EXAMPLE_BIN = test_example
 TEST_VERSION_SRC = test_version.c
+
+MINIMAL_OBJ=iotdata_full.o iotdata_minimal.o
 
 VERSION_BINS = \
     test_version_FULL \
@@ -91,31 +103,26 @@ lib: $(LIB_STATIC)
 
 $(LIB_OBJ): $(LIB_SRC) $(LIB_HDR)
 	$(CC) $(CFLAGS) $(EXTRA) -c $(LIB_SRC) -o $(LIB_OBJ)
-
 $(LIB_STATIC): $(LIB_OBJ)
 	$(AR) rcs $(LIB_STATIC) $(LIB_OBJ)
 
 $(TEST_DEFAULT_BIN): $(TEST_DEFAULT_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_DEFAULT_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_DEFAULT_BIN)
-
 $(TEST_CUSTOM_BIN): $(TEST_CUSTOM_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=custom_variants -DIOTDATA_VARIANT_MAPS_COUNT=3 $(TEST_CUSTOM_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_CUSTOM_BIN)
-
 $(TEST_EXAMPLE_BIN): $(TEST_EXAMPLE_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
 
-test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN)
-	./$(TEST_DEFAULT_BIN)
-	./$(TEST_CUSTOM_BIN)
-
 test-default: $(TEST_DEFAULT_BIN)
 	./$(TEST_DEFAULT_BIN)
-
 test-custom: $(TEST_CUSTOM_BIN)
 	./$(TEST_CUSTOM_BIN)
-
 test-example: $(TEST_EXAMPLE_BIN)
 	./$(TEST_EXAMPLE_BIN)
+
+test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN)
+	./$(TEST_DEFAULT_BIN)
+	./$(TEST_CUSTOM_BIN)
 
 test_version_FULL: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT \
@@ -142,7 +149,6 @@ test_version_NO_FLOATING_NO_JSON: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -DIOTDATA_NO_FLOATING -DIOTDATA_NO_JSON \
 		$(CFLAGS_NO_FLOATING_POINT) \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS_NOJSON_NO_MATH) -o $@
-
 test-versions: $(VERSION_BINS)
 	@echo ""
 	@echo "=== iotdata — build variant smoke tests ==="
@@ -150,18 +156,20 @@ test-versions: $(VERSION_BINS)
 	@for t in $(VERSION_BINS); do ./$$t; done
 	@echo ""
 
+test-all: test test-versions test-example
+
 format:
 	clang-format -i *.[ch]
 
 clean:
-	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS)
+	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ)
 
 minimal:
 	@echo "--- Full library ---"
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_full.o
 	@size iotdata_full.o
 	@echo "--- Minimal encoder (battery + environment, integer-only) ---"
-	$(CC) $(CFLAGS) \
+	$(CC) $(CFLAGS) $(CFLAGS_NO_FLOATING_POINT) \
 		-DIOTDATA_NO_DECODE \
 		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
 		-DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
