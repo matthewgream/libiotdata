@@ -119,7 +119,7 @@ static void test_battery_round_trip(void) {
     ASSERT_OK(iotdata_encode_battery(&enc, 75, true), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_BATTERY), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_BATTERY), 1, "present");
     /* 75% → q=round(75/100*31)=23, decode=round(23/31*100)=74 */
     ASSERT_NEAR(dec.battery_level, 75, 4, "level");
     ASSERT_EQ(dec.battery_charging, true, "charging");
@@ -133,7 +133,7 @@ static void test_environment_round_trip(void) {
     ASSERT_OK(iotdata_encode_environment(&enc, 22.5f, 1013, 65), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_ENVIRONMENT), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_ENVIRONMENT), 1, "present");
     ASSERT_NEAR(dec.temperature, 22.5, 0.25, "temp");
     ASSERT_EQ(dec.pressure, 1013, "pressure");
     ASSERT_EQ(dec.humidity, 65, "humidity");
@@ -147,7 +147,7 @@ static void test_wind_round_trip(void) {
     ASSERT_OK(iotdata_encode_wind(&enc, 5.5f, 180, 8.0f), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_WIND), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_WIND), 1, "present");
     ASSERT_NEAR(dec.wind_speed, 5.5, 0.5, "speed");
     ASSERT_NEAR(dec.wind_direction, 180, 2.0, "dir");
     ASSERT_NEAR(dec.wind_gust, 8.0, 0.5, "gust");
@@ -161,7 +161,7 @@ static void test_rain_round_trip(void) {
     ASSERT_OK(iotdata_encode_rain(&enc, 42, 15), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_RAIN), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_RAIN), 1, "present");
     ASSERT_EQ(dec.rain_rate, 42, "rate");
     ASSERT_NEAR(dec.rain_size10, 15, 5.0, "size");
     PASS();
@@ -174,7 +174,7 @@ static void test_solar_round_trip(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 850, 11), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_SOLAR), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_SOLAR), 1, "present");
     ASSERT_EQ(dec.solar_irradiance, 850, "irradiance");
     ASSERT_EQ(dec.solar_ultraviolet, 11, "uv");
     PASS();
@@ -187,7 +187,7 @@ static void test_link_round_trip(void) {
     ASSERT_OK(iotdata_encode_link(&enc, -90, 5.0f), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_LINK), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_LINK), 1, "present");
     /* RSSI: -90 → q=(-90-(-120))/4=7.5→8, decode=-120+8*4=-88 */
     ASSERT_NEAR(dec.link_rssi, -90, 4, "rssi");
     ASSERT_NEAR(dec.link_snr, 5.0, 5.0, "snr");
@@ -201,7 +201,7 @@ static void test_flags_round_trip(void) {
     ASSERT_OK(iotdata_encode_flags(&enc, 0xA5), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_FLAGS), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_FLAGS), 1, "present");
     ASSERT_EQ(dec.flags, 0xA5, "flags");
     PASS();
 }
@@ -213,7 +213,7 @@ static void test_air_quality_round_trip(void) {
     ASSERT_OK(iotdata_encode_air_quality(&enc, 312), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_AIR_QUALITY), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_AIR_QUALITY), 1, "present");
     ASSERT_EQ(dec.air_quality, 312, "aqi");
     PASS();
 }
@@ -225,7 +225,7 @@ static void test_clouds_round_trip(void) {
     ASSERT_OK(iotdata_encode_clouds(&enc, 6), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_CLOUDS), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_CLOUDS), 1, "present");
     ASSERT_EQ(dec.clouds, 6, "okta");
     PASS();
 }
@@ -237,7 +237,7 @@ static void test_radiation_round_trip(void) {
     ASSERT_OK(iotdata_encode_radiation(&enc, 15000, 1.23f), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_RADIATION), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_RADIATION), 1, "present");
     ASSERT_EQ_U(dec.radiation_cpm, 15000, "cpm");
     ASSERT_NEAR(dec.radiation_dose, 1.23, 0.01, "dose");
     PASS();
@@ -250,7 +250,7 @@ static void test_position_round_trip(void) {
     ASSERT_OK(iotdata_encode_position(&enc, 51.507222, -0.127500), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_POSITION), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_POSITION), 1, "present");
     ASSERT_NEAR(dec.position_lat, 51.507222, 0.001, "lat");
     ASSERT_NEAR(dec.position_lon, -0.127500, 0.001, "lon");
     PASS();
@@ -263,9 +263,9 @@ static void test_datetime_round_trip(void) {
     ASSERT_OK(iotdata_encode_datetime(&enc, 3456000), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_DATETIME), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_DATETIME), 1, "present");
     /* 3456000 / 5 * 5 = 3456000 (exact) */
-    ASSERT_EQ_U(dec.datetime_seconds, 3456000, "seconds");
+    ASSERT_EQ_U(dec.datetime_secs, 3456000, "seconds");
     PASS();
 }
 
@@ -325,7 +325,7 @@ static void test_pres1_all_seven_fields(void) {
     ASSERT_NEAR(dec.radiation_dose, 0.05, 0.01, "dose");
     ASSERT_NEAR(dec.position_lat, -33.8688, 0.001, "lat");
     ASSERT_NEAR(dec.position_lon, 151.2093, 0.001, "lon");
-    ASSERT_EQ_U(dec.datetime_seconds, 7200000, "dt");
+    ASSERT_EQ_U(dec.datetime_secs, 7200000, "dt");
     PASS();
 }
 
@@ -375,7 +375,7 @@ static void test_full_weather_station(void) {
     ASSERT_NEAR(dec.radiation_dose, 0.15, 0.01, "dose");
     ASSERT_NEAR(dec.position_lat, 59.334591, 0.001, "lat");
     ASSERT_NEAR(dec.position_lon, 18.063240, 0.001, "lon");
-    ASSERT_EQ_U(dec.datetime_seconds, 3456000, "dt");
+    ASSERT_EQ_U(dec.datetime_secs, 3456000, "dt");
     PASS();
 }
 
@@ -422,13 +422,13 @@ static void test_boundary_min_values(void) {
     ASSERT_NEAR(dec.radiation_dose, 0.0, 0.01, "dose");
     ASSERT_NEAR(dec.position_lat, -90.0, 0.001, "lat");
     ASSERT_NEAR(dec.position_lon, -180.0, 0.001, "lon");
-    ASSERT_EQ_U(dec.datetime_seconds, 0, "dt");
+    ASSERT_EQ_U(dec.datetime_secs, 0, "dt");
     PASS();
 }
 
 static void test_boundary_max_values(void) {
     TEST("Maximum boundary values");
-    begin(IOTDATA_STATION_ID_MAX, IOTDATA_SEQUENCE_MAX);
+    begin(IOTDATA_STATION_MAX, IOTDATA_SEQUENCE_MAX);
 
     ASSERT_OK(iotdata_encode_battery(&enc, 100, true), "bat 100%");
     ASSERT_OK(iotdata_encode_environment(&enc, 80.0f, 1105, 100), "env max");
@@ -648,8 +648,8 @@ static void test_tlv_round_trip(void) {
     ASSERT_EQ(dec.tlv[0].format, IOTDATA_TLV_FMT_RAW, "fmt0");
     ASSERT_EQ(dec.tlv[0].type, 1, "type0");
     ASSERT_EQ(dec.tlv[0].length, 4, "len0");
-    ASSERT_EQ(dec.tlv[0].raw[0], 0xDE, "raw0");
-    ASSERT_EQ(dec.tlv[0].raw[3], 0xEF, "raw3");
+    ASSERT_EQ(dec.tlv[0].data[0], 0xDE, "raw0");
+    ASSERT_EQ(dec.tlv[0].data[3], 0xEF, "raw3");
     ASSERT_EQ(dec.tlv[1].format, IOTDATA_TLV_FMT_STRING, "fmt1");
     ASSERT_EQ(strcmp(dec.tlv[1].str, "hello world"), 0, "str1");
     PASS();
@@ -751,7 +751,7 @@ static void test_empty_packet(void) {
 
     ASSERT_EQ(pkt_len, 5, "size"); /* 4 header + 1 pres0 */
     decode();
-    ASSERT_EQ(dec.fields_present, 0, "no fields");
+    ASSERT_EQ(dec.fields, 0, "no fields");
     ASSERT_EQ(dec.variant, 0, "variant");
     PASS();
 }
@@ -763,7 +763,7 @@ static void test_single_pres1_field_only(void) {
     finish();
     decode();
 
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_FLAGS), 1, "present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_FLAGS), 1, "present");
     ASSERT_EQ(dec.flags, 0x42, "flags");
     /* Should have needed extension byte since flags is in pres1 */
     PASS();

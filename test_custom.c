@@ -203,10 +203,10 @@ static void test_soil_sensor_partial(void) {
     finish();
     decode_pkt();
 
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_BATTERY), 1, "bat present");
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_TEMPERATURE), 1, "temp present");
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_HUMIDITY), 0, "humid absent");
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_DEPTH), 0, "depth absent");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_BATTERY), 1, "bat present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_TEMPERATURE), 1, "temp present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_HUMIDITY), 0, "humid absent");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_DEPTH), 0, "depth absent");
     ASSERT_NEAR(dec.temperature, -10.0, 0.25, "temp");
     PASS();
 }
@@ -277,9 +277,9 @@ static void test_wind_mast_partial(void) {
     finish();
     decode_pkt();
 
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_WIND_SPEED), 1, "wspd present");
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_WIND_DIRECTION), 1, "wdir present");
-    ASSERT_EQ(!!(dec.fields_present & IOTDATA_FIELD_WIND_GUST), 0, "wgust absent");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_WIND_SPEED), 1, "wspd present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_WIND_DIRECTION), 1, "wdir present");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_WIND_GUST), 0, "wgust absent");
     ASSERT_NEAR(dec.wind_speed, 3.0, 0.5, "wspd");
     ASSERT_NEAR(dec.wind_direction, 90, 2.0, "wdir");
     PASS();
@@ -371,7 +371,7 @@ static void test_radiation_monitor_full(void) {
     /* Verify pres1 */
     ASSERT_NEAR(dec.position_lat, 51.5, 0.001, "lat");
     ASSERT_NEAR(dec.position_lon, -0.1, 0.001, "lon");
-    ASSERT_EQ_U(dec.datetime_seconds, 172800, "dt");
+    ASSERT_EQ_U(dec.datetime_secs, 172800, "dt");
     ASSERT_EQ(dec.flags, 0x03, "flags");
     ASSERT_EQ(dec.solar_irradiance, 400, "sol");
     ASSERT_EQ(dec.solar_ultraviolet, 6, "uv");
@@ -562,7 +562,7 @@ static void test_empty_packets_all_variants(void) {
         ASSERT_EQ(pkt_len, 5, "5 bytes");
         decode_pkt();
         ASSERT_EQ(dec.variant, v, "variant");
-        ASSERT_EQ(dec.fields_present, 0, "no fields");
+        ASSERT_EQ(dec.fields, 0, "no fields");
     }
     PASS();
 }

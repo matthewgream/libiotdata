@@ -445,6 +445,7 @@ const iotdata_variant_def_t my_variants[] = {
             { IOTDATA_FIELD_TEMPERATURE, "soil_temp"  },
             { IOTDATA_FIELD_HUMIDITY,    "soil_moist" },
             { IOTDATA_FIELD_DEPTH,       "soil_depth" },
+            { IOTDATA_FIELD_NONE,        NULL         },
         },
     },
 };
@@ -1059,7 +1060,7 @@ variant definition.
 ```json
 {
   "variant": 0,
-  "station_id": 42,
+  "station": 42,
   "sequence": 1234,
   "packed_bits": 120,
   "packed_bytes": 15,
@@ -1717,7 +1718,7 @@ iotdata_decoded_t dec;
 iotdata_decode(buf, len, &dec);
 
 printf("Station %u: %.2f°C, %u hPa, wind %.1f m/s @ %u°\n",
-       dec.station_id, dec.temperature, dec.pressure,
+       dec.station, dec.temperature, dec.pressure,
        dec.wind_speed, dec.wind_direction);
 
 /* Or decode to JSON for forwarding */
@@ -2217,7 +2218,7 @@ static inline uint16_t int_round(uint32_t num, uint32_t denom) {
 
 The `libcjson` dependency exists only for the JSON serialisation
 functions and SHOULD be excluded from embedded builds via `#ifdef
-IOTDATA_HAS_JSON` or by simply not compiling the JSON functions.
+IOTDATA_NO_JSON`.
 
 ### E.8. Stack vs Heap Allocation
 
@@ -2343,7 +2344,7 @@ MQTT, HTTP, or database insertion.
       Offset     Len  Field                            Raw  Decoded                       Range
       ------     ---  -----                            ---  -------                       -----
            0       4  variant                            0  0                             0-14 (15=rsvd)
-           4      12  station_id                        42  42                            0-4095
+           4      12  station                           42  42                            0-4095
           16      16  sequence                           1  1                             0-65535
           32       8  presence[0]                      191  0xbf                          ext|tlv|6 fields
           40       8  presence[1]                      126  0x7e                          ext|7 fields
@@ -2390,7 +2391,7 @@ Station 42 seq=1 var=0 (weather_station) [253 bits, 32 bytes]
 
 ** JSON:
 
-{"variant":0,"station_id":42,"sequence":1,"packed_bits":253,"packed_bytes":32,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":0},"environment":{"temperature":14.75,"pressure":1013,"humidity":55},"wind":{"speed":4,"direction":172,"gust":8.5},"rain":{"rate":3,"size":4},"solar":{"irradiance":393,"ultraviolet":3},"clouds":4,"air_quality":41,"radiation":{"cpm":22,"dose":0.099999994039535522},"position":{"latitude":59.334592183506032,"longitude":18.06323039908591},"datetime":3518945,"flags":1}
+{"variant":0,"station":42,"sequence":1,"packed_bits":253,"packed_bytes":32,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":0},"environment":{"temperature":14.75,"pressure":1013,"humidity":55},"wind":{"speed":4,"direction":172,"gust":8.5},"rain":{"rate":3,"size":4},"solar":{"irradiance":393,"ultraviolet":3},"clouds":4,"air_quality":41,"radiation":{"cpm":22,"dose":0.099999994039535522},"position":{"latitude":59.334592183506032,"longitude":18.06323039908591},"datetime":3518945,"flags":1}
 
 ────────────────────────────────────────────────────────────────────────────────
 ** Packet #2  [17:29:38]  30-second report
@@ -2416,7 +2417,7 @@ Station 42 seq=1 var=0 (weather_station) [253 bits, 32 bytes]
       Offset     Len  Field                            Raw  Decoded                       Range
       ------     ---  -----                            ---  -------                       -----
            0       4  variant                            0  0                             0-14 (15=rsvd)
-           4      12  station_id                        42  42                            0-4095
+           4      12  station                           42  42                            0-4095
           16      16  sequence                           2  2                             0-65535
           32       8  presence[0]                       63  0x3f                          ext|tlv|6 fields
           40       5  battery_level                     26  84%                           0..100%%, 5b quant
@@ -2447,7 +2448,7 @@ Station 42 seq=2 var=0 (weather_station) [124 bits, 16 bytes]
   solar:               390 W/m2, UV 3
 
 ** JSON:
-{"variant":0,"station_id":42,"sequence":2,"packed_bits":124,"packed_bytes":16,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":10},"environment":{"temperature":14.5,"pressure":1013,"humidity":55},"wind":{"speed":3.5,"direction":172,"gust":7},"rain":{"rate":5,"size":0},"solar":{"irradiance":390,"ultraviolet":3}}
+{"variant":0,"station":42,"sequence":2,"packed_bits":124,"packed_bytes":16,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":10},"environment":{"temperature":14.5,"pressure":1013,"humidity":55},"wind":{"speed":3.5,"direction":172,"gust":7},"rain":{"rate":5,"size":0},"solar":{"irradiance":390,"ultraviolet":3}}
 ```
 
 ---

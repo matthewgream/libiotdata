@@ -49,11 +49,11 @@ CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
     -Wundef \
     -Wunreachable-code -Wunused \
     -Wwrite-strings
-# CFLAGS_OPT=-Os
-CFLAGS_OPT=-O6
+CFLAGS_OPT=-Os
+# CFLAGS_OPT=-O6
 CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT)
-# CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
-CFLAGS_NO_FLOATING_POINT=
+CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
+# CFLAGS_NO_FLOATING_POINT=
 AR      = ar
 LDFLAGS =
 LIBS      = -lm -lcjson

@@ -225,7 +225,7 @@ int main(void) {
         CHECK(rc == IOTDATA_OK, "decode");
         CHECK(decoded.variant == 0, "variant == 0");
 #if !defined(IOTDATA_NO_ENCODE)
-        CHECK(decoded.station_id == 1, "station_id == 1");
+        CHECK(decoded.station == 1, "station == 1");
         CHECK(decoded.sequence == 1, "sequence == 1");
 #endif
     }
