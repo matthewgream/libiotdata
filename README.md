@@ -19,11 +19,12 @@
 ## Status of This Document
 
 This document specifies a bit-packed telemetry protocol for
-battery-constrained IoT sensor systems, with particular emphasis on
-LoRa-based remote environmental monitoring.  The protocol has a
-reference implementation in C (`libiotdata`) which is the normative
-source for any ambiguity in this specification.  In the tradition of
-RFC 1, the specification is informed by running code.
+battery- and transmission- constrained IoT sensor systems, with
+particular emphasis on LoRa-based remote environmental monitoring.
+The protocol has a reference implementation in C (`libiotdata`)
+which is the normative source for any ambiguity in this specification.
+In the tradition of RFC 1, the specification is informed by running
+code.
 
 Discussion of this document and the reference implementation takes
 place on the project's GitHub repository.
@@ -130,7 +131,8 @@ constrained along three axes simultaneously:
   3. **Processing** — small, inexpensive embedded microcontrollers
      running at tens of megahertz with tens or hundreds of kilobytes
      of RAM and program storage, where code size and complexity are
-     real constraints.
+     real constraints, and where there are no, or limited, operating
+     system or protocol support.
 
 Existing serialisation approaches — JSON, Protobuf, CBOR, even raw
 C structs — waste bits on byte alignment, field delimiters, schema
@@ -226,7 +228,7 @@ The following principles guided the protocol design:
      support interoperability between implementations, e.g. between
      vendors.  Rather, the design intends to provide an optimal
      framework and reference for a specific vendor across a suite
-     of devices.
+     of devices. Interoperability may be a goal for future versions.
 
 ## 4. Packet Structure Overview
 
@@ -288,6 +290,13 @@ The header is always the first 32 bits of a packet.
   The receiver MAY use this to detect lost packets.  The wrap-around
   is expected and MUST NOT be treated as an error.
 
+The header could be reduced to 24 bits by a reduction in the Station
+ID (from 12 to 8 bits, saving 4 bits) and the Sequence (from 16 to 12
+bits, saving 4 bits).  This would retain station diversity (at 256,
+rather than 4096) and loss detection (at 4096 packet window, rather
+than 65536). Such a modification is not contemplated in this version
+of the protocol.
+
 ## 6. Presence Bytes
 
 Immediately following the header, one or more presence bytes indicate
@@ -309,7 +318,8 @@ indicates another presence byte follows.
 
   - **TLV** (bit 6): TLV data flag.  If set, one or more TLV entries
     (Section 9) follow after all data fields. Builds excluding TLV
-    MAY use this bit for Data fields.
+    might use this as a Data field, but this is not contemplated in
+    this version of the protocol.
 
   - **S0-S5** (bits 5-0): Data fields 0 through 5.  Each bit, when
     set, indicates that the corresponding field (as defined by the
