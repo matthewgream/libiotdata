@@ -2370,9 +2370,10 @@ library's table-driven architecture is unnecessary overhead.  The
 following self-contained function encodes a weather station packet
 with battery, environment, and two TLV entries directly into a
 caller-provided buffer.  No structs, no function pointers, no
-library linkage — just bit-packing arithmetic.
-
-Configure via `#define` before including:
+library linkage — just bit-packing arithmetic.  The full weather
+station packet requires a buffer of no more than 32 bytes (without
+TLV).  If really necessary, the implementation can avoid buffers
+and use ws_bits to write directly to an output (e.g. serial port).
 
 ```c
 #define WS_VARIANT       0    /* Built-in weather station */
@@ -2473,8 +2474,9 @@ static uint8_t ws_encode(
 
 **Resource usage:** This function requires approximately 20 bytes of
 stack (loop counters, bit pointer, temporaries) plus the output
-buffer.  The code compiles to under 400 bytes on PIC18F or AVR.
-The caller can reuse the output buffer between transmissions.
+buffer (or not, if directly writing to serial output).  The code
+compiles to under 400 bytes on PIC18F or AVR.  The caller can reuse
+the output buffer between transmissions.
 
 **Adapting for other variants:** Copy the function, change the
 presence byte constant, and add or remove the field sections.  Each
