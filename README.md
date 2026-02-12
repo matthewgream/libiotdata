@@ -1610,6 +1610,15 @@ The following items are identified for future revisions:
      more variant bits, larger station ID space, or additional
      structural fields.
 
+  4. **Implementation singularity limitation:** The wire format
+     supports multiple instances of the same field type in different
+     slots (e.g. two independent temperature readings).  The current
+     reference implementation uses fixed named storage in the
+     encoder/decoder structs, limiting each field type to one
+     instance.  A future implementation could decouple field type
+     from field storage, allowing the variant map to bind each slot
+     to an independent storage location.
+
 ---
 
 ## Appendix A. 6-Bit Character Table
