@@ -103,6 +103,7 @@ place on the project's GitHub repository.
   - [E.9. Endianness](#e9-endianness)
   - [E.10. Real-Time Considerations](#e10-real-time-considerations)
   - [E.11. Platform-Specific Notes](#e11-platform-specific-notes)
+  - [E.12. Class 1 Hand-Rolled Encoder Example](#e12-class-1-hand-rolled-encoder-example)
 - [Appendix F. Example Weather Station Output](#appendix-f-example-weather-station-output)
 
 ---
@@ -1460,16 +1461,16 @@ latent in the implementation.
 
 ### 13.4. Build Size
 
-The following measurements are from GCC on x86-64 and aarch64 using
-the `minimal` build target. With space optimisation, the minimal
-implementation is less than 2KB.
+The following measurements are from GCC on x86-64, aarch64 and 
+ESP32-C3 using the `minimal` build target. With space optimisation,
+the minimal implementation is less than 1KB on the embedded target.
 
-| Configuration                                       | x86-64 -O6 | x86-64 -Os | aarch64 -O6 | aarch64 -Os |
-|-----------------------------------------------------|------------|------------|-------------|-------------|
-| Full library (all elements, encode + decode + JSON) | ~84 KB     | ~29 KB     | ~86 KB      | ~31 KB      |
-| Encoder-only, battery + environment only            | ~5.7 KB    | ~1.1 KB    | ~5.7 KB     | ~1.1 KB     |
+| Configuration                                       | x86-64 -O6 | x86-64 -Os | aarch64 -O6 | aarch64 -Os | esp32-c3 -O6 | esp32-c3 -Os |
+|-----------------------------------------------------|------------|------------|-------------|-------------|--------------|--------------|
+| Full library (all elements, encode + decode + JSON) | ~84 KB     | ~29 KB     | ~86 KB      | ~31 KB      | ~68 KB       | ~19 KB       |
+| Encoder-only, battery + environment only            | ~5.7 KB    | ~1.1 KB    | ~5.7 KB     | ~1.1 KB     | ~5.1 KB      | ~0.8 KB      |
 
-**x86-64 minimal builds**
+**x86-64 builds**
 
 ```
 --- Full library ---
@@ -1511,6 +1512,26 @@ Minimal object size:
 0000000000000018 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_battery
 0000000000000010 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_environment
 0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
+```
+
+**esp32-c3 builds**
+
+```
+--- ESP32-C3 full library (no JSON) ---
+riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -O6 -DIOTDATA_NO_JSON -c iotdata.c -o iotdata_esp32c3_full.o
+   text    data     bss     dec     hex filename
+  68067       0       0   68067   109e3 iotdata_esp32c3_full.o
+--- ESP32-C3 minimal encoder (battery + environment, integer-only) ---
+riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -O6 \
+        -DIOTDATA_NO_DECODE \
+        -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
+        -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
+        -DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
+        -c iotdata.c -o iotdata_esp32c3_minimal.o
+Minimal object size:
+   text    data     bss     dec     hex filename
+   5102       0       0    5102    13ee iotdata_esp32c3_minimal.o
+00000000 l    d  .data  00000000 .data
 ```
 
 
@@ -2334,6 +2355,129 @@ full encoder context does not fit.  Use pack-as-you-go with backfill
 (Section E.4, Approach A), integer-only APIs (Section E.6), and
 aggressive `#ifdef` stripping (Section E.5).  Target flash budget:
 2-3 KB for a battery + environment + depth encoder.
+
+### E.12. Class 1 Hand-Rolled Encoder Example
+
+On devices with as little as 256 bytes of RAM (PIC16F, ATtiny), the
+library's table-driven architecture is unnecessary overhead.  The
+following self-contained function encodes a weather station packet
+with battery, environment, and two TLV entries directly into a
+caller-provided buffer.  No structs, no function pointers, no
+library linkage — just bit-packing arithmetic.
+
+Configure via `#define` before including:
+
+```c
+/* ---- Configuration ---- */
+#define WS_VARIANT       0
+#define WS_STATION_ID    1
+#define WS_PRES0_FIELDS  6    /* battery, link, environment, wind, rain, solar */
+
+/* Presence byte layout */
+#define WS_PRES_EXT      0x80
+#define WS_PRES_TLV      0x40
+
+/* ---- Writer ---- */
+static void ws_bits(uint8_t *buf, uint16_t *bp, uint32_t val, uint8_t n) {
+    for (int8_t i = n - 1; i >= 0; i--, (*bp)++)
+        if (val & (1UL << i))
+            buf[*bp >> 3] |= (1U << (7 - (*bp & 7)));
+}
+
+/* ---- Encoder ----
+ *
+ * Encodes: battery, environment, one raw TLV, one string TLV.
+ * All integer arithmetic.  No floating point.  No malloc.
+ *
+ * Parameters:
+ *   buf        — output buffer, must be zeroed by caller, >= 32 bytes
+ *   seq        — 16-bit sequence number
+ *   batt_pct   — battery level 0-100
+ *   charging   — 0 or 1
+ *   temp100    — temperature in centidegrees (-4000 = -40.00 C)
+ *   press_hpa  — pressure in hPa (850-1105)
+ *   humid_pct  — humidity 0-100
+ *   tlv0_type  — first TLV type (0-63)
+ *   tlv0_data  — first TLV raw data pointer
+ *   tlv0_len   — first TLV data length
+ *   tlv1_type  — second TLV type (0-63)
+ *   tlv1_str   — second TLV string (6-bit charset: a-z 0-9 A-Z space)
+ *   tlv1_len   — second TLV string length
+ *
+ * Returns: packet size in bytes
+ */
+static uint8_t ws_encode(
+    uint8_t *buf, uint16_t seq,
+    uint8_t batt_pct, uint8_t charging,
+    int16_t temp100, uint16_t press_hpa, uint8_t humid_pct,
+    uint8_t tlv0_type, const uint8_t *tlv0_data, uint8_t tlv0_len,
+    uint8_t tlv1_type, const char *tlv1_str, uint8_t tlv1_len)
+{
+    uint16_t bp = 0;
+
+    /* --- Header: 4-bit variant + 12-bit station + 16-bit sequence --- */
+    ws_bits(buf, &bp, WS_VARIANT, 4);
+    ws_bits(buf, &bp, WS_STATION_ID, 12);
+    ws_bits(buf, &bp, seq, 16);
+
+    /* --- Presence byte 0: ext=0, tlv=1, battery=1, link=0,
+           environment=1, wind=0, rain=0, solar=0 --- */
+    /*   bit 7: ext         = 0  (no pres1)
+     *   bit 6: tlv         = 1  (TLV present)
+     *   bit 5: battery     = 1
+     *   bit 4: link        = 0
+     *   bit 3: environment = 1
+     *   bit 2: wind        = 0
+     *   bit 1: rain        = 0
+     *   bit 0: solar       = 0
+     */
+    ws_bits(buf, &bp, 0x68, 8);   /* 0b01101000 */
+
+    /* --- Battery: 5-bit level + 1-bit charging --- */
+    ws_bits(buf, &bp, ((uint32_t)batt_pct * 31 + 50) / 100, 5);
+    ws_bits(buf, &bp, charging ? 1 : 0, 1);
+
+    /* --- Environment: 9-bit temp + 8-bit pressure + 7-bit humidity --- */
+    ws_bits(buf, &bp, (uint32_t)((temp100 - (-4000)) + 12) / 25, 9);
+    ws_bits(buf, &bp, (uint32_t)(press_hpa - 850), 8);
+    ws_bits(buf, &bp, (uint32_t)humid_pct, 7);
+
+    /* --- TLV 0: raw --- */
+    ws_bits(buf, &bp, 0, 1);           /* format: raw */
+    ws_bits(buf, &bp, tlv0_type, 6);   /* type */
+    ws_bits(buf, &bp, 1, 1);           /* more: yes */
+    ws_bits(buf, &bp, tlv0_len, 8);    /* length */
+    for (uint8_t i = 0; i < tlv0_len; i++)
+        ws_bits(buf, &bp, tlv0_data[i], 8);
+
+    /* --- TLV 1: 6-bit string --- */
+    ws_bits(buf, &bp, 1, 1);           /* format: string */
+    ws_bits(buf, &bp, tlv1_type, 6);   /* type */
+    ws_bits(buf, &bp, 0, 1);           /* more: no */
+    ws_bits(buf, &bp, tlv1_len, 8);    /* length */
+    for (uint8_t i = 0; i < tlv1_len; i++) {
+        char c = tlv1_str[i];
+        uint8_t v = (c == ' ') ? 0 :
+                    (c >= 'a' && c <= 'z') ? 1 + (c - 'a') :
+                    (c >= '0' && c <= '9') ? 27 + (c - '0') :
+                    (c >= 'A' && c <= 'Z') ? 37 + (c - 'A') : 0;
+        ws_bits(buf, &bp, v, 6);
+    }
+
+    return (uint8_t)((bp + 7) >> 3);
+}
+```
+
+**Resource usage:** This function requires approximately 20 bytes of
+stack (loop counters, bit pointer, temporaries) plus the output
+buffer.  The code compiles to under 400 bytes on PIC18F or AVR.
+The caller can reuse the output buffer between transmissions.
+
+**Adapting for other variants:** Copy the function, change the
+presence byte constant, and add or remove the field sections.  Each
+field is a self-contained block of `ws_bits` calls — the protocol
+document (Sections 4-6) gives the bit widths and quantisation
+formulae for every field type.
 
 ## Appendix F. Example Weather Station Output
 

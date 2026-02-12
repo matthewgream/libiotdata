@@ -7,7 +7,8 @@
 #   test-custom   - Build and run custom variant tests
 #   test-example  - Build and run example default variant test
 #   test-versions - Build and run all compile-time variant smoke tests
-#   minimal       - Build and show full versus minimal build sizes
+#   minimal       - Build and show full versus minimal build sizes (native)
+#   minimal-esp32 - Build and show full versus minimal build sizes (esp32 cross)
 #   lib           - Build static library
 #   clean         - Remove build artifacts
 #   format        - Run clang-format across the code
@@ -164,6 +165,8 @@ format:
 clean:
 	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ)
 
+################################################################################
+
 minimal:
 	@echo "--- Full library ---"
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_full.o
@@ -179,4 +182,27 @@ minimal:
 	@size iotdata_minimal.o
 	@objdump -t iotdata_minimal.o | grep ' \.data\| \.rodata' | sort -k5 -rn
 	@rm -f iotdata_full.o iotdata_minimal.o
+
+################################################################################
+
+ESP_CC = riscv32-esp-elf-gcc
+ESP_CFLAGS_BASE = -march=rv32imc -mabi=ilp32 -O6
+
+minimal-esp32:
+	@echo "--- ESP32-C3 full library (no JSON) ---"
+	$(ESP_CC) $(ESP_CFLAGS_BASE) -DIOTDATA_NO_JSON -c $(LIB_SRC) -o iotdata_esp32c3_full.o
+	@riscv32-esp-elf-size iotdata_esp32c3_full.o
+	@echo "--- ESP32-C3 minimal encoder (battery + environment, integer-only) ---"
+	$(ESP_CC) $(ESP_CFLAGS_BASE) \
+		-DIOTDATA_NO_DECODE \
+		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
+		-DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
+		-DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
+		-c $(LIB_SRC) -o iotdata_esp32c3_minimal.o
+	@echo "Minimal object size:"
+	@riscv32-esp-elf-size iotdata_esp32c3_minimal.o
+	@riscv32-esp-elf-objdump -t iotdata_esp32c3_minimal.o | grep ' \.data\| \.rodata' | sort -k5 -rn
+	@rm -f iotdata_esp32c3_full.o iotdata_esp32c3_minimal.o
+
+################################################################################
 
