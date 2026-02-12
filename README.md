@@ -4,14 +4,15 @@
 ## Specification
 
 ```
-    Title:      IoT Sensor Telemetry Protocol
-    Version:    1
-    Status:     Running Code
-    Created:    2026-02-07
-    Authors:    Matthew Gream
-    Licence:    Attribute-ShareAlike 4.0 International
-                https://creativecommons.org/licenses/by-sa/4.0
-    Repository: https://libiotdata.org
+    Title:     IoT Sensor Telemetry Protocol
+    Version:   1
+    Status:    Running Code
+    Created:   2026-02-07
+    Authors:   Matthew Gream
+    Licence:   Attribute-ShareAlike 4.0 International
+               https://creativecommons.org/licenses/by-sa/4.0
+    Location:  https://libiotdata.org
+               https://github.com/matthewgream/libiotdata
 
 ```
 
