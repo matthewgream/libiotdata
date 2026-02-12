@@ -25,7 +25,58 @@
 #endif
 
 /* =========================================================================
- * Internal structures
+ * External Variant maps
+ * ========================================================================= */
+
+#if defined(IOTDATA_VARIANT_MAPS) && defined(IOTDATA_VARIANT_MAPS_COUNT)
+
+extern const iotdata_variant_def_t IOTDATA_VARIANT_MAPS[];
+
+const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
+    if (variant < IOTDATA_VARIANT_MAPS_COUNT)
+        return &IOTDATA_VARIANT_MAPS[variant];
+    return &IOTDATA_VARIANT_MAPS[0];
+}
+
+#elif !defined(IOTDATA_ENABLE_SELECTIVE)
+
+#define IOTDATA_VARIANT_MAPS_DEFAULT_COUNT 1
+
+static const iotdata_variant_def_t IOTDATA_DEFAULT_VARIANTS[IOTDATA_VARIANT_MAPS_DEFAULT_COUNT] = {
+    /* Variant 0: weather station */
+    [0] = {
+        .name = "weather_station",
+        .num_pres_bytes = 2,
+        .fields = {
+            /* --- pres0 (6 fields) --- */
+            { IOTDATA_FIELD_BATTERY,         "battery" },
+            { IOTDATA_FIELD_LINK,            "link" },
+            { IOTDATA_FIELD_ENVIRONMENT,     "environment" },
+            { IOTDATA_FIELD_WIND,            "wind" },
+            { IOTDATA_FIELD_RAIN,            "rain" },
+            { IOTDATA_FIELD_SOLAR,           "solar" },
+            /* --- pres1 (6 fields) --- */
+            { IOTDATA_FIELD_CLOUDS,          "clouds" },
+            { IOTDATA_FIELD_AIR_QUALITY,     "air_quality" },
+            { IOTDATA_FIELD_RADIATION,       "radiation" },
+            { IOTDATA_FIELD_POSITION,        "position" },
+            { IOTDATA_FIELD_DATETIME,        "datetime" },
+            { IOTDATA_FIELD_FLAGS,           "flags" },
+            { IOTDATA_FIELD_NONE,            NULL },
+        },
+    },
+};
+
+const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
+    if (variant < IOTDATA_VARIANT_MAPS_DEFAULT_COUNT)
+        return &IOTDATA_DEFAULT_VARIANTS[variant];
+    return &IOTDATA_DEFAULT_VARIANTS[0];
+}
+
+#endif /* IOTDATA_VARIANT_MAPS */
+
+/* =========================================================================
+ * Internal dump structures
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_DUMP)
@@ -38,7 +89,7 @@ typedef struct {
     char range_str[80];
 } iotdata_dump_entry_t;
 
-#define IOTDATA_MAX_DUMP_ENTRIES 64
+#define IOTDATA_MAX_DUMP_ENTRIES 48
 
 typedef struct {
     iotdata_dump_entry_t entries[IOTDATA_MAX_DUMP_ENTRIES];
@@ -49,7 +100,7 @@ typedef struct {
 #endif /* !IOTDATA_NO_DUMP */
 
 /* =========================================================================
- * Field operations table — types and registration macros
+ * Internal field operations table
  * ========================================================================= */
 
 #define _IOTDATA_FIELD_OP_NAME // const char *name;
@@ -123,207 +174,7 @@ typedef struct {
 } iotdata_field_ops_t;
 
 /* =========================================================================
- * Error strings
- * ========================================================================= */
-
-#if !defined(IOTDATA_NO_ERROR_STRINGS)
-
-const char *iotdata_strerror(iotdata_status_t status) {
-    switch (status) {
-
-    case IOTDATA_OK:
-        return "OK";
-
-#if !defined(IOTDATA_NO_ENCODE)
-    case IOTDATA_ERR_CTX_NULL:
-        return "Encoding context pointer is NULL";
-    case IOTDATA_ERR_CTX_NOT_BEGUN:
-        return "Encoding not started (call encode_begin first)";
-    case IOTDATA_ERR_CTX_ALREADY_BEGUN:
-        return "Encoding already started";
-    case IOTDATA_ERR_CTX_ALREADY_ENDED:
-        return "Encoding already ended";
-    case IOTDATA_ERR_CTX_DUPLICATE_FIELD:
-        return "Encoding field already added";
-    case IOTDATA_ERR_BUF_NULL:
-        return "Buffer pointer is NULL";
-    case IOTDATA_ERR_BUF_OVERFLOW:
-        return "Buffer overflow during packing";
-    case IOTDATA_ERR_BUF_TOO_SMALL:
-        return "Buffer too small for minimum packet";
-#elif !defined(IOTDATA_NO_DUMP)
-    case IOTDATA_ERR_CTX_NULL:
-        return "Encoding context pointer is NULL";
-#endif
-
-#if !defined(IOTDATA_NO_DECODE)
-    case IOTDATA_ERR_DECODE_SHORT:
-        return "Decoding buffer too short for header";
-    case IOTDATA_ERR_DECODE_VARIANT:
-        return "Decoding variant unsupported";
-    case IOTDATA_ERR_DECODE_TRUNCATED:
-        return "Decoding packet truncated";
-#elif !defined(IOTDATA_NO_DUMP)
-    case IOTDATA_ERR_DECODE_SHORT:
-        return "Decoding buffer too short for header";
-#endif
-
-#if !defined(IOTDATA_NO_DUMP)
-    case IOTDATA_ERR_DUMP_ALLOC:
-        return "Dump allocation error";
-#endif
-
-#if !defined(IOTDATA_NO_PRINT)
-    case IOTDATA_ERR_PRINT_ALLOC:
-        return "Print allocation error";
-#endif
-
-#if !defined(IOTDATA_NO_JSON)
-    case IOTDATA_ERR_JSON_PARSE:
-        return "JSON parse error";
-    case IOTDATA_ERR_JSON_ALLOC:
-        return "JSON allocation error";
-    case IOTDATA_ERR_JSON_MISSING_FIELD:
-        return "JSON mandatory field missing";
-#endif
-
-    case IOTDATA_ERR_HDR_VARIANT_HIGH:
-        return "Variant above maximum (14)";
-    case IOTDATA_ERR_HDR_VARIANT_RESERVED:
-        return "Variant 15 is reserved";
-    case IOTDATA_ERR_HDR_VARIANT_UNKNOWN:
-        return "Variant unknown";
-    case IOTDATA_ERR_HDR_STATION_HIGH:
-        return "Station ID above maximum (4095)";
-
-#if defined(IOTDATA_ENABLE_TLV)
-    case IOTDATA_ERR_TLV_TYPE_HIGH:
-        return "TLV type above maximum (63)";
-    case IOTDATA_ERR_TLV_DATA_NULL:
-        return "TLV data pointer is NULL";
-    case IOTDATA_ERR_TLV_LEN_HIGH:
-        return "TLV length above maximum (255)";
-    case IOTDATA_ERR_TLV_FULL:
-        return "TLV fields exhausted (max 8)";
-    case IOTDATA_ERR_TLV_STR_NULL:
-        return "TLV string pointer is NULL";
-    case IOTDATA_ERR_TLV_STR_LEN_HIGH:
-        return "TLV string too long (max 255 chars)";
-    case IOTDATA_ERR_TLV_STR_CHAR_INVALID:
-        return "TLV string contains unencodable character";
-#endif
-
-#if defined(IOTDATA_ENABLE_BATTERY)
-    case IOTDATA_ERR_BATTERY_LEVEL_HIGH:
-        return "Battery level above 100%";
-#endif
-
-#if defined(IOTDATA_ENABLE_LINK)
-    case IOTDATA_ERR_LINK_RSSI_LOW:
-        return "RSSI below -120 dBm";
-    case IOTDATA_ERR_LINK_RSSI_HIGH:
-        return "RSSI above -60 dBm";
-    case IOTDATA_ERR_LINK_SNR_LOW:
-        return "SNR below -20 dB";
-    case IOTDATA_ERR_LINK_SNR_HIGH:
-        return "SNR above +10 dB";
-#endif
-
-#if defined(IOTDATA_ENABLE_ENVIRONMENT) || defined(IOTDATA_ENABLE_TEMPERATURE)
-    case IOTDATA_ERR_TEMPERATURE_LOW:
-        return "Temperature below -40C";
-    case IOTDATA_ERR_TEMPERATURE_HIGH:
-        return "Temperature above +80C";
-#endif
-#if defined(IOTDATA_ENABLE_ENVIRONMENT) || defined(IOTDATA_ENABLE_PRESSURE)
-    case IOTDATA_ERR_PRESSURE_LOW:
-        return "Pressure below 850 hPa";
-    case IOTDATA_ERR_PRESSURE_HIGH:
-        return "Pressure above 1105 hPa";
-#endif
-#if defined(IOTDATA_ENABLE_ENVIRONMENT) || defined(IOTDATA_ENABLE_HUMIDITY)
-    case IOTDATA_ERR_HUMIDITY_HIGH:
-        return "Humidity above 100%";
-#endif
-
-#if defined(IOTDATA_ENABLE_WIND) || defined(IOTDATA_ENABLE_WIND_SPEED)
-    case IOTDATA_ERR_WIND_SPEED_HIGH:
-        return "Wind speed above 63.5 m/s";
-#endif
-#if defined(IOTDATA_ENABLE_WIND) || defined(IOTDATA_ENABLE_WIND_DIRECTION)
-    case IOTDATA_ERR_WIND_DIRECTION_HIGH:
-        return "Wind direction above 359 degrees";
-#endif
-#if defined(IOTDATA_ENABLE_WIND) || defined(IOTDATA_ENABLE_WIND_GUST)
-    case IOTDATA_ERR_WIND_GUST_HIGH:
-        return "Wind gust above 63.5 m/s";
-#endif
-
-#if defined(IOTDATA_ENABLE_RAIN) || defined(IOTDATA_ENABLE_RAIN_RATE)
-    case IOTDATA_ERR_RAIN_RATE_HIGH:
-        return "Rain rate above 255 mm/hr";
-#endif
-#if defined(IOTDATA_ENABLE_RAIN) || defined(IOTDATA_ENABLE_RAIN_SIZE)
-    case IOTDATA_ERR_RAIN_SIZE_HIGH:
-        return "Rain size above 6.0 mm/d";
-#endif
-
-#if defined(IOTDATA_ENABLE_SOLAR)
-    case IOTDATA_ERR_SOLAR_IRRADIATION_HIGH:
-        return "Solar irradiance above 1023 W/m2";
-    case IOTDATA_ERR_SOLAR_ULTRAVIOLET_HIGH:
-        return "Solar ultraviolet index above 15";
-#endif
-
-#if defined(IOTDATA_ENABLE_CLOUDS)
-    case IOTDATA_ERR_CLOUDS_HIGH:
-        return "Cloud cover above 8 okta";
-#endif
-
-#if defined(IOTDATA_ENABLE_AIR_QUALITY)
-    case IOTDATA_ERR_AIR_QUALITY_HIGH:
-        return "Air quality above 500 AQI";
-#endif
-
-#if defined(IOTDATA_ENABLE_RADIATION) || defined(IOTDATA_ENABLE_RADIATION_CPM)
-    case IOTDATA_ERR_RADIATION_CPM_HIGH:
-        return "Radiation CPM above 65535";
-#endif
-#if defined(IOTDATA_ENABLE_RADIATION) || defined(IOTDATA_ENABLE_RADIATION_DOSE)
-    case IOTDATA_ERR_RADIATION_DOSE_HIGH:
-        return "Radiation dose above 163.83 uSv/h";
-#endif
-
-#if defined(IOTDATA_ENABLE_DEPTH)
-    case IOTDATA_ERR_DEPTH_HIGH:
-        return "Depth above 1023 cm";
-#endif
-
-#if defined(IOTDATA_ENABLE_POSITION)
-    case IOTDATA_ERR_POSITION_LAT_LOW:
-        return "Latitude below -90";
-    case IOTDATA_ERR_POSITION_LAT_HIGH:
-        return "Latitude above +90";
-    case IOTDATA_ERR_POSITION_LON_LOW:
-        return "Longitude below -180";
-    case IOTDATA_ERR_POSITION_LON_HIGH:
-        return "Longitude above +180";
-#endif
-
-#if defined(IOTDATA_ENABLE_DATETIME)
-    case IOTDATA_ERR_DATETIME_HIGH:
-        return "Datetime ticks above maximum";
-#endif
-
-    default:
-        return "Unknown error";
-    }
-}
-
-#endif /* !IOTDATA_NO_ERROR_STRINGS */
-
-/* =========================================================================
- * Bit-packing (MSB-first / big-endian order)
+ * Internal bit-packing (MSB-first / big-endian order)
  * ========================================================================= */
 
 static inline size_t bits_to_bytes(size_t bits) {
@@ -349,7 +200,7 @@ static inline uint32_t bits_read(const uint8_t *buf, size_t buf_bits, size_t *bp
 #endif
 
 /* =========================================================================
- * 6-bit packed string encoding
+ * xxx Internal
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_ENCODE)
@@ -509,8 +360,12 @@ static const iotdata_field_ops_t _iotdata_field_def_battery = {
     _IOTDATA_OP_JSON_GET(json_get_battery)
 };
 #define _IOTDATA_ENT_BATTERY [IOTDATA_FIELD_BATTERY] = &_iotdata_field_def_battery,
+#define _IOTDATA_ERR_BATTERY \
+    case IOTDATA_ERR_BATTERY_LEVEL_HIGH: \
+        return "Battery level above 100%"; 
 #else
 #define _IOTDATA_ENT_BATTERY
+#define _IOTDATA_ERR_BATTERY
 #endif
 // clang-format on
 
@@ -519,7 +374,7 @@ static const iotdata_field_ops_t _iotdata_field_def_battery = {
  * ========================================================================= */
 
 /* =========================================================================
- * Quantisation
+ * xxx (to be moved per field)
  * ========================================================================= */
 
 #if defined(IOTDATA_ENABLE_LINK)
@@ -2003,10 +1858,6 @@ static inline void print_clouds(const iotdata_decoded_t *d, FILE *fp, const char
 
 #endif /* !IOTDATA_NO_PRINT */
 
-/* =========================================================================
- * Field operation definitions
- * ========================================================================= */
-
 // clang-format off
 
 #if defined(IOTDATA_ENABLE_LINK)
@@ -2363,8 +2214,176 @@ static const iotdata_field_ops_t _iotdata_field_def_flags = {
 
 // clang-format on
 
+#if defined(IOTDATA_ENABLE_LINK)
+#define _IOTDATA_ERR_LINK \
+    case IOTDATA_ERR_LINK_RSSI_LOW: \
+        return "RSSI below -120 dBm"; \
+    case IOTDATA_ERR_LINK_RSSI_HIGH: \
+        return "RSSI above -60 dBm"; \
+    case IOTDATA_ERR_LINK_SNR_LOW: \
+        return "SNR below -20 dB"; \
+    case IOTDATA_ERR_LINK_SNR_HIGH: \
+        return "SNR above +10 dB";
+#else
+#define _IOTDATA_ERR_LINK
+#endif
+
+#if defined(IOTDATA_ENABLE_ENVIRONMENT) || defined(IOTDATA_ENABLE_TEMPERATURE)
+#define _IOTDATA_ERR_TEMPERATURE \
+    case IOTDATA_ERR_TEMPERATURE_LOW: \
+        return "Temperature below -40C"; \
+    case IOTDATA_ERR_TEMPERATURE_HIGH: \
+        return "Temperature above +80C";
+#else
+#define _IOTDATA_ERR_TEMPERATURE
+#endif
+#if defined(IOTDATA_ENABLE_ENVIRONMENT) || defined(IOTDATA_ENABLE_PRESSURE)
+#define _IOTDATA_ERR_PRESSURE \
+    case IOTDATA_ERR_PRESSURE_LOW: \
+        return "Pressure below 850 hPa"; \
+    case IOTDATA_ERR_PRESSURE_HIGH: \
+        return "Pressure above 1105 hPa";
+#else
+#define _IOTDATA_ERR_PRESSURE
+#endif
+#if defined(IOTDATA_ENABLE_ENVIRONMENT) || defined(IOTDATA_ENABLE_HUMIDITY)
+#define _IOTDATA_ERR_HUMIDITY \
+    case IOTDATA_ERR_HUMIDITY_HIGH: \
+        return "Humidity above 100%";
+#else
+#define _IOTDATA_ERR_HUMIDITY
+#endif
+
+#if defined(IOTDATA_ENABLE_WIND) || defined(IOTDATA_ENABLE_WIND_SPEED)
+#define _IOTDATA_ERR_WIND_SPEED \
+    case IOTDATA_ERR_WIND_SPEED_HIGH: \
+        return "Wind speed above 63.5 m/s";
+#else
+#define _IOTDATA_ERR_WIND_SPEED
+#endif
+#if defined(IOTDATA_ENABLE_WIND) || defined(IOTDATA_ENABLE_WIND_DIRECTION)
+#define _IOTDATA_ERR_WIND_DIRECTION \
+    case IOTDATA_ERR_WIND_DIRECTION_HIGH: \
+        return "Wind direction above 359 degrees";
+#else
+#define _IOTDATA_ERR_WIND_DIRECTION
+#endif
+#if defined(IOTDATA_ENABLE_WIND) || defined(IOTDATA_ENABLE_WIND_GUST)
+#define _IOTDATA_ERR_WIND_GUST \
+    case IOTDATA_ERR_WIND_GUST_HIGH: \
+        return "Wind gust above 63.5 m/s";
+#else
+#define _IOTDATA_ERR_WIND_GUST
+#endif
+
+#if defined(IOTDATA_ENABLE_RAIN) || defined(IOTDATA_ENABLE_RAIN_RATE)
+#define _IOTDATA_ERR_RAIN_RATE \
+    case IOTDATA_ERR_RAIN_RATE_HIGH: \
+        return "Rain rate above 255 mm/hr";
+#else
+#define _IOTDATA_ERR_RAIN_RATE
+#endif
+#if defined(IOTDATA_ENABLE_RAIN) || defined(IOTDATA_ENABLE_RAIN_SIZE)
+#define _IOTDATA_ERR_RAIN_SIZE \
+    case IOTDATA_ERR_RAIN_SIZE_HIGH: \
+        return "Rain size above 6.0 mm/d";
+#else
+#define _IOTDATA_ERR_RAIN_SIZE
+#endif
+
+#if defined(IOTDATA_ENABLE_SOLAR)
+#define _IOTDATA_ERR_SOLAR \
+    case IOTDATA_ERR_SOLAR_IRRADIATION_HIGH: \
+        return "Solar irradiance above 1023 W/m2"; \
+    case IOTDATA_ERR_SOLAR_ULTRAVIOLET_HIGH: \
+        return "Solar ultraviolet index above 15";
+#else
+#define _IOTDATA_ERR_SOLAR
+#endif
+
+#if defined(IOTDATA_ENABLE_CLOUDS)
+#define _IOTDATA_ERR_CLOUDS \
+    case IOTDATA_ERR_CLOUDS_HIGH: \
+        return "Cloud cover above 8 okta";
+#else
+#define _IOTDATA_ERR_CLOUDS
+#endif
+
+#if defined(IOTDATA_ENABLE_AIR_QUALITY)
+#define _IOTDATA_ERR_AIR_QUALITY \
+    case IOTDATA_ERR_AIR_QUALITY_HIGH: \
+        return "Air quality above 500 AQI";
+#else
+#define _IOTDATA_ERR_AIR_QUALITY
+#endif
+
+#if defined(IOTDATA_ENABLE_RADIATION) || defined(IOTDATA_ENABLE_RADIATION_CPM)
+#define _IOTDATA_ERR_RADIATION_CPM \
+    case IOTDATA_ERR_RADIATION_CPM_HIGH: \
+        return "Radiation CPM above 65535";
+#else
+#define _IOTDATA_ERR_RADIATION_CPM
+#endif
+#if defined(IOTDATA_ENABLE_RADIATION) || defined(IOTDATA_ENABLE_RADIATION_DOSE)
+#define _IOTDATA_ERR_RADIATION_DOSE \
+    case IOTDATA_ERR_RADIATION_DOSE_HIGH: \
+        return "Radiation dose above 163.83 uSv/h";
+#else
+#define _IOTDATA_ERR_RADIATION_DOSE
+#endif
+
+#if defined(IOTDATA_ENABLE_DEPTH)
+#define _IOTDATA_ERR_DEPTH \
+    case IOTDATA_ERR_DEPTH_HIGH: \
+        return "Depth above 1023 cm";
+#else
+#define _IOTDATA_ERR_DEPTH
+#endif
+
+#if defined(IOTDATA_ENABLE_POSITION)
+#define _IOTDATA_ERR_POSITION \
+    case IOTDATA_ERR_POSITION_LAT_LOW: \
+        return "Latitude below -90"; \
+    case IOTDATA_ERR_POSITION_LAT_HIGH: \
+        return "Latitude above +90"; \
+    case IOTDATA_ERR_POSITION_LON_LOW: \
+        return "Longitude below -180"; \
+    case IOTDATA_ERR_POSITION_LON_HIGH: \
+        return "Longitude above +180";
+#else
+#define _IOTDATA_ERR_POSITION
+#endif
+
+#if defined(IOTDATA_ENABLE_DATETIME)
+#define _IOTDATA_ERR_DATETIME \
+    case IOTDATA_ERR_DATETIME_HIGH: \
+        return "Datetime ticks above maximum";
+#else
+#define _IOTDATA_ERR_DATETIME
+#endif
+
+#if defined(IOTDATA_ENABLE_TLV)
+#define _IOTDATA_ERR_TLV \
+    case IOTDATA_ERR_TLV_TYPE_HIGH: \
+        return "TLV type above maximum (63)"; \
+    case IOTDATA_ERR_TLV_DATA_NULL: \
+        return "TLV data pointer is NULL"; \
+    case IOTDATA_ERR_TLV_LEN_HIGH: \
+        return "TLV length above maximum (255)"; \
+    case IOTDATA_ERR_TLV_FULL: \
+        return "TLV fields exhausted (max 8)"; \
+    case IOTDATA_ERR_TLV_STR_NULL: \
+        return "TLV string pointer is NULL"; \
+    case IOTDATA_ERR_TLV_STR_LEN_HIGH: \
+        return "TLV string too long (max 255 chars)"; \
+    case IOTDATA_ERR_TLV_STR_CHAR_INVALID: \
+        return "TLV string contains unencodable character";
+#else
+#define _IOTDATA_ERR_TLV
+#endif
+
 /* =========================================================================
- * Global field operations table
+ * Internal field operations table
  * ========================================================================= */
 
 // clang-format off
@@ -2398,58 +2417,7 @@ static const iotdata_field_ops_t *_iotdata_field_ops[IOTDATA_FIELD_COUNT] = {
 // clang-format on
 
 /* =========================================================================
- * Variant maps
- * ========================================================================= */
-
-#if defined(IOTDATA_VARIANT_MAPS) && defined(IOTDATA_VARIANT_MAPS_COUNT)
-
-extern const iotdata_variant_def_t IOTDATA_VARIANT_MAPS[];
-
-const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
-    if (variant < IOTDATA_VARIANT_MAPS_COUNT)
-        return &IOTDATA_VARIANT_MAPS[variant];
-    return &IOTDATA_VARIANT_MAPS[0];
-}
-
-#elif !defined(IOTDATA_ENABLE_SELECTIVE)
-
-#define IOTDATA_VARIANT_MAPS_DEFAULT_COUNT 1
-
-static const iotdata_variant_def_t IOTDATA_DEFAULT_VARIANTS[IOTDATA_VARIANT_MAPS_DEFAULT_COUNT] = {
-    /* Variant 0: weather station */
-    [0] = {
-        .name = "weather_station",
-        .num_pres_bytes = 2,
-        .fields = {
-            /* --- pres0 (6 fields) --- */
-            { IOTDATA_FIELD_BATTERY,         "battery" },
-            { IOTDATA_FIELD_LINK,            "link" },
-            { IOTDATA_FIELD_ENVIRONMENT,     "environment" },
-            { IOTDATA_FIELD_WIND,            "wind" },
-            { IOTDATA_FIELD_RAIN,            "rain" },
-            { IOTDATA_FIELD_SOLAR,           "solar" },
-            /* --- pres1 (6 fields) --- */
-            { IOTDATA_FIELD_CLOUDS,          "clouds" },
-            { IOTDATA_FIELD_AIR_QUALITY,     "air_quality" },
-            { IOTDATA_FIELD_RADIATION,       "radiation" },
-            { IOTDATA_FIELD_POSITION,        "position" },
-            { IOTDATA_FIELD_DATETIME,        "datetime" },
-            { IOTDATA_FIELD_FLAGS,           "flags" },
-            { IOTDATA_FIELD_NONE,            NULL },
-        },
-    },
-};
-
-const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
-    if (variant < IOTDATA_VARIANT_MAPS_DEFAULT_COUNT)
-        return &IOTDATA_DEFAULT_VARIANTS[variant];
-    return &IOTDATA_DEFAULT_VARIANTS[0];
-}
-
-#endif /* IOTDATA_VARIANT_MAPS */
-
-/* =========================================================================
- * Presence bytes
+ * Internal presence bytes functions
  * ========================================================================= */
 
 static inline int _iotdata_field_count(int num_pres_bytes) {
@@ -2471,12 +2439,12 @@ static inline int _iotdata_field_pres_bit(int field_idx) {
 }
 
 /* =========================================================================
- * ENCODER
+ * External ENCODER
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_ENCODE)
 
-static inline void pack_field(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc, iotdata_field_type_t type) {
+static inline void _iotdata_encode_pack_field(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc, iotdata_field_type_t type) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->pack)
         ops->pack(buf, bp, enc);
@@ -2492,8 +2460,6 @@ iotdata_status_t iotdata_encode_begin(iotdata_encoder_t *enc, uint8_t *buf, size
         return IOTDATA_ERR_BUF_NULL;
     if (buf_size < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
         return IOTDATA_ERR_BUF_TOO_SMALL;
-    if (enc->_magic == IOTDATA_MAGIC || enc->state == IOTDATA_STATE_BEGUN)
-        return IOTDATA_ERR_CTX_ALREADY_BEGUN;
 #endif
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
     if (variant > IOTDATA_VARIANT_MAX) {
@@ -2505,14 +2471,13 @@ iotdata_status_t iotdata_encode_begin(iotdata_encoder_t *enc, uint8_t *buf, size
         return IOTDATA_ERR_HDR_STATION_HIGH;
 #endif
 
-    memset(enc, 0, sizeof(*enc));
-    enc->_magic = IOTDATA_MAGIC;
     enc->buf = buf;
     enc->buf_size = buf_size;
     enc->variant = variant;
     enc->station = station;
     enc->sequence = sequence;
     enc->state = IOTDATA_STATE_BEGUN;
+    enc->fields = IOTDATA_FIELD_EMPTY;
     return IOTDATA_OK;
 }
 #pragma GCC diagnostic pop
@@ -2529,8 +2494,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
     bits_write(enc->buf, &bp, enc->sequence, IOTDATA_SEQUENCE_BITS);
 
     /* Presence */
-    uint8_t pres[IOTDATA_PRES_MAXIMUM];
-    memset(pres, 0, sizeof(pres));
+    uint8_t pres[IOTDATA_PRES_MAXIMUM] = { 0 };
     int max_pres_needed = 1; /* always have pres0 */
     for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(enc->fields, vdef->fields[si].type)) {
@@ -2551,7 +2515,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type)) {
             const int pb = _iotdata_field_pres_byte(si);
             if (pb < max_pres_needed && pres[pb] & (1U << _iotdata_field_pres_bit(si)))
-                pack_field(enc->buf, &bp, enc, vdef->fields[si].type);
+                _iotdata_encode_pack_field(enc->buf, &bp, enc, vdef->fields[si].type);
         }
 
 #if defined(IOTDATA_ENABLE_TLV)
@@ -2574,7 +2538,6 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
     enc->packed_bits = bp;
     enc->packed_bytes = bits_to_bytes(bp);
     enc->state = IOTDATA_STATE_ENDED;
-    enc->_magic = 0;
     if (out_bytes)
         *out_bytes = enc->packed_bytes;
     return IOTDATA_OK;
@@ -2582,13 +2545,39 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
 
 #endif /* !IOTDATA_NO_ENCODE */
 
+#if !defined(IOTDATA_NO_ENCODE)
+#define _IOTDATA_ERR_ENCODE \
+    case IOTDATA_ERR_CTX_NULL: \
+        return "Encoding context pointer is NULL"; \
+    case IOTDATA_ERR_CTX_NOT_BEGUN: \
+        return "Encoding not started (call encode_begin first)"; \
+    case IOTDATA_ERR_CTX_ALREADY_BEGUN: \
+        return "Encoding already started"; \
+    case IOTDATA_ERR_CTX_ALREADY_ENDED: \
+        return "Encoding already ended"; \
+    case IOTDATA_ERR_CTX_DUPLICATE_FIELD: \
+        return "Encoding field already added"; \
+    case IOTDATA_ERR_BUF_NULL: \
+        return "Buffer pointer is NULL"; \
+    case IOTDATA_ERR_BUF_OVERFLOW: \
+        return "Buffer overflow during packing"; \
+    case IOTDATA_ERR_BUF_TOO_SMALL: \
+        return "Buffer too small for minimum packet";
+#elif !defined(IOTDATA_NO_DUMP)
+#define _IOTDATA_ERR_ENCODE \
+    case IOTDATA_ERR_CTX_NULL: \
+        return "Encoding context pointer is NULL";
+#else
+#define _IOTDATA_ERR_ENCODE
+#endif
+
 /* =========================================================================
- * DECODER
+ * External DECODER
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_DECODE)
 
-static inline void unpack_field(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out, iotdata_field_type_t type) {
+static inline void _iotdata_decode_unpack_field(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out, iotdata_field_type_t type) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->unpack)
         ops->unpack(buf, bb, bp, out);
@@ -2603,31 +2592,29 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
     if (len < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
         return IOTDATA_ERR_DECODE_SHORT;
 
-    memset(out, 0, sizeof(*out));
     size_t bb = len * 8, bp = 0;
 
     /* Header */
     out->variant = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_VARIANT_BITS);
     out->station = (uint16_t)bits_read(buf, bb, &bp, IOTDATA_STATION_BITS);
     out->sequence = (uint16_t)bits_read(buf, bb, &bp, IOTDATA_SEQUENCE_BITS);
-
     if (out->variant == IOTDATA_VARIANT_RESERVED)
         return IOTDATA_ERR_DECODE_VARIANT;
 
     /* Presence */
-    uint8_t pres[IOTDATA_PRES_MAXIMUM];
-    memset(pres, 0, sizeof(pres));
+    uint8_t pres[IOTDATA_PRES_MAXIMUM] =  { 0 };
     pres[0] = (uint8_t)bits_read(buf, bb, &bp, 8);
     int num_pres = 1;
     while (num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb && (pres[num_pres - 1] & IOTDATA_PRES_EXT) != 0)
         pres[num_pres++] = (uint8_t)bits_read(buf, bb, &bp, 8);
 
     /* Fields */
+    out->fields = IOTDATA_FIELD_EMPTY;
     const iotdata_variant_def_t *vdef = iotdata_get_variant(out->variant);
     for (int si = 0; si < _iotdata_field_count(num_pres) && si < IOTDATA_MAX_DATA_FIELDS; si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && _iotdata_field_pres_byte(si) < num_pres && pres[_iotdata_field_pres_byte(si)] & (1U << _iotdata_field_pres_bit(si))) {
             IOTDATA_FIELD_SET(out->fields, vdef->fields[si].type);
-            unpack_field(buf, bb, &bp, out, vdef->fields[si].type);
+            _iotdata_decode_unpack_field(buf, bb, &bp, out, vdef->fields[si].type);
         }
 
 #if defined(IOTDATA_ENABLE_TLV)
@@ -2663,14 +2650,30 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
 
 #endif /* !IOTDATA_NO_DECODE */
 
+#if !defined(IOTDATA_NO_DECODE)
+#define _IOTDATA_ERR_DECODE \
+    case IOTDATA_ERR_DECODE_SHORT: \
+        return "Decoding buffer too short for header"; \
+    case IOTDATA_ERR_DECODE_VARIANT: \
+        return "Decoding variant unsupported"; \
+    case IOTDATA_ERR_DECODE_TRUNCATED: \
+        return "Decoding packet truncated";
+#elif !defined(IOTDATA_NO_DUMP)
+#define _IOTDATA_ERR_DECODE \
+    case IOTDATA_ERR_DECODE_SHORT: \
+        return "Decoding buffer too short for header";
+#else
+#define _IOTDATA_ERR_DECODE
+#endif
+
 /* =========================================================================
- * JSON
+ * External JSON
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_JSON)
 #if !defined(IOTDATA_NO_DECODE)
 
-static inline void hex_encode(const uint8_t *data, size_t len, char *out) {
+static inline void _iotdata_decode_to_json_hex_encode(const uint8_t *data, size_t len, char *out) {
     static const char hex_string[] = "0123456789abcdef";
     for (size_t i = 0; i < len; i++) {
         out[i * 2] = hex_string[data[i] >> 4];
@@ -2679,7 +2682,7 @@ static inline void hex_encode(const uint8_t *data, size_t len, char *out) {
     out[len * 2] = '\0';
 }
 
-static inline void json_set_field(cJSON *root, const iotdata_decoded_t *d, iotdata_field_type_t type, const char *label) {
+static inline void _iotdata_decode_to_json_set_field(cJSON *root, const iotdata_decoded_t *d, iotdata_field_type_t type, const char *label) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->json_set)
         ops->json_set((void *)root, (const void *)d, label);
@@ -2710,7 +2713,7 @@ iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **j
     const iotdata_variant_def_t *vdef = iotdata_get_variant(dec.variant);
     for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(dec.fields, vdef->fields[si].type))
-            json_set_field(root, &dec, vdef->fields[si].type, vdef->fields[si].label);
+            _iotdata_decode_to_json_set_field(root, &dec, vdef->fields[si].type, vdef->fields[si].label);
 
 #if defined(IOTDATA_ENABLE_TLV)
     /* TLV */
@@ -2724,7 +2727,7 @@ iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **j
                 cJSON_AddStringToObject(item, "data", dec.tlv[i].str);
             } else {
                 char hex_buf[(IOTDATA_TLV_DATA_MAX * 2) + 1];
-                hex_encode(dec.tlv[i].raw, dec.tlv[i].length, hex_buf);
+                _iotdata_decode_to_json_hex_encode(dec.tlv[i].raw, dec.tlv[i].length, hex_buf);
                 cJSON_AddStringToObject(item, "data", hex_buf);
             }
             cJSON_AddItemToArray(arr, item);
@@ -2743,7 +2746,7 @@ iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **j
 
 #if !defined(IOTDATA_NO_ENCODE)
 
-static inline size_t hex_decode(const char *hex_str, uint8_t *out, size_t max_len) {
+static inline size_t _iotdata_encode_from_json_hex_decode(const char *hex_str, uint8_t *out, size_t max_len) {
 #define HEX_NIBBLE(c) (((c) >= '0' && (c) <= '9') ? (uint8_t)((c) - '0') : (((c) >= 'a' && (c) <= 'f') ? (uint8_t)((c) - 'a' + 10) : (((c) >= 'A' && (c) <= 'F') ? (uint8_t)((c) - 'A' + 10) : 0)))
     size_t i;
     for (i = 0; i < max_len && hex_str[i * 2] && hex_str[i * 2 + 1]; i++)
@@ -2751,7 +2754,7 @@ static inline size_t hex_decode(const char *hex_str, uint8_t *out, size_t max_le
     return i;
 }
 
-static inline iotdata_status_t json_get_field(cJSON *root, iotdata_encoder_t *enc, iotdata_field_type_t type, const char *label) {
+static inline iotdata_status_t _iotdata_encode_from_json_get_field(cJSON *root, iotdata_encoder_t *enc, iotdata_field_type_t type, const char *label) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->json_get)
         return ops->json_get((void *)root, (void *)enc, label);
@@ -2782,7 +2785,7 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
     const iotdata_variant_def_t *vdef = iotdata_get_variant(enc.variant);
     for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type))
-            if ((rc = json_get_field(root, &enc, vdef->fields[si].type, vdef->fields[si].label)) != IOTDATA_OK) {
+            if ((rc = _iotdata_encode_from_json_get_field(root, &enc, vdef->fields[si].type, vdef->fields[si].label)) != IOTDATA_OK) {
                 cJSON_Delete(root);
                 return rc;
             }
@@ -2805,7 +2808,7 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
                 snprintf(tlv_str_scratch[tidx], sizeof(tlv_str_scratch[tidx]), "%s", data);
                 rc = iotdata_encode_tlv_string(&enc, type, tlv_str_scratch[tidx]);
             } else {
-                rc = iotdata_encode_tlv(&enc, type, tlv_raw_scratch[tidx], (uint8_t)hex_decode(data, tlv_raw_scratch[tidx], IOTDATA_TLV_DATA_MAX));
+                rc = iotdata_encode_tlv(&enc, type, tlv_raw_scratch[tidx], (uint8_t)_iotdata_encode_from_json_hex_decode(data, tlv_raw_scratch[tidx], IOTDATA_TLV_DATA_MAX));
             }
             if (rc != IOTDATA_OK) {
                 cJSON_Delete(root);
@@ -2824,12 +2827,25 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
 #endif /* !IOTDATA_NO_ENCODE */
 #endif /* !IOTDATA_NO_JSON */
 
+#if !defined(IOTDATA_NO_JSON)
+#define _IOTDATA_ERR_JSON \
+    case IOTDATA_ERR_JSON_PARSE: \
+        return "JSON parse error"; \
+    case IOTDATA_ERR_JSON_ALLOC: \
+        return "JSON allocation error"; \
+    case IOTDATA_ERR_JSON_MISSING_FIELD: \
+        return "JSON mandatory field missing";
+#else
+#define _IOTDATA_ERR_JSON
+#endif
+
 /* =========================================================================
  * DUMP functions
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_DUMP)
 
+#define IOTDATA_MAX_DUMP_ENTRIES 48
 static int dump_add(iotdata_dump_t *dump, int n, size_t bit_offset, size_t bit_length, uint32_t raw_value, const char *decoded, const char *range, const char *name) {
     if (n >= IOTDATA_MAX_DUMP_ENTRIES)
         return n;
@@ -2843,14 +2859,14 @@ static int dump_add(iotdata_dump_t *dump, int n, size_t bit_offset, size_t bit_l
     return n + 1;
 }
 
-static inline int dump_field(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, iotdata_field_type_t type, const char *label) {
+static inline int _iotdata_dump_build_field(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, iotdata_field_type_t type, const char *label) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->dump)
         return ops->dump(buf, bb, bp, dump, n, label);
     return n;
 }
 
-iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump_t *dump) {
+static iotdata_status_t _iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump_t *dump) {
 #if !defined(IOTDATA_NO_CHECKS_STATE)
     if (!buf || !dump)
         return IOTDATA_ERR_CTX_NULL;
@@ -2859,12 +2875,15 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
     if (len < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
         return IOTDATA_ERR_DECODE_SHORT;
 
-    memset(dump, 0, sizeof(*dump));
     size_t bb = len * 8, bp = 0;
     int n = 0;
     char dec_buf[64];
     size_t s;
     uint32_t raw;
+
+    dump->count = 0;	
+    dump->packed_bits = 0;
+    dump->packed_bytes = 0;
 
     /* Header */
     s = bp;
@@ -2882,8 +2901,7 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
     n = dump_add(dump, n, s, IOTDATA_SEQUENCE_BITS, raw, dec_buf, "0-65535", "sequence");
 
     /* Presence */
-    uint8_t pres[IOTDATA_PRES_MAXIMUM];
-    memset(pres, 0, sizeof(pres));
+    uint8_t pres[IOTDATA_PRES_MAXIMUM] = { 0 };
     s = bp;
     pres[0] = (uint8_t)bits_read(buf, bb, &bp, 8);
     snprintf(dec_buf, sizeof(dec_buf), "0x%02x", pres[0]);
@@ -2904,7 +2922,7 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
     for (int si = 0; si < _iotdata_field_count(num_pres) && si < IOTDATA_MAX_DATA_FIELDS; si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type))
             if (_iotdata_field_pres_byte(si) < num_pres && pres[_iotdata_field_pres_byte(si)] & (1U << _iotdata_field_pres_bit(si)))
-                n = dump_field(buf, bb, &bp, dump, n, vdef->fields[si].type, vdef->fields[si].label);
+                n = _iotdata_dump_build_field(buf, bb, &bp, dump, n, vdef->fields[si].type, vdef->fields[si].label);
 
 #if defined(IOTDATA_ENABLE_TLV)
     /* TLV */
@@ -2944,7 +2962,7 @@ iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump
     return IOTDATA_OK;
 }
 
-static iotdata_status_t dump_decoded_to_file(const iotdata_dump_t *dump, FILE *fp) {
+static iotdata_status_t _iotdata_dump_decoded_to_file(const iotdata_dump_t *dump, FILE *fp) {
     fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "Offset", "Len", "Field", "Raw", "Decoded", "Range");
     fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "------", "---", "-----", "---", "-------", "-----");
     for (size_t i = 0; i < dump->count; i++) {
@@ -2955,7 +2973,7 @@ static iotdata_status_t dump_decoded_to_file(const iotdata_dump_t *dump, FILE *f
     return IOTDATA_OK;
 }
 
-static iotdata_status_t dump_oneline_to_file(const iotdata_dump_t *dump, FILE *fp) {
+static iotdata_status_t _iotdata_dump_oneline_to_file(const iotdata_dump_t *dump, FILE *fp) {
     for (size_t i = 0; i < dump->count; i++) {
         const iotdata_dump_entry_t *e = &dump->entries[i];
         fprintf(fp, "%s%s=%s%s", (i > 0 ? ", " : ""), e->field_name, e->decoded_str, (i + 1 == dump->count ? "\n" : ""));
@@ -2966,25 +2984,33 @@ static iotdata_status_t dump_oneline_to_file(const iotdata_dump_t *dump, FILE *f
 iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp, bool verbose) {
     iotdata_dump_t dump;
     iotdata_status_t rc;
-    if ((rc = iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
+    if ((rc = _iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
         return rc;
-    return verbose ? dump_decoded_to_file(&dump, fp) : dump_oneline_to_file(&dump, fp);
+    return verbose ? _iotdata_dump_decoded_to_file(&dump, fp) : _iotdata_dump_oneline_to_file(&dump, fp);
 }
 
 iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose) {
     iotdata_dump_t dump;
     iotdata_status_t rc;
-    if ((rc = iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
+    if ((rc = _iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
         return rc;
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_DUMP_ALLOC;
-    rc = verbose ? dump_decoded_to_file(&dump, fp) : dump_oneline_to_file(&dump, fp);
+    rc = verbose ? _iotdata_dump_decoded_to_file(&dump, fp) : _iotdata_dump_oneline_to_file(&dump, fp);
     fclose(fp);
     return rc;
 }
 
 #endif /* !IOTDATA_NO_DUMP */
+
+#if !defined(IOTDATA_NO_DUMP)
+#define _IOTDATA_ERR_DUMP \
+    case IOTDATA_ERR_DUMP_ALLOC: \
+        return "Dump allocation error";
+#else
+#define _IOTDATA_ERR_DUMP
+#endif
 
 /* =========================================================================
  * PRINT
@@ -2993,7 +3019,7 @@ iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *ou
 #if !defined(IOTDATA_NO_PRINT)
 #if !defined(IOTDATA_NO_DECODE)
 
-static inline void print_field(const iotdata_decoded_t *d, FILE *fp, iotdata_field_type_t type, const char *label) {
+static inline void _iotdata_print_field(const iotdata_decoded_t *d, FILE *fp, iotdata_field_type_t type, const char *label) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->print)
         ops->print(d, fp, label);
@@ -3006,7 +3032,7 @@ iotdata_status_t print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp) {
 
     for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(dec->fields, vdef->fields[si].type))
-            print_field(dec, fp, vdef->fields[si].type, vdef->fields[si].label);
+            _iotdata_print_field(dec, fp, vdef->fields[si].type, vdef->fields[si].label);
 
 #if defined(IOTDATA_ENABLE_TLV)
     if (IOTDATA_FIELD_PRESENT(dec->fields, IOTDATA_FIELD_TLV)) {
@@ -3062,3 +3088,71 @@ iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *o
 
 #endif /* !IOTDATA_NO_DECODE */
 #endif /* !IOTDATA_NO_PRINT */
+
+#if !defined(IOTDATA_NO_PRINT)
+#define _IOTDATA_ERR_PRINT \
+    case IOTDATA_ERR_PRINT_ALLOC: \
+        return "Print allocation error";
+#else
+#define _IOTDATA_ERR_PRINT
+#endif
+
+/* =========================================================================
+ * External error strings
+ * ========================================================================= */
+
+#if !defined(IOTDATA_NO_ERROR_STRINGS)
+
+const char *iotdata_strerror(iotdata_status_t status) {
+    switch (status) {
+
+    case IOTDATA_OK:
+        return "OK";
+
+    case IOTDATA_ERR_HDR_VARIANT_HIGH:
+        return "Variant above maximum (14)";
+    case IOTDATA_ERR_HDR_VARIANT_RESERVED:
+        return "Variant 15 is reserved";
+    case IOTDATA_ERR_HDR_VARIANT_UNKNOWN:
+        return "Variant unknown";
+
+    case IOTDATA_ERR_HDR_STATION_HIGH:
+        return "Station ID above maximum (4095)";
+
+        _IOTDATA_ERR_ENCODE
+        _IOTDATA_ERR_DECODE
+        _IOTDATA_ERR_DUMP
+        _IOTDATA_ERR_PRINT
+        _IOTDATA_ERR_JSON
+
+        _IOTDATA_ERR_TLV
+
+        _IOTDATA_ERR_BATTERY
+        _IOTDATA_ERR_LINK
+        _IOTDATA_ERR_TEMPERATURE
+        _IOTDATA_ERR_PRESSURE
+        _IOTDATA_ERR_HUMIDITY
+        _IOTDATA_ERR_WIND_SPEED
+        _IOTDATA_ERR_WIND_DIRECTION
+        _IOTDATA_ERR_WIND_GUST
+        _IOTDATA_ERR_RAIN_RATE
+        _IOTDATA_ERR_RAIN_SIZE
+        _IOTDATA_ERR_SOLAR
+        _IOTDATA_ERR_CLOUDS
+        _IOTDATA_ERR_AIR_QUALITY
+        _IOTDATA_ERR_RADIATION_CPM
+        _IOTDATA_ERR_RADIATION_DOSE
+        _IOTDATA_ERR_DEPTH
+        _IOTDATA_ERR_POSITION
+        _IOTDATA_ERR_DATETIME
+
+    default:
+        return "Unknown error";
+    }
+}
+
+#endif /* !IOTDATA_NO_ERROR_STRINGS */
+
+/* =========================================================================
+ * End
+ * ========================================================================= */

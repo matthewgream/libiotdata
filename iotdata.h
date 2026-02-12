@@ -558,6 +558,7 @@ typedef enum {
 
 _Static_assert(IOTDATA_FIELD_COUNT <= 32, "fields overflow");
 
+#define IOTDATA_FIELD_EMPTY		(0)
 #define IOTDATA_FIELD_BIT(id)           (1U << (id))
 #define IOTDATA_FIELD_PRESENT(mask, id) (((mask) >> (id)) & 1U)
 #define IOTDATA_FIELD_SET(mask, id)     ((mask) |= (1U << (id)))
@@ -740,10 +741,7 @@ typedef uint32_t iotdata_field_t;
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_ENCODE)
-#define IOTDATA_MAGIC 0xDA7AB175
 typedef struct {
-    uint32_t _magic;
-
     uint8_t *buf;
     size_t buf_size;
     iotdata_state_t state;
@@ -897,7 +895,7 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
 #endif /* !IOTDATA_NO_DECODE */
 
 /* ---------------------------------------------------------------------------
- * JSON, Print (requires encoder/decoder), Dump
+ * Dump, Print (requires decoder), JSON (requires encoder/decoder)
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_DUMP)
