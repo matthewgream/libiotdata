@@ -186,7 +186,7 @@ minimal:
 ################################################################################
 
 ESP_CC = riscv32-esp-elf-gcc
-ESP_CFLAGS_BASE = -march=rv32imc -mabi=ilp32 -O6
+ESP_CFLAGS_BASE = -march=rv32imc -mabi=ilp32 -Os
 
 minimal-esp32:
 	@echo "--- ESP32-C3 full library (no JSON) ---"

@@ -1474,16 +1474,16 @@ the minimal implementation is less than 1KB on the embedded target.
 
 | Configuration                                       | x86-64 -O6 | x86-64 -Os | aarch64 -O6 | aarch64 -Os | esp32-c3 -O6 | esp32-c3 -Os |
 |-----------------------------------------------------|------------|------------|-------------|-------------|--------------|--------------|
-| Full library (all elements, encode + decode + JSON) | ~84 KB     | ~29 KB     | ~86 KB      | ~31 KB      | ~68 KB       | ~19 KB       |
-| Encoder-only, battery + environment only            | ~5.7 KB    | ~1.1 KB    | ~5.7 KB     | ~1.1 KB     | ~5.1 KB      | ~0.8 KB      |
+| Full library (all elements, encode + decode + JSON) | ~85 KB     | ~29 KB     | ~87 KB      | ~31 KB      | ~67 KB       | ~19 KB       |
+| Encoder-only, battery + environment only            | ~5.5 KB    | ~1.1 KB    | ~5.4 KB     | ~1.1 KB     | ~5.0 KB      | ~0.7 KB      |
 
-**x86-64 builds**
+**x86-64 builds (-O6 and -Os)**
 
 ```
 --- Full library ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -O6 -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
    text    data     bss     dec     hex filename
-  84699    2096    4096   90891   1630b iotdata_full.o
+  85866    2112    4096   92074   167aa iotdata_full.o
 --- Minimal encoder (battery + environment, integer-only) ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -O6 -mno-sse -mno-mmx -mno-80387 \
         -DIOTDATA_NO_DECODE \
@@ -1493,7 +1493,7 @@ gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototype
         -c iotdata.c -o iotdata_minimal.o
 Minimal object size:
    text    data     bss     dec     hex filename
-   5718      32       0    5750    1676 iotdata_minimal.o
+   5559      32       0    5591    15d7 iotdata_minimal.o
 0000000000000000 l     O .data.rel.ro.local     0000000000000010 _iotdata_field_ops
 0000000000000018 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_battery
 0000000000000010 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_environment
@@ -1504,7 +1504,7 @@ Minimal object size:
 --- Full library ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -Os -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
    text    data     bss     dec     hex filename
-  29570    2096    4096   35762    8bb2 iotdata_full.o
+  29603    2112    4096   35811    8be3 iotdata_full.o
 --- Minimal encoder (battery + environment, integer-only) ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -Os -mno-sse -mno-mmx -mno-80387 \
         -DIOTDATA_NO_DECODE \
@@ -1514,22 +1514,22 @@ gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototype
         -c iotdata.c -o iotdata_minimal.o
 Minimal object size:
    text    data     bss     dec     hex filename
-   1125      32       0    1157     485 iotdata_minimal.o
+   1101      32       0    1133     46d iotdata_minimal.o
 0000000000000000 l     O .data.rel.ro.local     0000000000000010 _iotdata_field_ops
 0000000000000018 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_battery
 0000000000000010 l     O .data.rel.ro.local     0000000000000008 _iotdata_field_def_environment
 0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
 ```
 
-**esp32-c3 builds**
+**esp32-c3 builds (-Os)**
 
 ```
 --- ESP32-C3 full library (no JSON) ---
-riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -O6 -DIOTDATA_NO_JSON -c iotdata.c -o iotdata_esp32c3_full.o
+riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -Os -DIOTDATA_NO_JSON -c iotdata.c -o iotdata_esp32c3_full.o
    text    data     bss     dec     hex filename
-  68067       0       0   68067   109e3 iotdata_esp32c3_full.o
+  19513       0       0   19513    4c39 iotdata_esp32c3_full.o
 --- ESP32-C3 minimal encoder (battery + environment, integer-only) ---
-riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -O6 \
+riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -Os \
         -DIOTDATA_NO_DECODE \
         -DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
         -DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
@@ -1537,7 +1537,7 @@ riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -O6 \
         -c iotdata.c -o iotdata_esp32c3_minimal.o
 Minimal object size:
    text    data     bss     dec     hex filename
-   5102       0       0    5102    13ee iotdata_esp32c3_minimal.o
+    768       0       0     768     300 iotdata_esp32c3_minimal.o
 00000000 l    d  .data  00000000 .data
 ```
 
