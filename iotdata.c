@@ -80,18 +80,23 @@ const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_DUMP)
+#define IOTDATA_DUMP_FIELD_NAME_MAX 32
+#define IOTDATA_DUMP_DECODED_STR_MAX 32
+#define IOTDATA_DUMP_RANGE_STR_MAX 32
+
 typedef struct {
     size_t bit_offset;
     size_t bit_length;
-    char field_name[32];
+    char field_name[IOTDATA_DUMP_FIELD_NAME_MAX];
     uint32_t raw_value;
-    char decoded_str[64];
-    char range_str[80];
+    char decoded_str[IOTDATA_DUMP_DECODED_STR_MAX];
+    char range_str[IOTDATA_DUMP_RANGE_STR_MAX];
 } iotdata_dump_entry_t;
 
 #define IOTDATA_MAX_DUMP_ENTRIES 48
 
 typedef struct {
+    char _dec_buf[IOTDATA_DUMP_DECODED_STR_MAX];
     iotdata_dump_entry_t entries[IOTDATA_MAX_DUMP_ENTRIES];
     size_t count;
     size_t packed_bits;
@@ -326,15 +331,14 @@ static inline void json_set_battery(cJSON *root, const iotdata_decoded_t *d, con
 #if !defined(IOTDATA_NO_DUMP)
 static inline int dump_battery(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_BATTERY_LEVEL_BITS);
-    snprintf(dec, sizeof(dec), "%u%%", dequantise_battery_level(r));
-    n = dump_add(dump, n, s, IOTDATA_BATTERY_LEVEL_BITS, r, dec, "0..100%%, 5b quant", "battery_level");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u%%", dequantise_battery_level(r));
+    n = dump_add(dump, n, s, IOTDATA_BATTERY_LEVEL_BITS, r, dump->_dec_buf, "0..100%%, 5b quant", "battery_level");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_BATTERY_CHARGE_BITS);
-    snprintf(dec, sizeof(dec), "%s", dequantise_battery_state(r) ? "charging" : "discharging");
-    n = dump_add(dump, n, s, IOTDATA_BATTERY_CHARGE_BITS, r, dec, "0/1", "battery_charging");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s", dequantise_battery_state(r) ? "charging" : "discharging");
+    n = dump_add(dump, n, s, IOTDATA_BATTERY_CHARGE_BITS, r, dump->_dec_buf, "0/1", "battery_charging");
     return n;
 }
 #endif
@@ -1510,33 +1514,30 @@ static inline iotdata_status_t json_get_clouds(cJSON *root, iotdata_encoder_t *e
 
 static inline int dump_temperature(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_TEMPERATURE_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.2f C", dequantise_temperature(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f C", dequantise_temperature(r));
 #else
-    fmt_scaled100(dec, sizeof(dec), dequantise_temperature(r), "C");
+    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_temperature(r), "C");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_TEMPERATURE_BITS, r, dec, "-40..+80C, 0.25C", "temperature");
+    n = dump_add(dump, n, s, IOTDATA_TEMPERATURE_BITS, r, dump->_dec_buf, "-40..+80C, 0.25C", "temperature");
     return n;
 }
 static inline int dump_pressure(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_PRESSURE_BITS);
-    snprintf(dec, sizeof(dec), "%u hPa", dequantise_pressure(r));
-    n = dump_add(dump, n, s, IOTDATA_PRESSURE_BITS, r, dec, "850..1105 hPa", "pressure");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u hPa", dequantise_pressure(r));
+    n = dump_add(dump, n, s, IOTDATA_PRESSURE_BITS, r, dump->_dec_buf, "850..1105 hPa", "pressure");
     return n;
 }
 static inline int dump_humidity(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_HUMIDITY_BITS);
-    snprintf(dec, sizeof(dec), "%u%%", dequantise_humidity(r));
-    n = dump_add(dump, n, s, IOTDATA_HUMIDITY_BITS, r, dec, "0..100%%", "humidity");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u%%", dequantise_humidity(r));
+    n = dump_add(dump, n, s, IOTDATA_HUMIDITY_BITS, r, dump->_dec_buf, "0..100%%", "humidity");
     return n;
 }
 static inline int dump_environment(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
@@ -1548,122 +1549,112 @@ static inline int dump_environment(const uint8_t *buf, size_t bb, size_t *bp, io
 
 static inline int dump_solar(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_SOLAR_IRRADIATION_BITS);
-    snprintf(dec, sizeof(dec), "%u W/m2", dequantise_solar_irradiance(r));
-    n = dump_add(dump, n, s, IOTDATA_SOLAR_IRRADIATION_BITS, r, dec, "0..1023 W/m2", "solar_irradiance");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u W/m2", dequantise_solar_irradiance(r));
+    n = dump_add(dump, n, s, IOTDATA_SOLAR_IRRADIATION_BITS, r, dump->_dec_buf, "0..1023 W/m2", "solar_irradiance");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_SOLAR_ULTRAVIOLET_BITS);
-    snprintf(dec, sizeof(dec), "%u", dequantise_solar_ultraviolet(r));
-    n = dump_add(dump, n, s, IOTDATA_SOLAR_ULTRAVIOLET_BITS, r, dec, "0..15", "solar_ultraviolet");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", dequantise_solar_ultraviolet(r));
+    n = dump_add(dump, n, s, IOTDATA_SOLAR_ULTRAVIOLET_BITS, r, dump->_dec_buf, "0..15", "solar_ultraviolet");
     return n;
 }
 
 static inline int dump_depth(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_DEPTH_BITS);
-    snprintf(dec, sizeof(dec), "%u cm", dequantise_depth(r));
-    n = dump_add(dump, n, s, IOTDATA_DEPTH_BITS, r, dec, "0..1023 cm", label);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u cm", dequantise_depth(r));
+    n = dump_add(dump, n, s, IOTDATA_DEPTH_BITS, r, dump->_dec_buf, "0..1023 cm", label);
     return n;
 }
 
 static inline int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_LINK_RSSI_BITS);
-    snprintf(dec, sizeof(dec), "%d dBm", dequantise_link_rssi(r));
-    n = dump_add(dump, n, s, IOTDATA_LINK_RSSI_BITS, r, dec, "-120..-60, 4dBm", "link_rssi");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%d dBm", dequantise_link_rssi(r));
+    n = dump_add(dump, n, s, IOTDATA_LINK_RSSI_BITS, r, dump->_dec_buf, "-120..-60, 4dBm", "link_rssi");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_LINK_SNR_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.0f dB", dequantise_link_snr(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.0f dB", dequantise_link_snr(r));
 #else
-    fmt_scaled10(dec, sizeof(dec), dequantise_link_snr(r), "dB");
+    fmt_scaled10(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_link_snr(r), "dB");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_LINK_SNR_BITS, r, dec, "-20..+10, 10dB", "link_snr");
+    n = dump_add(dump, n, s, IOTDATA_LINK_SNR_BITS, r, dump->_dec_buf, "-20..+10, 10dB", "link_snr");
     return n;
 }
 
 static inline int dump_flags(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_FLAGS_BITS);
-    snprintf(dec, sizeof(dec), "0x%02x", r);
-    n = dump_add(dump, n, s, IOTDATA_FLAGS_BITS, r, dec, "8-bit bitmask", "flags");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02x", r);
+    n = dump_add(dump, n, s, IOTDATA_FLAGS_BITS, r, dump->_dec_buf, "8-bit bitmask", "flags");
     return n;
 }
 
 static inline int dump_position(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_POS_LAT_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.6f", dequantise_position_lat(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", dequantise_position_lat(r));
 #else
-    fmt_scaled10000000(dec, sizeof(dec), dequantise_position_lat(r), "");
+    fmt_scaled10000000(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lat(r), "");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_POS_LAT_BITS, r, dec, "-90..+90", "latitude");
-
+    n = dump_add(dump, n, s, IOTDATA_POS_LAT_BITS, r, dump->_dec_buf, "-90..+90", "latitude");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_POS_LON_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.6f", dequantise_position_lon(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", dequantise_position_lon(r));
 #else
-    fmt_scaled10000000(dec, sizeof(dec), dequantise_position_lon(r), "");
+    fmt_scaled10000000(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lon(r), "");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_POS_LON_BITS, r, dec, "-180..+180", "longitude");
+    n = dump_add(dump, n, s, IOTDATA_POS_LON_BITS, r, dump->_dec_buf, "-180..+180", "longitude");
     return n;
 }
 
 static inline int dump_datetime(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_DATETIME_BITS);
     const uint32_t secs = dequantise_datetime(r);
-    snprintf(dec, sizeof(dec), "day %u %02u:%02u:%02u (%us)", secs / 86400, (secs % 86400) / 3600, (secs % 3600) / 60, secs % 60, secs);
-    n = dump_add(dump, n, s, IOTDATA_DATETIME_BITS, r, dec, "5s res", "datetime");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "day %u %02u:%02u:%02u (%us)", secs / 86400, (secs % 86400) / 3600, (secs % 3600) / 60, secs % 60, secs);
+    n = dump_add(dump, n, s, IOTDATA_DATETIME_BITS, r, dump->_dec_buf, "5s res", "datetime");
     return n;
 }
 
 static inline int dump_wind_speed(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_WIND_SPEED_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.1f m/s", dequantise_wind_speed(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", dequantise_wind_speed(r));
 #else
-    fmt_scaled100(dec, sizeof(dec), dequantise_wind_speed(r), "m/s");
+    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), "m/s");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_WIND_SPEED_BITS, r, dec, "0..63.5, 0.5m/s", "wind_speed");
+    n = dump_add(dump, n, s, IOTDATA_WIND_SPEED_BITS, r, dump->_dec_buf, "0..63.5, 0.5m/s", "wind_speed");
     return n;
 }
 static inline int dump_wind_direction(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_WIND_DIRECTION_BITS);
-    snprintf(dec, sizeof(dec), "%u deg", dequantise_wind_direction(r));
-    n = dump_add(dump, n, s, IOTDATA_WIND_DIRECTION_BITS, r, dec, "0..355, ~1.4deg", "wind_direction");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u deg", dequantise_wind_direction(r));
+    n = dump_add(dump, n, s, IOTDATA_WIND_DIRECTION_BITS, r, dump->_dec_buf, "0..355, ~1.4deg", "wind_direction");
     return n;
 }
 static inline int dump_wind_gust(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_WIND_GUST_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.1f m/s", dequantise_wind_speed(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", dequantise_wind_speed(r));
 #else
-    fmt_scaled100(dec, sizeof(dec), dequantise_wind_speed(r), "m/s");
+    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), "m/s");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_WIND_GUST_BITS, r, dec, "0..63.5, 0.5m/s", "wind_gust");
+    n = dump_add(dump, n, s, IOTDATA_WIND_GUST_BITS, r, dump->_dec_buf, "0..63.5, 0.5m/s", "wind_gust");
     return n;
 }
 static inline int dump_wind(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
@@ -1675,20 +1666,18 @@ static inline int dump_wind(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 
 static inline int dump_rain_rate(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RAIN_RATE_BITS);
-    snprintf(dec, sizeof(dec), "%u mm/hr", dequantise_rain_rate(r));
-    n = dump_add(dump, n, s, IOTDATA_RAIN_RATE_BITS, r, dec, "0..255 mm/hr", "rain_rate");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u mm/hr", dequantise_rain_rate(r));
+    n = dump_add(dump, n, s, IOTDATA_RAIN_RATE_BITS, r, dump->_dec_buf, "0..255 mm/hr", "rain_rate");
     return n;
 }
 static inline int dump_rain_size(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RAIN_SIZE_BITS);
-    snprintf(dec, sizeof(dec), "%u.%u mm/d", dequantise_rain_size(r) / 10, dequantise_rain_size(r) % 10);
-    n = dump_add(dump, n, s, IOTDATA_RAIN_SIZE_BITS, r, dec, "0..6.3 mm/d", "rain_size");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u.%u mm/d", dequantise_rain_size(r) / 10, dequantise_rain_size(r) % 10);
+    n = dump_add(dump, n, s, IOTDATA_RAIN_SIZE_BITS, r, dump->_dec_buf, "0..6.3 mm/d", "rain_size");
     return n;
 }
 static inline int dump_rain(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
@@ -1699,34 +1688,31 @@ static inline int dump_rain(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 
 static inline int dump_air_quality(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_BITS);
-    snprintf(dec, sizeof(dec), "%u AQI", dequantise_air_quality(r));
-    n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_BITS, r, dec, "0..500 AQI", "air_quality");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u AQI", dequantise_air_quality(r));
+    n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_BITS, r, dump->_dec_buf, "0..500 AQI", "air_quality");
     return n;
 }
 
 static inline int dump_radiation_cpm(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RADIATION_CPM_BITS);
-    snprintf(dec, sizeof(dec), "%u CPM", dequantise_radiation_cpm(r));
-    n = dump_add(dump, n, s, IOTDATA_RADIATION_CPM_BITS, r, dec, "0..65535 CPM", "radiation_cpm");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u CPM", dequantise_radiation_cpm(r));
+    n = dump_add(dump, n, s, IOTDATA_RADIATION_CPM_BITS, r, dump->_dec_buf, "0..65535 CPM", "radiation_cpm");
     return n;
 }
 static inline int dump_radiation_dose(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RADIATION_DOSE_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dec, sizeof(dec), "%.2f uSv/h", dequantise_radiation_dose(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f uSv/h", dequantise_radiation_dose(r));
 #else
-    fmt_scaled100(dec, sizeof(dec), dequantise_radiation_dose(r), "uSv/h");
+    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_radiation_dose(r), "uSv/h");
 #endif
-    n = dump_add(dump, n, s, IOTDATA_RADIATION_DOSE_BITS, r, dec, "0..163.83, 0.01", "radiation_dose");
+    n = dump_add(dump, n, s, IOTDATA_RADIATION_DOSE_BITS, r, dump->_dec_buf, "0..163.83, 0.01", "radiation_dose");
     return n;
 }
 static inline int dump_radiation(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
@@ -1737,11 +1723,10 @@ static inline int dump_radiation(const uint8_t *buf, size_t bb, size_t *bp, iotd
 
 static inline int dump_clouds(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
-    char dec[64];
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_CLOUDS_BITS);
-    snprintf(dec, sizeof(dec), "%u okta", dequantise_clouds(r));
-    n = dump_add(dump, n, s, IOTDATA_CLOUDS_BITS, r, dec, "0..8 okta", "clouds");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u okta", dequantise_clouds(r));
+    n = dump_add(dump, n, s, IOTDATA_CLOUDS_BITS, r, dump->_dec_buf, "0..8 okta", "clouds");
     return n;
 }
 
@@ -2854,8 +2839,11 @@ static int dump_add(iotdata_dump_t *dump, int n, size_t bit_offset, size_t bit_l
     e->bit_length = bit_length;
     e->raw_value = raw_value;
     snprintf(e->field_name, sizeof(e->field_name), "%s", name);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wrestrict"
     snprintf(e->decoded_str, sizeof(e->decoded_str), "%s", decoded);
     snprintf(e->range_str, sizeof(e->range_str), "%s", range);
+#pragma GCC diagnostic pop
     return n + 1;
 }
 
@@ -2877,7 +2865,6 @@ static iotdata_status_t _iotdata_dump_build(const uint8_t *buf, size_t len, iotd
 
     size_t bb = len * 8, bp = 0;
     int n = 0;
-    char dec_buf[64];
     size_t s;
     uint32_t raw;
 
@@ -2888,32 +2875,32 @@ static iotdata_status_t _iotdata_dump_build(const uint8_t *buf, size_t len, iotd
     /* Header */
     s = bp;
     raw = bits_read(buf, bb, &bp, IOTDATA_VARIANT_BITS);
-    snprintf(dec_buf, sizeof(dec_buf), "%u", raw);
-    n = dump_add(dump, n, s, IOTDATA_VARIANT_BITS, raw, dec_buf, "0-14 (15=rsvd)", "variant");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", raw);
+    n = dump_add(dump, n, s, IOTDATA_VARIANT_BITS, raw, dump->_dec_buf, "0-14 (15=rsvd)", "variant");
     const uint8_t variant = (uint8_t)raw;
     s = bp;
     raw = bits_read(buf, bb, &bp, IOTDATA_STATION_BITS);
-    snprintf(dec_buf, sizeof(dec_buf), "%u", raw);
-    n = dump_add(dump, n, s, IOTDATA_STATION_BITS, raw, dec_buf, "0-4095", "station");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", raw);
+    n = dump_add(dump, n, s, IOTDATA_STATION_BITS, raw, dump->_dec_buf, "0-4095", "station");
     s = bp;
     raw = bits_read(buf, bb, &bp, IOTDATA_SEQUENCE_BITS);
-    snprintf(dec_buf, sizeof(dec_buf), "%u", raw);
-    n = dump_add(dump, n, s, IOTDATA_SEQUENCE_BITS, raw, dec_buf, "0-65535", "sequence");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", raw);
+    n = dump_add(dump, n, s, IOTDATA_SEQUENCE_BITS, raw, dump->_dec_buf, "0-65535", "sequence");
 
     /* Presence */
     uint8_t pres[IOTDATA_PRES_MAXIMUM] = { 0 };
     s = bp;
     pres[0] = (uint8_t)bits_read(buf, bb, &bp, 8);
-    snprintf(dec_buf, sizeof(dec_buf), "0x%02x", pres[0]);
-    n = dump_add(dump, n, s, 8, pres[0], dec_buf, "ext|tlv|6 fields", "presence[0]");
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02x", pres[0]);
+    n = dump_add(dump, n, s, 8, pres[0], dump->_dec_buf, "ext|tlv|6 fields", "presence[0]");
     int num_pres = 1;
     while (num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb && (pres[num_pres - 1] & IOTDATA_PRES_EXT) != 0) {
         s = bp;
         pres[num_pres] = (uint8_t)bits_read(buf, bb, &bp, 8);
         char pname[24];
         snprintf(pname, sizeof(pname), "presence[%d]", num_pres);
-        snprintf(dec_buf, sizeof(dec_buf), "0x%02x", pres[num_pres]);
-        n = dump_add(dump, n, s, 8, pres[num_pres], dec_buf, "ext|7 fields", pname);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02x", pres[num_pres]);
+        n = dump_add(dump, n, s, 8, pres[num_pres], dump->_dec_buf, "ext|7 fields", pname);
         num_pres++;
     }
 
@@ -2934,21 +2921,21 @@ static iotdata_status_t _iotdata_dump_build(const uint8_t *buf, size_t len, iotd
             const uint8_t format = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_FMT_BITS);
             const uint8_t type = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_TYPE_BITS);
             more = bits_read(buf, bb, &bp, IOTDATA_TLV_MORE_BITS) != 0;
-            snprintf(dec_buf, sizeof(dec_buf), "%s type=%u more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
-            char name_buf[32];
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=%u more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
+            char name_buf[IOTDATA_DUMP_FIELD_NAME_MAX];
             snprintf(name_buf, sizeof(name_buf), "tlv[%d].hdr", tlv_idx);
-            n = dump_add(dump, n, s, IOTDATA_TLV_FMT_BITS + IOTDATA_TLV_TYPE_BITS + IOTDATA_TLV_MORE_BITS, 0, dec_buf, "format+type+more", name_buf);
+            n = dump_add(dump, n, s, IOTDATA_TLV_FMT_BITS + IOTDATA_TLV_TYPE_BITS + IOTDATA_TLV_MORE_BITS, 0, dump->_dec_buf, "format+type+more", name_buf);
             s = bp;
             const uint8_t length = (uint8_t)bits_read(buf, bb, &bp, IOTDATA_TLV_LENGTH_BITS);
-            snprintf(dec_buf, sizeof(dec_buf), "%u", length);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", length);
             snprintf(name_buf, sizeof(name_buf), "tlv[%d].len", tlv_idx);
-            n = dump_add(dump, n, s, IOTDATA_TLV_LENGTH_BITS, length, dec_buf, "0..255", name_buf);
+            n = dump_add(dump, n, s, IOTDATA_TLV_LENGTH_BITS, length, dump->_dec_buf, "0..255", name_buf);
             if (length > 0) {
                 s = bp;
                 const size_t data_bits = (format == IOTDATA_TLV_FMT_STRING) ? (size_t)length * IOTDATA_TLV_CHAR_BITS : (size_t)length * 8;
                 snprintf(name_buf, sizeof(name_buf), "tlv[%d].data", tlv_idx);
-                snprintf(dec_buf, sizeof(dec_buf), "(%zu bits)", data_bits);
-                n = dump_add(dump, n, s, data_bits, 0, dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", name_buf);
+                snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%zu bits)", data_bits);
+                n = dump_add(dump, n, s, data_bits, 0, dump->_dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", name_buf);
                 bp += data_bits;
             }
             tlv_idx++;
