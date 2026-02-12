@@ -247,7 +247,7 @@ int main(void) {
         char str[8192];
         iotdata_status_t rc;
 
-        rc = iotdata_dump_to_string(buf, len, str, sizeof(str));
+        rc = iotdata_dump_to_string(buf, len, str, sizeof(str), true);
         CHECK(rc == IOTDATA_OK, "dump_to_string");
         CHECK(strlen(str) > 0, "dump output non-empty");
     }

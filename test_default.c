@@ -699,21 +699,22 @@ static void test_dump_output(void) {
     ASSERT_OK(iotdata_encode_environment(&enc, 15.0f, 1000, 70), "env");
     finish();
 
-    iotdata_dump_t dump;
-    ASSERT_OK(iotdata_dump_build(pkt, pkt_len, &dump), "build");
-    if (dump.count < 5) {
-        FAIL("too few entries");
-        return;
-    }
-
     char str[8192];
-    ASSERT_OK(iotdata_dump_to_string(pkt, pkt_len, str, sizeof(str)), "to_string");
+    ASSERT_OK(iotdata_dump_to_string(pkt, pkt_len, str, sizeof(str), true), "to_string");
     if (!strstr(str, "Offset")) {
         FAIL("missing header");
         return;
     }
     if (!strstr(str, "variant")) {
         FAIL("missing variant");
+        return;
+    }
+    if (!strstr(str, "battery")) {
+        FAIL("missing battery");
+        return;
+    }
+    if (!strstr(str, "temperature")) {
+        FAIL("missing temperature");
         return;
     }
     PASS();

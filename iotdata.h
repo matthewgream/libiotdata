@@ -806,26 +806,6 @@ typedef struct {
 } iotdata_decoded_t;
 #endif /* !IOTDATA_NO_DECODE */
 
-#if !defined(IOTDATA_NO_DUMP)
-typedef struct {
-    size_t bit_offset;
-    size_t bit_length;
-    char field_name[32];
-    uint32_t raw_value;
-    char decoded_str[64];
-    char range_str[80];
-} iotdata_dump_entry_t;
-
-#define IOTDATA_MAX_DUMP_ENTRIES 64
-
-typedef struct {
-    iotdata_dump_entry_t entries[IOTDATA_MAX_DUMP_ENTRIES];
-    size_t count;
-    size_t packed_bits;
-    size_t packed_bytes;
-} iotdata_dump_t;
-#endif /* !IOTDATA_NO_DUMP */
-
 /* ---------------------------------------------------------------------------
  * Encoder
  * -------------------------------------------------------------------------*/
@@ -921,9 +901,8 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_DUMP)
-iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp);
-iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size);
-iotdata_status_t iotdata_dump_build(const uint8_t *buf, size_t len, iotdata_dump_t *dump);
+iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp, bool verbose);
+iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose);
 #endif /* !IOTDATA_NO_DUMP */
 
 #if !defined(IOTDATA_NO_PRINT)

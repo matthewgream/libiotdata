@@ -255,9 +255,11 @@ static void print_hex_dump(const uint8_t *buf, size_t len) {
 static void print_diagnostic_dump(const uint8_t *buf, size_t len) {
     iotdata_status_t rc;
     char dump_str[8192];
-    if ((rc = iotdata_dump_to_string(buf, len, dump_str, sizeof(dump_str))) == IOTDATA_OK)
+    if ((rc = iotdata_dump_to_string(buf, len, dump_str, sizeof(dump_str), true)) == IOTDATA_OK) {
         printf("\n** Diagnostic dump:\n\n%s", dump_str);
-    else
+        if ((rc = iotdata_dump_to_string(buf, len, dump_str, sizeof(dump_str), false)) == IOTDATA_OK)
+            printf("\n%s", dump_str);
+    } else
         fprintf(stderr, "\n  dump: %s", iotdata_strerror(rc));
 }
 

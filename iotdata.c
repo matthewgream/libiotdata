@@ -25,6 +25,30 @@
 #endif
 
 /* =========================================================================
+ * Internal structures
+ * ========================================================================= */
+
+#if !defined(IOTDATA_NO_DUMP)
+typedef struct {
+    size_t bit_offset;
+    size_t bit_length;
+    char field_name[32];
+    uint32_t raw_value;
+    char decoded_str[64];
+    char range_str[80];
+} iotdata_dump_entry_t;
+
+#define IOTDATA_MAX_DUMP_ENTRIES 64
+
+typedef struct {
+    iotdata_dump_entry_t entries[IOTDATA_MAX_DUMP_ENTRIES];
+    size_t count;
+    size_t packed_bits;
+    size_t packed_bytes;
+} iotdata_dump_t;
+#endif /* !IOTDATA_NO_DUMP */
+
+/* =========================================================================
  * Field operations table — types and registration macros
  * ========================================================================= */
 
@@ -2931,15 +2955,23 @@ static iotdata_status_t dump_decoded_to_file(const iotdata_dump_t *dump, FILE *f
     return IOTDATA_OK;
 }
 
-iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp) {
+static iotdata_status_t dump_oneline_to_file(const iotdata_dump_t *dump, FILE *fp) {
+    for (size_t i = 0; i < dump->count; i++) {
+        const iotdata_dump_entry_t *e = &dump->entries[i];
+        fprintf(fp, "%s%s=%s%s", (i > 0 ? ", " : ""), e->field_name, e->decoded_str, (i + 1 == dump->count ? "\n" : ""));
+    }
+    return IOTDATA_OK;
+}
+
+iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp, bool verbose) {
     iotdata_dump_t dump;
     iotdata_status_t rc;
     if ((rc = iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
         return rc;
-    return dump_decoded_to_file(&dump, fp);
+    return verbose ? dump_decoded_to_file(&dump, fp) : dump_oneline_to_file(&dump, fp);
 }
 
-iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size) {
+iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose) {
     iotdata_dump_t dump;
     iotdata_status_t rc;
     if ((rc = iotdata_dump_build(buf, len, &dump)) != IOTDATA_OK)
@@ -2947,7 +2979,7 @@ iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *ou
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_DUMP_ALLOC;
-    rc = dump_decoded_to_file(&dump, fp);
+    rc = verbose ? dump_decoded_to_file(&dump, fp) : dump_oneline_to_file(&dump, fp);
     fclose(fp);
     return rc;
 }

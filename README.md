@@ -1403,8 +1403,8 @@ In particular, avoidance of the TLV element will save considerable footprint.
 
 | Define                          | Effect |
 |---------------------------------|--------|
-| `IOTDATA_NO_DECODE`             | Exclude decoder, JSON, print, dump functions |
-| `IOTDATA_NO_ENCODE`             | Exclude encoder functions |
+| `IOTDATA_NO_DECODE`             | Exclude decoder functions (also excludes print and JSON encoder) |
+| `IOTDATA_NO_ENCODE`             | Exclude encoder functions (also excludes JSON decoder) |
 | `IOTDATA_NO_PRINT`              | Exclude print functions |
 | `IOTDATA_NO_DUMP`               | Exclude dump functions |
 | `IOTDATA_NO_JSON`               | Exclude JSON functions |
@@ -1414,6 +1414,13 @@ In particular, avoidance of the TLV element will save considerable footprint.
 
 These allow building an encoder-only image for a sensor node
 (smallest possible footprint) or a decoder-only image for a gateway.
+
+The JSON encoding functions have a dependency on the decoder (decode
+from wire format and encode into JSON), and JSON decoding functions
+equivalently are dependent on the encoder (decode from JSON and encode
+into wire format). The print functions, for brevity, are also dependant
+upon the decoder. The dump functions work directly upon the the wire
+format buffer are are not dependent on either the encoder or decoder.
 
 Be aware that `IOTDATA_NO_CHECKS_STATE` will cease verification of
 non null `iotdata_encoder_t*` and the ordering of the encoding calls
@@ -2368,30 +2375,26 @@ library linkage — just bit-packing arithmetic.
 Configure via `#define` before including:
 
 ```c
-/* ---- Configuration ---- */
-#define WS_VARIANT       0
-#define WS_STATION_ID    1
+#define WS_VARIANT       0    /* Built-in weather station */
+#define WS_STATION       1    /* 0 to 4095 */
 #define WS_PRES0_FIELDS  6    /* battery, link, environment, wind, rain, solar */
 
-/* Presence byte layout */
 #define WS_PRES_EXT      0x80
 #define WS_PRES_TLV      0x40
 
-/* ---- Writer ---- */
 static void ws_bits(uint8_t *buf, uint16_t *bp, uint32_t val, uint8_t n) {
     for (int8_t i = n - 1; i >= 0; i--, (*bp)++)
         if (val & (1UL << i))
             buf[*bp >> 3] |= (1U << (7 - (*bp & 7)));
 }
 
-/* ---- Encoder ----
- *
+/*
  * Encodes: battery, environment, one raw TLV, one string TLV.
  * All integer arithmetic.  No floating point.  No malloc.
  *
  * Parameters:
  *   buf        — output buffer, must be zeroed by caller, >= 32 bytes
- *   seq        — 16-bit sequence number
+ *   sequence   — 16-bit sequence number
  *   batt_pct   — battery level 0-100
  *   charging   — 0 or 1
  *   temp100    — temperature in centidegrees (-4000 = -40.00 C)
@@ -2407,7 +2410,7 @@ static void ws_bits(uint8_t *buf, uint16_t *bp, uint32_t val, uint8_t n) {
  * Returns: packet size in bytes
  */
 static uint8_t ws_encode(
-    uint8_t *buf, uint16_t seq,
+    uint8_t *buf, uint16_t sequence,
     uint8_t batt_pct, uint8_t charging,
     int16_t temp100, uint16_t press_hpa, uint8_t humid_pct,
     uint8_t tlv0_type, const uint8_t *tlv0_data, uint8_t tlv0_len,
@@ -2417,8 +2420,8 @@ static uint8_t ws_encode(
 
     /* --- Header: 4-bit variant + 12-bit station + 16-bit sequence --- */
     ws_bits(buf, &bp, WS_VARIANT, 4);
-    ws_bits(buf, &bp, WS_STATION_ID, 12);
-    ws_bits(buf, &bp, seq, 16);
+    ws_bits(buf, &bp, WS_STATION, 12);
+    ws_bits(buf, &bp, sequence, 16);
 
     /* --- Presence byte 0: ext=0, tlv=1, battery=1, link=0,
            environment=1, wind=0, rain=0, solar=0 --- */
