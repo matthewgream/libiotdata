@@ -1,5 +1,8 @@
 /*
- * iotdata.h - IoT Sensor Telemetry Protocol
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+ *
+ * iotdata.h - reference implementation header
  *
  * Ultra-efficient bit-packed telemetry protocol for remote sensor systems.
  * Designed for constrained devices (ESP32-C3, STM32, nRF52) with

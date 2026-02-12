@@ -9,8 +9,9 @@
     Status:     Running Code
     Created:    2026-02-07
     Authors:    Matthew Gream
-    Licence:    [TBD]
-    Repository: https://github.com/matthewgream/libiotdata
+    Licence:    Attribute-ShareAlike 4.0 International
+                https://creativecommons.org/licenses/by-sa/4.0
+    Repository: https://libiotdata.org
 
 ```
 
@@ -76,7 +77,7 @@ place on the project's GitHub repository.
   - [13.1. Reference Implementation](#131-reference-implementation)
   - [13.2. Encoder Strategy](#132-encoder-strategy)
   - [13.3. Compile-Time Options](#133-compile-time-options)
-  - [13.4. Build Size](#134-build-size)
+  - [13.4. Build Size and Stack Usage](#134-build-size-and-stack-usage)
   - [13.5. Variant Table Extension](#135-variant-table-extension)
 - [14. Security Considerations](#14-security-considerations)
 - [15. Future Work](#15-future-work)
@@ -1466,7 +1467,9 @@ the combined version, will on x86 platforms, force the compiler
 to reject floating-point operations, so as to ensure they are not
 latent in the implementation.
 
-### 13.4. Build Size
+### 13.4. Build Size and Stack Usage
+
+**Build summary for x86-64, aarch64 and esp32-c3 systems**
 
 The following measurements are from GCC on x86-64, aarch64 and 
 ESP32-C3 using the `minimal` build target. With space optimisation,
@@ -1477,7 +1480,7 @@ the minimal implementation is less than 1KB on the embedded target.
 | Full library (all elements, encode + decode + JSON) | ~85 KB     | ~29 KB     | ~87 KB      | ~31 KB      | ~67 KB       | ~19 KB       |
 | Encoder-only, battery + environment only            | ~5.5 KB    | ~1.1 KB    | ~5.4 KB     | ~1.1 KB     | ~5.0 KB      | ~0.7 KB      |
 
-**x86-64 builds (-O6 and -Os)**
+**Build output for x86-64 (-O6 and -Os)**
 
 ```
 --- Full library ---
@@ -1521,7 +1524,7 @@ Minimal object size:
 0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
 ```
 
-**esp32-c3 builds (-Os)**
+**Build output for esp32-c3 (-Os)**
 
 ```
 --- ESP32-C3 full library (no JSON) ---
@@ -1541,6 +1544,42 @@ Minimal object size:
 00000000 l    d  .data  00000000 .data
 ```
 
+**Stack usage for x86-64 (-Os)**
+
+The `test-example' target compiled with `gcc -fstack-usage -Os` on x86-64
+illustrates per-function stack frames; nested calls accumulate.
+
+| Function                     | Stack (bytes) | Notes                          |
+|------------------------------|---------------|--------------------------------|
+| `iotdata_dump_to_string`     | 5872          | `iotdata_dump_t` on stack      |
+| `iotdata_dump_to_file`       | 5872          | `iotdata_dump_t` on stack      |
+| `iotdata_decode_to_json`     | 2768          | `iotdata_decoded_t` + cJSON    |
+| `iotdata_print_to_string`    | 2224          | `iotdata_decoded_t` on stack   |
+| `iotdata_print_to_file`      | 2208          | `iotdata_decoded_t` on stack   |
+| `iotdata_encode_from_json`   | 416           | Encoder context + JSON parsing |
+| `iotdata_dump_build`         | 192           | Dynamic, bounded               |
+| `iotdata_encode_begin`       | < 64          | —                              |
+| `iotdata_encode_end`         | < 64          | —                              |
+| `iotdata_decode`             | < 128         | —                              |
+
+The dump and print functions dominate because they allocate
+`iotdata_dump_t` (5.8 KB) or `iotdata_decoded_t` (2.2 KB) on the
+stack.  These are gateway/diagnostic functions not intended for
+constrained devices. The macro `IOTDATA_MAX_DUMP_ENTRIES` defaults
+to 48, and may be reduced to tune down this size. Note that 
+`iotdata_decoded_t` contains a complete set of all decoded variables,
+which in this example is the weather station variant with expensive
+TLV entries.
+
+The encode path — `encode_begin`, field calls, `encode_end` — peaks
+well under 500 bytes total stack depth.  On a Class 2 device with
+20 KB RAM, this leaves ample room for the RTOS stack, radio driver,
+and application logic.
+
+To reduce stack usage on memory-constrained targets, allocate
+`iotdata_dump_t` or `iotdata_decoded_t` as a static or global
+rather than calling the convenience wrappers which declare them
+locally.
 
 ### 13.5. Variant Table Extension
 
@@ -2495,6 +2534,10 @@ formulae for every field type.
 
 ## Appendix F. Example Weather Station Output
 
+The `test-example` target generates pseudo sensor data simulating a 
+weather station to illustrate quantisation effects and ancillary
+(dump, print and JSON) functionality.
+
 ```
 ╔══════════════════════════════════════════════════╗
 ║  iotdata weather station simulator               ║
@@ -2643,4 +2686,4 @@ Station 42 seq=2 var=0 (weather_station) [124 bits, 16 bytes]
 
 ---
 
-*This document and the reference implementation are maintained at [https://github.com/matthewgream/libiotdata].*
+*This document and the reference implementation are maintained at [https://libiotdata.org].*

@@ -1,12 +1,12 @@
 /*
- * test_default.c - Default variant (weather_station) test suite
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
  *
- * Exercises all 13 fields in the default weather station variant,
+ * test_default.c - test suite for default variant map
+ *
+ * Exercises all 12 fields in the default weather station variant,
  * plus standalone field types, boundary conditions, quantisation
  * accuracy, JSON round-trip, TLV, print, and dump.
- *
- * Compile:
- *   cc -DIOTDATA_VARIANT_MAPS_DEFAULT test_default.c iotdata.c -lm -lcjson -o test_default
  */
 
 #include "iotdata.h"

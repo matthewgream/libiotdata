@@ -1,5 +1,8 @@
 /*
- * test_example.c — Weather station simulator
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+ *
+ * test_weather.c - test example for builtin (weather station) variant
  *
  * Generates random-walk weather data using the built-in weather station
  * variant map.  Every 30 seconds it encodes a packet and displays:
@@ -11,9 +14,6 @@
  * triggering the extension byte.
  *
  * Runs until terminated with Ctrl-C.
- *
- * Compile:
- *   cc -DIOTDATA_VARIANT_MAPS_DEFAULT test_example.c iotdata.c -lm -lcjson -o test_example
  */
 
 #include "iotdata.h"

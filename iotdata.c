@@ -1,5 +1,8 @@
 /*
- * iotdata.c - IoT Sensor Telemetry Protocol implementation
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+ *
+ * iotdata.c - reference implementation body
  *
  * Architecture:
  *   1. Per-field inline functions (pack, unpack, json_set, json_get, dump, print)

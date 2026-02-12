@@ -1,5 +1,8 @@
 /*
- * test_version.c — Build variant smoke test
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+ *
+ * test_version.c — test suite for variant smoke test builds
  *
  * Lightweight test that exercises available API functions under each
  * compile-time configuration.  A single source file compiled with

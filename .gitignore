@@ -4,3 +4,4 @@ test_default
 test_custom
 test_example
 test_version_*
+*.su

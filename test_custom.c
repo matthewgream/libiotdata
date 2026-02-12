@@ -1,5 +1,8 @@
 /*
- * test_custom.c - Custom variant map test suite
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+ *
+ * test_custom.c - test suite for custom variant map
  *
  * Defines two custom variants and verifies:
  *   - Custom field ordering works
@@ -8,10 +11,6 @@
  *   - JSON round-trip uses custom labels
  *   - Standalone field types (temperature, pressure, humidity,
  *     wind_speed, wind_direction, wind_gust) work in custom layouts
- *
- * Compile:
- *   cc -DIOTDATA_VARIANT_MAPS=custom_variants -DIOTDATA_VARIANT_MAPS_COUNT=3 \
- *      test_custom.c iotdata.c -lm -lcjson -o test_custom
  */
 
 #include "iotdata.h"

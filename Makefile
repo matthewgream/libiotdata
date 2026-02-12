@@ -1,4 +1,8 @@
-# iotdata library Makefile
+#
+# IoT Sensor Telemetry Protocol
+# Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+#
+# Makefile - iotdata library, test and support Makefile
 #
 # Targets:
 #   all           - Build library and both test suites
@@ -48,8 +52,8 @@ CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
     -Wundef \
     -Wunreachable-code -Wunused \
     -Wwrite-strings
-# CFLAGS_OPT=-Os
-CFLAGS_OPT=-O6
+CFLAGS_OPT=-Os
+# CFLAGS_OPT=-O6
 CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT)
 CFLAGS_NO_FLOATING_POINT=-mno-sse -mno-mmx -mno-80387
 AR      = ar
@@ -70,6 +74,9 @@ else ifneq ($(findstring i386,$(CC_MACHINE)),)
 else
     CFLAGS_NO_FLOATING_POINT =
 endif
+CFLAGS_STACK_USAGE=-fstack-usage
+STACK_USAGE_FILE_LIST=*.su
+STACK_USAGE_FILE_EXAMPLE_IOTDATA=test_example-iotdata.su
 
 LIB_SRC    = iotdata.c
 LIB_OBJ    = iotdata.o
@@ -112,7 +119,7 @@ $(TEST_DEFAULT_BIN): $(TEST_DEFAULT_SRC) $(LIB_HDR) $(LIB_SRC)
 $(TEST_CUSTOM_BIN): $(TEST_CUSTOM_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=custom_variants -DIOTDATA_VARIANT_MAPS_COUNT=3 $(TEST_CUSTOM_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_CUSTOM_BIN)
 $(TEST_EXAMPLE_BIN): $(TEST_EXAMPLE_SRC) $(LIB_HDR) $(LIB_SRC)
-	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
+	$(CC) $(CFLAGS) $(CFLAGS_STACK_USAGE) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
 
 test-default: $(TEST_DEFAULT_BIN)
 	./$(TEST_DEFAULT_BIN)
@@ -163,7 +170,12 @@ format:
 	clang-format -i *.[ch]
 
 clean:
-	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ)
+	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
+
+################################################################################
+
+stack-usage:
+	@cat $(STACK_USAGE_FILE_EXAMPLE_IOTDATA) | sort -t"$$(printf '\t')" -k2 -rn | head -10 | column -t
 
 ################################################################################
 
