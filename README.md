@@ -117,8 +117,8 @@ sensors, ice thickness gauges — are frequently deployed in locations
 without mains power or wired connectivity.  These devices are
 constrained along three axes simultaneously:
 
-  1. **Power** — battery and/or small solar panel, often in locations
-     with limited winter daylight.
+  1. **Power** — battery and/or small solar panel, particularly in
+     locations with limited winter daylight.
 
   2. **Transmission** — LoRa, 802.11ah, SigFox, cellular SMS,
      low-frequency RF, or similar low-power point-to-point, wide-area,
@@ -144,8 +144,8 @@ resolution.  A typical weather station packet — battery, link
 quality, temperature, pressure, humidity, wind speed, direction and
 gust, rain rate and drop size, solar irradiance and UV index, plus
 8 flag bits — fits in 16 bytes.  A full-featured packet adding air
-quality, cloud cover, radiation, position, and timestamp fits in
-32 bytes.
+quality, cloud cover, radiation CPM and dose, position latitude and
+longitude, and timestamp fits in 32 bytes.
 
 The protocol is designed for transmit-only devices.  There is no
 negotiation, handshake, or acknowledgement at this layer.  A sensor
@@ -211,7 +211,8 @@ The following principles guided the protocol design:
   6. **Encode-only on the sensor.**  The encoder is small enough for
      resource-constrained MCUs.  JSON serialisation and other
      server-side features are optional and can be excluded from
-     embedded builds.
+     embedded builds. The reference implementation can build to 1 KB
+     and non-refernece implementations to less than 512 bytes.
 
   7. **Transport-delegated integrity.**  The protocol carries no
      checksum, CRC, length field, or encryption.  These functions
@@ -220,6 +221,12 @@ The following principles guided the protocol design:
      bits — significant when the entire payload may be 46 bits.
      Packet loss is tolerated: the sequence number (Section 5)
      enables detection without requiring retransmission.
+
+  8. **No global interoperability.**  It is expressly not a goal to
+     support interoperability between implementations, e.g. between
+     vendors.  Rather, the design intends to provide an optimal
+     framework and reference for a specific vendor across a suite
+     of devices.
 
 ## 4. Packet Structure Overview
 
@@ -301,7 +308,8 @@ indicates another presence byte follows.
     immediately.  If clear, no further presence bytes exist.
 
   - **TLV** (bit 6): TLV data flag.  If set, one or more TLV entries
-    (Section 9) follow after all data fields.
+    (Section 9) follow after all data fields. Builds excluding TLV
+    MAY use this bit for Data fields.
 
   - **S0-S5** (bits 5-0): Data fields 0 through 5.  Each bit, when
     set, indicates that the corresponding field (as defined by the
@@ -377,6 +385,12 @@ variant.  The variant affects only which encoding type is associated
 with which field position, and which label is used in human-readable
 output and JSON serialisation.
 
+Fields may be repeated, such as to specify multiple temperature entries
+which have different meanings (for example, the temperature of the 
+microcontroller vs. the temperature of the environment). This is 
+supported by the protocol, but not the current reference implementation
+(which will be modified at some future date to do so).
+
 ### Variant Table Structure
 
 In the reference implementation, each variant is defined as:
@@ -402,7 +416,9 @@ and so on.  Unused trailing fields should have type `IOTDATA_FIELD_NONE`.
 
 The built-in default variant (variant 0) is a general-purpose weather
 station layout.  It is enabled by defining `IOTDATA_VARIANT_MAPS_DEFAULT`
-at compile time.
+at compile time. It is illustrative and not mandated for this use 
+case: there are no standardised variants, as global interoperability
+is not a goal.
 
 | Pres Byte | Field | Type          | Label          | Bits |
 |-----------|-------|---------------|----------------|------|
@@ -425,10 +441,10 @@ Byte 0, minimising packet size for routine transmissions.  The less
 frequently updated fields (position, datetime, radiation) are placed
 in Presence Byte 1 and only add to the packet when present.
 
-Note that the weather station variant uses the ENVIRONMENT and WIND
-bundle types (see Section 8.2 and 8.12) rather than their individual
-component types.  See Section 8 for a discussion of when to use
-bundled vs individual field types.
+Note that the weather station variant uses the ENVIRONMENT, WIND,
+RAIN and RADIATION bundle types (see Sections 8.3, 8.12, 8.16, 8.20)
+rather than their individual component types.  See Section 8 for a
+discussion of when to use bundled vs individual field types.
 
 ### Custom Variant Maps
 
@@ -467,11 +483,11 @@ extended header format).
 
 ### Registered Variants
 
-| Variant | Name             | Pres Bytes | Fields | Notes                    |
-|---------|------------------|------------|-------|--------------------------|
-| 0       | weather_station  | 2          | 12    | Default (built-in)       |
-| 1-14    | (application)    | —          | —     | User-defined via custom maps |
-| 15      | RESERVED         | —          | —     | Extended header format   |
+| Variant | Name             | Pres Bytes | Fields | Notes                        |
+|---------|------------------|------------|--------|------------------------------|
+| 0       | weather_station  | 2          | 12     | Default (built-in)           |
+| 1-14    | (application)    | —          | —      | User-defined via custom maps |
+| 15      | RESERVED         | —          | —      | Extended header format       |
 
 A receiver encountering an unknown variant SHOULD fall back to
 variant 0's field mapping and flag the packet as using an unknown
@@ -511,12 +527,16 @@ originating from a sensor that generates all bundled items concurrently.
     encodings and quantisation are identical.
 
 A variant definition chooses which form to use.  The default weather
-station variant uses the bundled forms (one field each for environment
-and wind).  A custom variant might use the individual forms to include
-only the specific measurements it needs, or to place them in different
-priority positions.
+station variant uses the bundled forms as the sensors generate the
+entire bundle of values concurrently.  A custom variant might use the
+individual forms to include only the specific measurements it needs,
+or to place them in different priority positions, or where they are
+sourced from different sensors at different times. For example, the
+commonly used BME280/680 sensor can generate temperature, pressure
+and humidity readings concurrently.
 
-Note that Solar Irradiance and Ultraviolet only exist in bundled form.
+Note that at this point, some bundles have no standalone forms, such
+as the Solar bundle with Irradiance and Ultraviolet measurements.
 
 ### 8.1. Battery
 
@@ -1053,10 +1073,10 @@ The JSON field names are derived from the variant's field labels, so
 the same binary encoding may produce different JSON keys depending on
 variant.  For example, a default weather station variant produces
 `"wind"` as a bundled JSON object, while a custom variant using
-individual wind fields produces separate `"wind_speed"`, `"wind_dir"`,
-and `"wind_gust"` keys.  Similarly, the DEPTH field type may produce
-`"snow_depth"`, `"soil_depth"`, or any other label depending on the
-variant definition.
+individual wind fields produces separate `"wind_speed"`,
+`"wind_direction"`, and `"wind_gust"` keys.  Similarly, the `"depth"`
+field type may produce `"snow_depth"`, `"soil_depth"`, or any other
+label depending on the variant definition.
 
 ### Example JSON (Variant 0, weather_station)
 
@@ -1207,7 +1227,7 @@ future standardised metadata TLVs that could convey:
 
 The design of these metadata TLVs is deferred to a future revision of
 this specification.  Implementers requiring interoperability before
-that revision MAY use application-defined TLV types (0x20-0x3F) for
+that revision MAY use application-defined TLV types (0x20-) for
 this purpose, with the understanding that these are not standardised.
 
 This approach follows a deliberate design philosophy: add wire
@@ -1274,8 +1294,8 @@ packet configurations, using variant 0 (weather_station).
 | Heartbeat (no data)               | header + pres0                                | 40   | 5     |
 | Minimal (battery only)            | + battery                                     | 46   | 6     |
 | Battery + environment             | + battery, environment                        | 70   | 9     |
-| Typical pres0 (bat+env+wind+rain) | + battery, environment, wind, rain_rate       | 100  | 13    |
-| Full pres0 (all 6 fields)         | + battery, env, wind, rain, solar, link       | 120  | 15    |
+| Typical pres0 (bat+env+wind+rain) | + battery, environment, wind, rain_rate       | 104  | 13    |
+| Full pres0 (all 6 fields)         | + battery, env, wind, rain, solar, link       | 124  | 16    |
 | Full station (all 12 fields)      | + all 12 field types (pres0 + pres1)          | 253  | 32    |
 
 For comparison, the equivalent data in JSON would typically be
@@ -1399,7 +1419,8 @@ compiled.  When `IOTDATA_VARIANT_MAPS_DEFAULT` is defined (without
 station variant are automatically enabled.  When neither is defined,
 all elements are compiled.
 
-In particular, avoidance of the TLV element will save considerable footprint.
+In particular, avoidance of the TLV element will save considerable
+footprint.
 
 **Functional subsetting:**
 
@@ -1456,7 +1477,8 @@ of the `NO_CHECKS` options.
 In integer-only mode (`IOTDATA_NO_FLOATING`), temperature is passed
 as degrees×100 (e.g. 2250 for 22.50°C), wind speed as m/s×100,
 radiation dose as µSv/h×100, position as degrees×10^7, and SNR as
-dB×10.  This eliminates all floating-point dependencies.
+dB×10.  This eliminates all floating-point dependencies. Future
+implementations SHOULD utilise this multiple-of-ten approach.
 
 **Test targets**
 
@@ -1469,6 +1491,11 @@ to reject floating-point operations, so as to ensure they are not
 latent in the implementation.
 
 ### 13.4. Build Size and Stack Usage
+
+The `minimal` and `minimal-esp32` targets yield object files for
+the purpose of establishing minimal build sizes (with a comparison
+to full build sizes) using the host (`minimal`) or cross-compiler
+(`minimal-esp32`) tools.
 
 **Build summary for x86-64, aarch64 and esp32-c3 systems**
 
@@ -2126,10 +2153,10 @@ smaller due to pointer size):
 
 | Structure          | Size   | Purpose                                     |
 |--------------------|--------|---------------------------------------------|
-| `iotdata_encoder_t`| 328 B  | Encoder context (all fields + TLV pointers) |
-| `iotdata_decoded_t`| 2176 B | Decoded packet (includes TLV data buffers)  |
+| `iotdata_encoder_t`| ~300 B | Encoder context (all fields + TLV pointers) |
+| `iotdata_decoded_t`| ~2000 B| Decoded packet (includes TLV data buffers)  |
 
-The encoder context (328 bytes) is dominated by the TLV pointer
+The encoder context (~300 bytes) is dominated by the TLV pointer
 array (8 entries × 2 pointers × 8 bytes = 128 bytes on 64-bit).  The
 core sensor fields occupy approximately 60 bytes.  On a 32-bit MCU:
 
@@ -2137,8 +2164,8 @@ core sensor fields occupy approximately 60 bytes.  On a 32-bit MCU:
   - Encoder context without TLV: ~72 bytes
   - Core sensor fields alone: ~50 bytes
 
-The decoded struct (2176 bytes) is dominated by the TLV data buffers
-(8 entries × 256 bytes = 2048 bytes).  This structure is designed for
+The decoded struct (~2000 bytes) is dominated by the TLV data buffers
+(8 entries × ~256 bytes = 2048 bytes).  This structure is designed for
 gateway/server use and is NOT appropriate for Class 1 or 2 devices.
 A minimal decoder that ignores TLV data needs approximately 60 bytes.
 
