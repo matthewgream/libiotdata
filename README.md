@@ -456,7 +456,7 @@ in Presence Byte 1 and only add to the packet when present.
 
 Note that the weather station variant uses the ENVIRONMENT, WIND,
 RAIN, AIR_QUALITY, RADIATION bundle types (see Sections 8.3, 8.12, 
-8.16, 8.20, 8.23) rather than their individual component types.
+8.16, 8.19, 8.23) rather than their individual component types.
 See Section 8 for a discussion of when to use bundled vs individual
 field types.
 
@@ -534,11 +534,11 @@ originating from a sensor that generates all bundled items concurrently.
     Rate Rate (8.16), and Rain Size (8.17).  The encodings and
     quantisation are identical.
 
-  - **Air Quality** (Section 8.20) is a convenience bundle that packs
+  - **Air Quality** (Section 8.19) is a convenience bundle that packs
     air quality index, air quality pm, and air quality gas into a
     single multi-bit field. The same three measurements are also
-    available as individual field types: Air Quality Index (8.21),
-    Air Quality PM (8.22), and Air Quality Gas (8.23).  The
+    available as individual field types: Air Quality Index (8.20),
+    Air Quality PM (8.21), and Air Quality Gas (8.22).  The
     encodings and quantisation are identical.
 
   - **Radiation** (Section 8.23) is a convenience bundle that packs
@@ -929,14 +929,38 @@ Encode: `q = round(rain_size / 0.25)`
 
 Decode: `rain_size = q * 0.25`
 
-### 8.19. Air Quality Index (standalone)
+### 8.19. Air Quality (bundle)
+
+Variable length (minimum 21 bits).
+
+This is a convenience bundle that packs air quality index, particulate
+matter, and gas readings into a single field.  The component encodings
+are identical to the standalone Air Quality Index (8.19), Air Quality
+PM (8.20), and Air Quality Gas (8.21) types.
+
+```
++-----------+-----------+-----------+
+| AQ Index  | AQ PM     | AQ Gas    |
+| (9 bits)  | (4+ bits) | (8+ bits) |
++-----------+-----------+-----------+
+```
+
+The three sub-fields are packed in order: index, PM, gas.  Each
+sub-field includes its own presence mask, so absent PM channels and
+gas slots consume no bits beyond the mask itself.
+
+Minimum: 9 (index) + 4 (PM mask, no channels) + 8 (gas mask, no
+slots) = 21 bits.  Typical SEN55 full reading: 9 + 36 + 24 = 69
+bits.
+
+### 8.20. Air Quality Index (standalone)
 
 9 bits total.
 
 Range: 0 to 500 AQI (Air Quality Index).
 Resolution: 1 AQI.  Direct encoding (9 bits = 512 values, 0-500 used).
 
-### 8.20. Air Quality PM (standalone)
+### 8.21. Air Quality PM (standalone)
 
 4 to 36 bits total (variable).
 
@@ -975,7 +999,7 @@ Resolution: 5 µg/m³.
   mask of 0xF (all present) with 4 × 8 = 32 data bits is the common
   case, giving 36 bits total.
 
-### 8.21. Air Quality Gas (standalone)
+### 8.22. Air Quality Gas (standalone)
 
 8 to 84 bits total (variable).
 
@@ -1035,30 +1059,6 @@ position in the mask.
   A typical Sensirion SEN55 station (VOC + NOx) sends 8 + 8 + 8 = 24
   bits.  A SEN66 station (VOC + NOx + CO₂) sends 8 + 8 + 8 + 10 = 34
   bits.
-
-### 8.22. Air Quality (bundle)
-
-Variable length (minimum 21 bits).
-
-This is a convenience bundle that packs air quality index, particulate
-matter, and gas readings into a single field.  The component encodings
-are identical to the standalone Air Quality Index (8.19), Air Quality
-PM (8.20), and Air Quality Gas (8.21) types.
-
-```
-+-----------+-----------+-----------+
-| AQ Index  | AQ PM     | AQ Gas    |
-| (9 bits)  | (4+ bits) | (8+ bits) |
-+-----------+-----------+-----------+
-```
-
-The three sub-fields are packed in order: index, PM, gas.  Each
-sub-field includes its own presence mask, so absent PM channels and
-gas slots consume no bits beyond the mask itself.
-
-Minimum: 9 (index) + 4 (PM mask, no channels) + 8 (gas mask, no
-slots) = 21 bits.  Typical SEN55 full reading: 9 + 36 + 24 = 69
-bits.
 
 ### 8.23. Radiation (bundle)
 
