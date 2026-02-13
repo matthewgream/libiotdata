@@ -315,7 +315,7 @@ static void encode_and_display(sensor_state_t *s, int full) {
     iotdata_encode_solar(&enc, (uint16_t)s->solar_irrad, (uint8_t)s->solar_uv);
     /* pres1: every 5 minutes */
     if (full) {
-        iotdata_encode_air_quality(&enc, (uint16_t)s->air_quality);
+        iotdata_encode_air_quality_index(&enc, (uint16_t)s->air_quality);
         iotdata_encode_clouds(&enc, (uint8_t)s->clouds);
         iotdata_encode_radiation(&enc, (uint16_t)s->rad_cpm, (float)s->rad_dose);
         iotdata_encode_position(&enc, s->pos_lat, s->pos_lon);

@@ -127,8 +127,8 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
     rc = iotdata_encode_flags(&enc, 0x42);
     CHECK(rc == IOTDATA_OK, "encode_flags");
 
-    rc = iotdata_encode_air_quality(&enc, 75);
-    CHECK(rc == IOTDATA_OK, "encode_air_quality");
+    rc = iotdata_encode_air_quality_index(&enc, 75);
+    CHECK(rc == IOTDATA_OK, "encode_air_quality_index");
 
     rc = iotdata_encode_clouds(&enc, 4);
     CHECK(rc == IOTDATA_OK, "encode_clouds");
@@ -166,8 +166,8 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
     rc = iotdata_encode_flags(&enc, 0x42);
     CHECK(rc == IOTDATA_OK, "encode_flags");
 
-    rc = iotdata_encode_air_quality(&enc, 75);
-    CHECK(rc == IOTDATA_OK, "encode_air_quality");
+    rc = iotdata_encode_air_quality_index(&enc, 75);
+    CHECK(rc == IOTDATA_OK, "encode_air_quality_index");
 
     rc = iotdata_encode_clouds(&enc, 4);
     CHECK(rc == IOTDATA_OK, "encode_clouds");

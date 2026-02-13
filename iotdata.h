@@ -64,7 +64,7 @@ extern "C" {
 #define IOTDATA_ENABLE_RAIN
 #define IOTDATA_ENABLE_SOLAR
 #define IOTDATA_ENABLE_CLOUDS
-#define IOTDATA_ENABLE_AIR_QUALITY
+#define IOTDATA_ENABLE_AIR_QUALITY_INDEX
 #define IOTDATA_ENABLE_RADIATION
 #define IOTDATA_ENABLE_POSITION
 #define IOTDATA_ENABLE_DATETIME
@@ -89,6 +89,9 @@ extern "C" {
 #define IOTDATA_ENABLE_SOLAR
 #define IOTDATA_ENABLE_CLOUDS
 #define IOTDATA_ENABLE_AIR_QUALITY
+#define IOTDATA_ENABLE_AIR_QUALITY_INDEX
+#define IOTDATA_ENABLE_AIR_QUALITY_PM
+#define IOTDATA_ENABLE_AIR_QUALITY_GAS
 #define IOTDATA_ENABLE_RADIATION
 #define IOTDATA_ENABLE_RADIATION_CPM
 #define IOTDATA_ENABLE_RADIATION_DOSE
@@ -257,16 +260,81 @@ extern "C" {
 #endif
 
 /* ---------------------------------------------------------------------------
- * Field AIR_QUALITY
+ * Field AIR_QUALITY, AIR_QUALITY_INDEX, AIR_QUALITY_PM, AIR_QUALITY_GAS
  * -------------------------------------------------------------------------*/
 
-#if defined(IOTDATA_ENABLE_AIR_QUALITY)
-#define IOTDATA_AIR_QUALITY_FIELDS uint16_t air_quality;
-#define IOTDATA_AIR_QUALITY_MAX    500
-#define IOTDATA_AIR_QUALITY_BITS   9
+/* --- Sub-field: AQ_INDEX (AQI 0-500, 9 bits) --- */
+#if defined(IOTDATA_ENABLE_AIR_QUALITY) || defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX)
+#define IOTDATA_AIR_QUALITY_INDEX_FIELD uint16_t aq_index;
+#define IOTDATA_AIR_QUALITY_INDEX_MAX   500
+#define IOTDATA_AIR_QUALITY_INDEX_BITS  9
 #else
-#define IOTDATA_AIR_QUALITY_FIELDS
+#define IOTDATA_AIR_QUALITY_INDEX_FIELD
 #endif
+/* --- Sub-field: AQ_PM (4 channels, presence + 8 bits each, res 5 ug/m3) --- */
+#if defined(IOTDATA_ENABLE_AIR_QUALITY) || defined(IOTDATA_ENABLE_AIR_QUALITY_PM)
+#define IOTDATA_AIR_QUALITY_PM_COUNT 4
+#define IOTDATA_AIR_QUALITY_PM_FIELD \
+    uint8_t aq_pm_present; \
+    uint16_t aq_pm[IOTDATA_AIR_QUALITY_PM_COUNT];
+#define IOTDATA_AIR_QUALITY_PM_PRESENT_BITS 4
+#define IOTDATA_AIR_QUALITY_PM_VALUE_BITS   8
+#define IOTDATA_AIR_QUALITY_PM_VALUE_RES    5
+#define IOTDATA_AIR_QUALITY_PM_VALUE_MAX    1275 /* 255 * 5 */
+
+#define IOTDATA_AIR_QUALITY_PM_INDEX_PM1    0
+#define IOTDATA_AIR_QUALITY_PM_INDEX_PM25   1
+#define IOTDATA_AIR_QUALITY_PM_INDEX_PM4    2
+#define IOTDATA_AIR_QUALITY_PM_INDEX_PM10   3
+#else
+#define IOTDATA_AIR_QUALITY_PM_FIELD
+#endif
+/* --- Sub-field: AQ_GAS (8 slots, presence + variable bits per slot) --- */
+#if defined(IOTDATA_ENABLE_AIR_QUALITY) || defined(IOTDATA_ENABLE_AIR_QUALITY_GAS)
+#define IOTDATA_AIR_QUALITY_GAS_COUNT 8
+#define IOTDATA_AIR_QUALITY_GAS_FIELD \
+    uint8_t aq_gas_present; \
+    uint16_t aq_gas[IOTDATA_AIR_QUALITY_GAS_COUNT];
+#define IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS 8
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_VOC    0
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_NOX    1
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_CO2    2
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_CO     3
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_HCHO   4
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_O3     5
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_RSVD6  6
+#define IOTDATA_AIR_QUALITY_GAS_INDEX_RSVD7  7
+/* Bit width per slot: indices=8, concentrations=10 */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_VOC     8  /* 0-510, res 2 index pts   */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_NOX     8  /* 0-510, res 2 index pts   */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_CO2     10 /* 0-51150, res 50 ppm      */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_CO      10 /* 0-1023, res 1 ppm        */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_HCHO    10 /* 0-5115, res 5 ppb        */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_O3      10 /* 0-1023, res 1 ppb        */
+#define IOTDATA_AIR_QUALITY_GAS_BITS_RSVD6   10
+#define IOTDATA_AIR_QUALITY_GAS_BITS_RSVD7   10
+/* Resolution per slot */
+#define IOTDATA_AIR_QUALITY_GAS_RES_VOC      2
+#define IOTDATA_AIR_QUALITY_GAS_RES_NOX      2
+#define IOTDATA_AIR_QUALITY_GAS_RES_CO2      50
+#define IOTDATA_AIR_QUALITY_GAS_RES_CO       1
+#define IOTDATA_AIR_QUALITY_GAS_RES_HCHO     5
+#define IOTDATA_AIR_QUALITY_GAS_RES_O3       1
+#define IOTDATA_AIR_QUALITY_GAS_RES_RSVD6    1
+#define IOTDATA_AIR_QUALITY_GAS_RES_RSVD7    1
+/* Max physical value per slot */
+#define IOTDATA_AIR_QUALITY_GAS_MAX_VOC      510
+#define IOTDATA_AIR_QUALITY_GAS_MAX_NOX      510
+#define IOTDATA_AIR_QUALITY_GAS_MAX_CO2      51150
+#define IOTDATA_AIR_QUALITY_GAS_MAX_CO       1023
+#define IOTDATA_AIR_QUALITY_GAS_MAX_HCHO     5115
+#define IOTDATA_AIR_QUALITY_GAS_MAX_O3       1023
+#define IOTDATA_AIR_QUALITY_GAS_MAX_RSVD6    1023
+#define IOTDATA_AIR_QUALITY_GAS_MAX_RSVD7    1023
+#else
+#define IOTDATA_AIR_QUALITY_GAS_FIELD
+#endif
+#define IOTDATA_AIR_QUALITY_FIELDS IOTDATA_AIR_QUALITY_INDEX_FIELD IOTDATA_AIR_QUALITY_PM_FIELD IOTDATA_AIR_QUALITY_GAS_FIELD
 
 /* ---------------------------------------------------------------------------
  * Field RADIATION, RADIATION_CPM, RADIATION_DOSE
@@ -531,7 +599,16 @@ typedef enum {
     IOTDATA_FIELD_CLOUDS, /*  4 bits */
 #endif
 #if defined(IOTDATA_ENABLE_AIR_QUALITY)
-    IOTDATA_FIELD_AIR_QUALITY, /*  9 bits */
+    IOTDATA_FIELD_AIR_QUALITY, /* 9+4+var+8+var bits */
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX)
+    IOTDATA_FIELD_AIR_QUALITY_INDEX, /*  9 bits */
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM)
+    IOTDATA_FIELD_AIR_QUALITY_PM, /* 4 + N*8 bits */
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS)
+    IOTDATA_FIELD_AIR_QUALITY_GAS, /* 8 + variable bits */
 #endif
 #if defined(IOTDATA_ENABLE_RADIATION)
     IOTDATA_FIELD_RADIATION, /* 30 bits */
@@ -704,8 +781,14 @@ typedef enum {
     IOTDATA_ERR_CLOUDS_HIGH,
 #endif
 
-#if defined(IOTDATA_ENABLE_AIR_QUALITY)
-    IOTDATA_ERR_AIR_QUALITY_HIGH,
+#if defined(IOTDATA_ENABLE_AIR_QUALITY) || defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX)
+    IOTDATA_ERR_AIR_QUALITY_INDEX_HIGH,
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY) || defined(IOTDATA_ENABLE_AIR_QUALITY_PM)
+    IOTDATA_ERR_AIR_QUALITY_PM_VALUE_HIGH,
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY) || defined(IOTDATA_ENABLE_AIR_QUALITY_GAS)
+    IOTDATA_ERR_AIR_QUALITY_GAS_VALUE_HIGH,
 #endif
 
 #if defined(IOTDATA_ENABLE_RADIATION) || defined(IOTDATA_ENABLE_RADIATION_CPM)
@@ -865,7 +948,16 @@ iotdata_status_t iotdata_encode_solar(iotdata_encoder_t *enc, uint16_t irradianc
 iotdata_status_t iotdata_encode_clouds(iotdata_encoder_t *enc, uint8_t okta);
 #endif
 #if defined(IOTDATA_ENABLE_AIR_QUALITY)
-iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aqi);
+iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aq_index, uint8_t pm_present, const uint16_t pm[4], uint8_t gas_present, const uint16_t gas[8]);
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX)
+iotdata_status_t iotdata_encode_air_quality_index(iotdata_encoder_t *enc, uint16_t aq_index);
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM)
+iotdata_status_t iotdata_encode_air_quality_pm(iotdata_encoder_t *enc, uint8_t pm_present, const uint16_t pm[4]);
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS)
+iotdata_status_t iotdata_encode_air_quality_gas(iotdata_encoder_t *enc, uint8_t gas_present, const uint16_t gas[8]);
 #endif
 #if defined(IOTDATA_ENABLE_RADIATION)
 iotdata_status_t iotdata_encode_radiation(iotdata_encoder_t *enc, uint16_t cpm, iotdata_float_t usvh);

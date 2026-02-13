@@ -211,11 +211,11 @@ static void test_flags_round_trip(void) {
 static void test_air_quality_round_trip(void) {
     TEST("Air quality round-trip");
     begin(1, 8);
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 312), "encode");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 312), "encode");
     finish();
     decode();
-    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_AIR_QUALITY), 1, "present");
-    ASSERT_EQ(dec.air_quality, 312, "aqi");
+    ASSERT_EQ(!!IOTDATA_FIELD_PRESENT(dec.fields, IOTDATA_FIELD_AIR_QUALITY_INDEX), 1, "present");
+    ASSERT_EQ(dec.aq_index, 312, "aqi");
     PASS();
 }
 
@@ -310,7 +310,7 @@ static void test_pres1_all_seven_fields(void) {
     ASSERT_OK(iotdata_encode_battery(&enc, 100, true), "battery");
 
     ASSERT_OK(iotdata_encode_flags(&enc, 0xFF), "flags");
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 250), "aqi");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 250), "aqi");
     ASSERT_OK(iotdata_encode_clouds(&enc, 3), "cloud");
     ASSERT_OK(iotdata_encode_radiation(&enc, 42, 0.05f), "rad");
     ASSERT_OK(iotdata_encode_position(&enc, -33.8688, 151.2093), "pos");
@@ -320,7 +320,7 @@ static void test_pres1_all_seven_fields(void) {
     decode();
 
     ASSERT_EQ(dec.flags, 0xFF, "flags");
-    ASSERT_EQ(dec.air_quality, 250, "aqi");
+    ASSERT_EQ(dec.aq_index, 250, "aqi");
     ASSERT_EQ(dec.clouds, 3, "cloud");
     ASSERT_EQ_U(dec.radiation_cpm, 42, "cpm");
     ASSERT_NEAR(dec.radiation_dose, 0.05, 0.01, "dose");
@@ -345,7 +345,7 @@ static void test_full_weather_station(void) {
 
     /* Pres1 (7 fields) */
     ASSERT_OK(iotdata_encode_flags(&enc, 0x01), "flags");
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 150), "aqi");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 150), "aqi");
     ASSERT_OK(iotdata_encode_clouds(&enc, 8), "cloud");
     ASSERT_OK(iotdata_encode_radiation(&enc, 25, 0.15f), "cpm");
     ASSERT_OK(iotdata_encode_position(&enc, 59.334591, 18.063240), "pos");
@@ -370,7 +370,7 @@ static void test_full_weather_station(void) {
     ASSERT_EQ(dec.solar_ultraviolet, 0, "uv");
     ASSERT_NEAR(dec.link_rssi, -100, 4, "rssi");
     ASSERT_EQ(dec.flags, 0x01, "flags");
-    ASSERT_EQ(dec.air_quality, 150, "aqi");
+    ASSERT_EQ(dec.aq_index, 150, "aqi");
     ASSERT_EQ(dec.clouds, 8, "cloud");
     ASSERT_EQ_U(dec.radiation_cpm, 25, "cpm");
     ASSERT_NEAR(dec.radiation_dose, 0.15, 0.01, "dose");
@@ -395,7 +395,7 @@ static void test_boundary_min_values(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 0, 0), "solar 0");
     ASSERT_OK(iotdata_encode_link(&enc, -120, -20.0f), "link min");
     ASSERT_OK(iotdata_encode_flags(&enc, 0x00), "flags 0");
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 0), "aqi 0");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 0), "aqi 0");
     ASSERT_OK(iotdata_encode_clouds(&enc, 0), "cloud 0");
     ASSERT_OK(iotdata_encode_radiation(&enc, 0, 0.f), "rad 0");
     ASSERT_OK(iotdata_encode_position(&enc, -90.0, -180.0), "pos min");
@@ -417,7 +417,7 @@ static void test_boundary_min_values(void) {
     ASSERT_EQ(dec.link_rssi, -120, "rssi");
     ASSERT_NEAR(dec.link_snr, -20.0, 5.0, "snr");
     ASSERT_EQ(dec.flags, 0x00, "flags");
-    ASSERT_EQ(dec.air_quality, 0, "aqi");
+    ASSERT_EQ(dec.aq_index, 0, "aqi");
     ASSERT_EQ(dec.clouds, 0, "cloud");
     ASSERT_EQ_U(dec.radiation_cpm, 0, "cpm");
     ASSERT_NEAR(dec.radiation_dose, 0.0, 0.01, "dose");
@@ -438,7 +438,7 @@ static void test_boundary_max_values(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 1023, 15), "solar max");
     ASSERT_OK(iotdata_encode_link(&enc, -60, 10.0f), "link max");
     ASSERT_OK(iotdata_encode_flags(&enc, 0xFF), "flags ff");
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 500), "aqi max");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 500), "aqi max");
     ASSERT_OK(iotdata_encode_clouds(&enc, 8), "cloud max");
     ASSERT_OK(iotdata_encode_radiation(&enc, 16383, 163.83f), "cpm max");
     ASSERT_OK(iotdata_encode_position(&enc, 90.0, 180.0), "pos max");
@@ -463,7 +463,7 @@ static void test_boundary_max_values(void) {
     ASSERT_EQ(dec.link_rssi, -60, "rssi");
     ASSERT_NEAR(dec.link_snr, 10.0, 5.0, "snr");
     ASSERT_EQ(dec.flags, 0xFF, "flags");
-    ASSERT_EQ(dec.air_quality, 500, "aqi");
+    ASSERT_EQ(dec.aq_index, 500, "aqi");
     ASSERT_EQ(dec.clouds, 8, "cloud");
     ASSERT_EQ_U(dec.radiation_cpm, 16383, "cpm");
     ASSERT_NEAR(dec.radiation_dose, 163.83, 0.01, "dose");
@@ -502,7 +502,7 @@ static void test_error_conditions(void) {
     /* (rain_rate boundary is enforced by the C type itself) */
 
     /* Air quality out of range */
-    ASSERT_ERR(iotdata_encode_air_quality(&enc, 501), IOTDATA_ERR_AIR_QUALITY_HIGH, "aqi high");
+    ASSERT_ERR(iotdata_encode_air_quality_index(&enc, 501), IOTDATA_ERR_AIR_QUALITY_INDEX_HIGH, "aqi high");
 
     /* Cloud cover out of range */
     ASSERT_ERR(iotdata_encode_clouds(&enc, 9), IOTDATA_ERR_CLOUDS_HIGH, "cloud high");
@@ -667,7 +667,7 @@ static void test_json_round_trip(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 300, 5), "sol");
     ASSERT_OK(iotdata_encode_link(&enc, -80, 0.0f), "link");
     ASSERT_OK(iotdata_encode_flags(&enc, 0x42), "flags");
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 75), "aqi");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 75), "aqi");
     ASSERT_OK(iotdata_encode_clouds(&enc, 4), "cloud");
     ASSERT_OK(iotdata_encode_radiation(&enc, 100, 0.50f), "rad");
     ASSERT_OK(iotdata_encode_position(&enc, 51.5, -0.1), "pos");
@@ -837,7 +837,7 @@ static void test_packet_sizes(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 300, 5), "sol");
     ASSERT_OK(iotdata_encode_link(&enc, -80, 0.0f), "link");
     ASSERT_OK(iotdata_encode_flags(&enc, 0x01), "flags");
-    ASSERT_OK(iotdata_encode_air_quality(&enc, 50), "aqi");
+    ASSERT_OK(iotdata_encode_air_quality_index(&enc, 50), "aqi");
     ASSERT_OK(iotdata_encode_clouds(&enc, 4), "cloud");
     ASSERT_OK(iotdata_encode_radiation(&enc, 100, 0.10f), "cpm");
     ASSERT_OK(iotdata_encode_position(&enc, 51.5, -0.1), "pos");

@@ -57,11 +57,14 @@ place on the project's GitHub repository.
   - [8.16. Rain (bundle)](#816-rain-bundle)
   - [8.17. Rain Rate (standalone)](#817-rain-rate-standalone)
   - [8.18. Rain Size (standalone)](#818-rain-rate-standalone)
-  - [8.19. Air Quality](#819-air-quality)
-  - [8.20. Radiation (bundle)](#820-radiation-bundle)
-  - [8.21. Radiation CPM (standalone)](#821-radiation-cpm-standalone)
-  - [8.22. Radiation Dose (standalone)](#822-radiation-dose-standalone)
-  - [8.23. Clouds](#823-clouds)
+  - [8.19. Air Quality (bundle)](#819-air-quality-bundle)
+  - [8.20. Air Quality Index (standalone)](#820-air-quality-index-standalone)
+  - [8.21. Air Quality PM (standalone)](#821-air-quality-pm-standalone)
+  - [8.22. Air Quality Gas (standalone)](#822-air-quality-gas-standalone)
+  - [8.23. Radiation (bundle)](#823-radiation-bundle)
+  - [8.24. Radiation CPM (standalone)](#824-radiation-cpm-standalone)
+  - [8.25. Radiation Dose (standalone)](#825-radiation-dose-standalone)
+  - [8.26. Clouds](#826-clouds)
 - [9. TLV Data](#9-tlv-data)
   - [9.1. TLV Header](#91-tlv-header)
   - [9.2. Raw Format](#92-raw-format)
@@ -439,7 +442,7 @@ is not a goal.
 | 0         | S4    | RAIN          | rain           | 12   |
 | 0         | S5    | SOLAR         | solar          | 14   |
 | 1         | S6    | CLOUDS        | clouds         | 4    |
-| 1         | S7    | AIR_QUALITY   | air_quality    | 9    |
+| 1         | S7    | AIR_QUALITY_INDEX   | air_quality    | 9    |
 | 1         | S8    | RADIATION     | radiation      | 30   |
 | 1         | S9    | POSITION      | position       | 48   |
 | 1         | S10   | DATETIME      | datetime       | 24   |
@@ -452,9 +455,10 @@ frequently updated fields (position, datetime, radiation) are placed
 in Presence Byte 1 and only add to the packet when present.
 
 Note that the weather station variant uses the ENVIRONMENT, WIND,
-RAIN and RADIATION bundle types (see Sections 8.3, 8.12, 8.16, 8.20)
-rather than their individual component types.  See Section 8 for a
-discussion of when to use bundled vs individual field types.
+RAIN, AIR_QUALITY, RADIATION bundle types (see Sections 8.3, 8.12, 
+8.16, 8.20, 8.23) rather than their individual component types.
+See Section 8 for a discussion of when to use bundled vs individual
+field types.
 
 ### Custom Variant Maps
 
@@ -530,10 +534,17 @@ originating from a sensor that generates all bundled items concurrently.
     Rate Rate (8.16), and Rain Size (8.17).  The encodings and
     quantisation are identical.
 
-  - **Radiation** (Section 8.20) is a convenience bundle that packs
+  - **Air Quality** (Section 8.20) is a convenience bundle that packs
+    air quality index, air quality pm, and air quality gas into a
+    single multi-bit field. The same three measurements are also
+    available as individual field types: Air Quality Index (8.21),
+    Air Quality PM (8.22), and Air Quality Gas (8.23).  The
+    encodings and quantisation are identical.
+
+  - **Radiation** (Section 8.23) is a convenience bundle that packs
     radiation cpm, and radiation dose into a single 30-bit field.
     The same two measurements are also available as individual field
-    types: Radiation CPM (8.21), and Radiation Dose (8.22).  The
+    types: Radiation CPM (8.24), and Radiation Dose (8.25).  The
     encodings and quantisation are identical.
 
 A variant definition chooses which form to use.  The default weather
@@ -918,14 +929,138 @@ Encode: `q = round(rain_size / 0.25)`
 
 Decode: `rain_size = q * 0.25`
 
-### 8.19. Air Quality
+### 8.19. Air Quality Index (standalone)
 
 9 bits total.
 
 Range: 0 to 500 AQI (Air Quality Index).
 Resolution: 1 AQI.  Direct encoding (9 bits = 512 values, 0-500 used).
 
-### 8.20. Radiation (bundle)
+### 8.20. Air Quality PM (standalone)
+
+4 to 36 bits total (variable).
+
+```
+ 0               
+ 0 1 2 3 4 5 6 7
++-+-+-+-+-+-+-+-+- - - - -+
+|P|P|P|P| ch0   | ch1 ...  (8 bits per present channel)
+|1|25|4|10|       |
++-+-+-+-+-+-+-+-+- - - - -+
+```
+
+4-bit presence mask followed by 8 bits for each present PM channel.
+Resolution: 5 µg/m³.
+
+**Presence mask** (4 bits):
+
+  - Bit 0: PM1 present
+  - Bit 1: PM2.5 present
+  - Bit 2: PM4 present
+  - Bit 3: PM10 present
+
+**Each channel** (8 bits):
+
+  Range: 0 to 1275 µg/m³.
+  Resolution: 5 µg/m³ (255 steps).
+
+    Encode: `q = value_ugm3 / 5`
+
+    Decode: `value_ugm3 = q * 5`
+
+  The 5 µg/m³ resolution matches the ±5 µg/m³ precision of typical
+  laser-scattering PM sensors (e.g. Sensirion SEN55, Plantower PMS5003).
+
+  Typical sensors output all four channels simultaneously; a presence
+  mask of 0xF (all present) with 4 × 8 = 32 data bits is the common
+  case, giving 36 bits total.
+
+### 8.21. Air Quality Gas (standalone)
+
+8 to 84 bits total (variable).
+
+```
+ 0                               
+ 0 1 2 3 4 5 6 7 8 9 ...
++-+-+-+-+-+-+-+-+- - - - - - -+
+|V|N|C|C|H|O|R|R| slot0 | slot1 ...
+|O|O|O|O|C|3|6|7|       |
+|C|X|2| |H| | | |       |
++-+-+-+-+-+-+-+-+- - - - - - -+
+```
+
+8-bit presence mask followed by data for each present gas slot.
+Each slot has a fixed bit width and resolution determined by its
+position in the mask.
+
+**Presence mask** (8 bits):
+
+  - Bit 0: VOC Index
+  - Bit 1: NOx Index
+  - Bit 2: CO₂
+  - Bit 3: CO
+  - Bit 4: HCHO (formaldehyde)
+  - Bit 5: O₃ (ozone)
+  - Bit 6: Reserved
+  - Bit 7: Reserved
+
+**Slot encodings**:
+
+| Slot | Gas  | Bits | Resolution   | Range          | Unit |
+|------|------|------|--------------|----------------|------|
+| 0    | VOC  | 8    | 2 index pts  | 0-510          | idx  |
+| 1    | NOx  | 8    | 2 index pts  | 0-510          | idx  |
+| 2    | CO₂  | 10   | 50 ppm       | 0-51,150       | ppm  |
+| 3    | CO   | 10   | 1 ppm        | 0-1,023        | ppm  |
+| 4    | HCHO | 10   | 5 ppb        | 0-5,115        | ppb  |
+| 5    | O₃   | 10   | 1 ppb        | 0-1,023        | ppb  |
+| 6    | Rsvd | 10   | —            | —              | —    |
+| 7    | Rsvd | 10   | —            | —              | —    |
+
+    Encode: `q = value / resolution`
+
+    Decode: `value = q * resolution`
+
+  VOC and NOx index slots carry Sensirion SGP4x-style algorithm
+  indices (1-500 typical).  The 2-point resolution is well within
+  the ±15/±50 index point device-to-device variation.
+
+  CO₂ at 50 ppm resolution covers the full SCD4x range (0-40,000 ppm)
+  and exceeds its ±40 ppm + 5% accuracy.
+
+  HCHO at 5 ppb resolution matches the ~10 ppb accuracy of typical
+  electrochemical formaldehyde sensors (e.g. Sensirion SEN69C, Dart
+  WZ-S).
+
+  A typical Sensirion SEN55 station (VOC + NOx) sends 8 + 8 + 8 = 24
+  bits.  A SEN66 station (VOC + NOx + CO₂) sends 8 + 8 + 8 + 10 = 34
+  bits.
+
+### 8.22. Air Quality (bundle)
+
+Variable length (minimum 21 bits).
+
+This is a convenience bundle that packs air quality index, particulate
+matter, and gas readings into a single field.  The component encodings
+are identical to the standalone Air Quality Index (8.19), Air Quality
+PM (8.20), and Air Quality Gas (8.21) types.
+
+```
++-----------+-----------+-----------+
+| AQ Index  | AQ PM     | AQ Gas    |
+| (9 bits)  | (4+ bits) | (8+ bits) |
++-----------+-----------+-----------+
+```
+
+The three sub-fields are packed in order: index, PM, gas.  Each
+sub-field includes its own presence mask, so absent PM channels and
+gas slots consume no bits beyond the mask itself.
+
+Minimum: 9 (index) + 4 (PM mask, no channels) + 8 (gas mask, no
+slots) = 21 bits.  Typical SEN55 full reading: 9 + 36 + 24 = 69
+bits.
+
+### 8.23. Radiation (bundle)
 
 28 bits total.
 
@@ -963,7 +1098,7 @@ standalone Radiation CPM (8.21), and Radiation Dose (8.22) types.
   between CPM and dose rate is detector-specific and is not defined
   by this protocol.
 
-### 8.21. Radiation CPM (standalone)
+### 8.24. Radiation CPM (standalone)
 
 14 bits total.
 
@@ -973,7 +1108,7 @@ Resolution: 1 CPM.  Direct encoding.
 This field carries the raw count rate from a Geiger-Müller tube or
 similar radiation detector.
 
-### 8.22. Radiation Dose (standalone)
+### 8.25. Radiation Dose (standalone)
 
 14 bits total.
 
@@ -988,7 +1123,7 @@ This field carries the computed dose rate.  The relationship between
 CPM and dose rate is detector-specific and is not defined by this
 protocol.
 
-### 8.23. Clouds
+### 8.26. Clouds
 
 4 bits total.
 
@@ -1281,7 +1416,14 @@ SHOULD be accounted for in any downstream processing.
 | Solar Irradiance | 10   | 0-1023 W/m²       | 1 W/m²       | ±0.5 W/m²       |
 | Solar UV Index   | 4    | 0-15              | 1            | ±0.5            |
 | Clouds           | 4    | 0-8 okta          | 1 okta       | ±0.5 okta       |
-| Air quality      | 9    | 0-500 AQI         | 1 AQI        | ±0.5 AQI        |
+| AQ Index         | 9    | 0-500 AQI         | 1 AQI        | ±0.5 AQI        |
+| AQ PM channels   | 8    | 0-1275 µg/m³      | 5 µg/m³      | ±2.5 µg/m³      |
+| AQ Gas VOC idx   | 8    | 0-510             | 2 idx pts    | ±1 idx pt       |
+| AQ Gas NOx idx   | 8    | 0-510             | 2 idx pts    | ±1 idx pt       |
+| AQ Gas CO₂       | 10   | 0-51,150 ppm      | 50 ppm       | ±25 ppm         |
+| AQ Gas CO        | 10   | 0-1,023 ppm       | 1 ppm        | ±0.5 ppm        |
+| AQ Gas HCHO      | 10   | 0-5,115 ppb       | 5 ppb        | ±2.5 ppb        |
+| AQ Gas O₃        | 10   | 0-1,023 ppb       | 1 ppb        | ±0.5 ppb        |
 | Radiation CPM    | 16   | 0-65535 CPM       | 1 CPM        | ±0.5 CPM        |
 | Radiation dose   | 14   | 0-163.83 µSv/h    | 0.01 µSv/h   | ±0.005 µSv/h    |
 | Depth            | 10   | 0-1023 cm         | 1 cm         | ±0.5 cm         |

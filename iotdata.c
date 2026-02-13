@@ -60,7 +60,7 @@ static const iotdata_variant_def_t IOTDATA_DEFAULT_VARIANTS[IOTDATA_VARIANT_MAPS
             { IOTDATA_FIELD_SOLAR,           "solar" },
             /* --- pres1 (6 fields) --- */
             { IOTDATA_FIELD_CLOUDS,          "clouds" },
-            { IOTDATA_FIELD_AIR_QUALITY,     "air_quality" },
+            { IOTDATA_FIELD_AIR_QUALITY_INDEX,     "air_quality" },
             { IOTDATA_FIELD_RADIATION,       "radiation" },
             { IOTDATA_FIELD_POSITION,        "position" },
             { IOTDATA_FIELD_DATETIME,        "datetime" },
@@ -1656,37 +1656,390 @@ _IOTDATA_OP_JSON_GET(json_get_clouds)
 // clang-format on
 
 /* =========================================================================
- * Field AIR_QUALITY
+ * Field AIR_QUALITY, AIR_QUALITY_INDEX, AIR_QUALITY_PM, AIR_QUALITY_GAS
  * ========================================================================= */
+
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) || defined(IOTDATA_ENABLE_AIR_QUALITY)
+static const char *_aq_pm_names[IOTDATA_AIR_QUALITY_PM_COUNT] = { "pm1", "pm25", "pm4", "pm10" };
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+static const char *_aq_pm_labels[IOTDATA_AIR_QUALITY_PM_COUNT] = { "PM1", "PM2.5", "PM4", "PM10" };
+#endif
+#endif
+
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS) || defined(IOTDATA_ENABLE_AIR_QUALITY)
+static const uint8_t _aq_gas_bits[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    IOTDATA_AIR_QUALITY_GAS_BITS_VOC,  IOTDATA_AIR_QUALITY_GAS_BITS_NOX, IOTDATA_AIR_QUALITY_GAS_BITS_CO2,   IOTDATA_AIR_QUALITY_GAS_BITS_CO,
+    IOTDATA_AIR_QUALITY_GAS_BITS_HCHO, IOTDATA_AIR_QUALITY_GAS_BITS_O3,  IOTDATA_AIR_QUALITY_GAS_BITS_RSVD6, IOTDATA_AIR_QUALITY_GAS_BITS_RSVD7,
+};
+static const uint16_t _aq_gas_res[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    IOTDATA_AIR_QUALITY_GAS_RES_VOC,  IOTDATA_AIR_QUALITY_GAS_RES_NOX, IOTDATA_AIR_QUALITY_GAS_RES_CO2,   IOTDATA_AIR_QUALITY_GAS_RES_CO,
+    IOTDATA_AIR_QUALITY_GAS_RES_HCHO, IOTDATA_AIR_QUALITY_GAS_RES_O3,  IOTDATA_AIR_QUALITY_GAS_RES_RSVD6, IOTDATA_AIR_QUALITY_GAS_RES_RSVD7,
+};
+#if !defined(IOTDATA_NO_ENCODE)
+static const uint16_t _aq_gas_max[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    IOTDATA_AIR_QUALITY_GAS_MAX_VOC,  IOTDATA_AIR_QUALITY_GAS_MAX_NOX, IOTDATA_AIR_QUALITY_GAS_MAX_CO2,   IOTDATA_AIR_QUALITY_GAS_MAX_CO,
+    IOTDATA_AIR_QUALITY_GAS_MAX_HCHO, IOTDATA_AIR_QUALITY_GAS_MAX_O3,  IOTDATA_AIR_QUALITY_GAS_MAX_RSVD6, IOTDATA_AIR_QUALITY_GAS_MAX_RSVD7,
+};
+#endif
+static const char *_aq_gas_names[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    "voc", "nox", "co2", "co", "hcho", "o3", "rsvd6", "rsvd7",
+};
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+static const char *_aq_gas_labels[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    "VOC", "NOx", "CO2", "CO", "HCHO", "O3", "rsvd6", "rsvd7",
+};
+#endif
+static const char *_aq_gas_units[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    "idx", "idx", "ppm", "ppm", "ppb", "ppb", "", "",
+};
+#if !defined(IOTDATA_NO_DUMP)
+static const char *_aq_gas_range[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
+    "0..510, 2 idx", "0..510, 2 idx", "0..51150, 50 ppm", "0..1023, 1 ppm", "0..5115, 5 ppb", "0..1023, 1 ppb", "reserved", "reserved",
+};
+#endif
+#endif
+
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX) || defined(IOTDATA_ENABLE_AIR_QUALITY)
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX) && !defined(IOTDATA_NO_ENCODE)
+iotdata_status_t iotdata_encode_air_quality_index(iotdata_encoder_t *enc, uint16_t aq_index) {
+    CHECK_CTX_ACTIVE(enc);
+    CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY_INDEX);
+#if !defined(IOTDATA_NO_CHECKS_TYPES)
+    if (aq_index > IOTDATA_AIR_QUALITY_INDEX_MAX)
+        return IOTDATA_ERR_AIR_QUALITY_INDEX_HIGH;
+#endif
+    enc->aq_index = aq_index;
+    IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_AIR_QUALITY_INDEX);
+    return IOTDATA_OK;
+}
+#endif
+static inline uint32_t quantise_aq_index(uint16_t v) {
+    return (uint32_t)v;
+}
+static inline uint16_t dequantise_aq_index(uint32_t r) {
+    return (uint16_t)r;
+}
+#if !defined(IOTDATA_NO_ENCODE)
+static inline void pack_aq_index(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc) {
+    bits_write(buf, bp, quantise_aq_index(enc->aq_index), IOTDATA_AIR_QUALITY_INDEX_BITS);
+}
+#endif
+#if !defined(IOTDATA_NO_DECODE)
+static inline void unpack_aq_index(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out) {
+    out->aq_index = dequantise_aq_index(bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_INDEX_BITS));
+}
+#endif
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+static inline void json_set_aq_index(cJSON *root, const iotdata_decoded_t *d, const char *label) {
+    cJSON_AddNumberToObject(root, label, d->aq_index);
+}
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX) && !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
+static inline iotdata_status_t json_get_aq_index(cJSON *root, iotdata_encoder_t *enc, const char *label) {
+    cJSON *j = cJSON_GetObjectItem(root, label);
+    if (!j)
+        return IOTDATA_OK;
+    return iotdata_encode_air_quality_index(enc, (uint16_t)j->valueint);
+}
+#endif
+#if !defined(IOTDATA_NO_DUMP)
+static inline int dump_aq_index(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
+    (void)label;
+    size_t s = *bp;
+    uint32_t r = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_INDEX_BITS);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u AQI", dequantise_aq_index(r));
+    n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_INDEX_BITS, r, dump->_dec_buf, "0..500 AQI", "aq_index");
+    return n;
+}
+#endif
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+static inline void print_aq_index(const iotdata_decoded_t *d, FILE *fp, const char *l) {
+    fprintf(fp, "  %s:%s %u AQI\n", l, _padd(l), d->aq_index);
+}
+#endif
+// clang-format off
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_INDEX)
+static const iotdata_field_ops_t _iotdata_field_def_aq_index = {
+    _IOTDATA_OP_NAME("air_quality_index")
+    _IOTDATA_OP_BITS(IOTDATA_AIR_QUALITY_INDEX_BITS)
+    _IOTDATA_OP_PACK(pack_aq_index)
+    _IOTDATA_OP_UNPACK(unpack_aq_index)
+    _IOTDATA_OP_DUMP(dump_aq_index)
+    _IOTDATA_OP_PRINT(print_aq_index)
+    _IOTDATA_OP_JSON_SET(json_set_aq_index)
+    _IOTDATA_OP_JSON_GET(json_get_aq_index)
+};
+#define _IOTDATA_ENT_AIR_QUALITY_INDEX [IOTDATA_FIELD_AIR_QUALITY_INDEX] = &_iotdata_field_def_aq_index,
+#else
+#define _IOTDATA_ENT_AIR_QUALITY_INDEX
+#endif
+#define _IOTDATA_ERR_AIR_QUALITY_INDEX \
+    case IOTDATA_ERR_AIR_QUALITY_INDEX_HIGH: \
+        return "AQ index above 500 AQI";
+#else
+#define _IOTDATA_ENT_AIR_QUALITY_INDEX
+#define _IOTDATA_ERR_AIR_QUALITY_INDEX
+#endif
+// clang-format on
+
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) || defined(IOTDATA_ENABLE_AIR_QUALITY)
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) && !defined(IOTDATA_NO_ENCODE)
+iotdata_status_t iotdata_encode_air_quality_pm(iotdata_encoder_t *enc, uint8_t pm_present, const uint16_t pm[4]) {
+    CHECK_CTX_ACTIVE(enc);
+    CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY_PM);
+#if !defined(IOTDATA_NO_CHECKS_TYPES)
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        if ((pm_present & (1U << i)) && pm[i] > IOTDATA_AIR_QUALITY_PM_VALUE_MAX)
+            return IOTDATA_ERR_AIR_QUALITY_PM_VALUE_HIGH;
+#endif
+    enc->aq_pm_present = pm_present & 0x0F;
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        enc->aq_pm[i] = pm[i];
+    IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_AIR_QUALITY_PM);
+    return IOTDATA_OK;
+}
+#endif
+#if !defined(IOTDATA_NO_ENCODE)
+static inline void pack_aq_pm(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc) {
+    bits_write(buf, bp, enc->aq_pm_present, IOTDATA_AIR_QUALITY_PM_PRESENT_BITS);
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        if (enc->aq_pm_present & (1U << i))
+            bits_write(buf, bp, enc->aq_pm[i] / IOTDATA_AIR_QUALITY_PM_VALUE_RES, IOTDATA_AIR_QUALITY_PM_VALUE_BITS);
+}
+#endif
+#if !defined(IOTDATA_NO_DECODE)
+static inline void unpack_aq_pm(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out) {
+    out->aq_pm_present = (uint8_t)bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_PM_PRESENT_BITS);
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        out->aq_pm[i] = out->aq_pm_present & (1U << i) ? (uint16_t)(bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_PM_VALUE_BITS) * IOTDATA_AIR_QUALITY_PM_VALUE_RES) : 0;
+}
+#endif
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+static inline void json_set_aq_pm(cJSON *root, const iotdata_decoded_t *d, const char *label) {
+    cJSON *obj = cJSON_AddObjectToObject(root, label);
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        if (d->aq_pm_present & (1U << i))
+            cJSON_AddNumberToObject(obj, _aq_pm_names[i], d->aq_pm[i]);
+}
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) && !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
+static inline iotdata_status_t json_get_aq_pm(cJSON *root, iotdata_encoder_t *enc, const char *label) {
+    cJSON *j = cJSON_GetObjectItem(root, label);
+    if (!j)
+        return IOTDATA_OK;
+    uint8_t present = 0;
+    uint16_t pm[IOTDATA_AIR_QUALITY_PM_COUNT] = { 0 };
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++) {
+        cJSON *v = cJSON_GetObjectItem(j, _aq_pm_names[i]);
+        if (v) {
+            present |= (1U << i);
+            pm[i] = (uint16_t)v->valueint;
+        }
+    }
+    return iotdata_encode_air_quality_pm(enc, present, pm);
+}
+#endif
+#if !defined(IOTDATA_NO_DUMP)
+static inline int dump_aq_pm(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
+    (void)label;
+    size_t s = *bp;
+    uint32_t present = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_PM_PRESENT_BITS);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%X", (unsigned)present);
+    n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_PM_PRESENT_BITS, present, dump->_dec_buf, "4-bit mask", "aq_pm_present");
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        if (present & (1U << i)) {
+            s = *bp;
+            uint32_t r = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_PM_VALUE_BITS);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u ug/m3", (unsigned)(r * IOTDATA_AIR_QUALITY_PM_VALUE_RES));
+            n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_PM_VALUE_BITS, r, dump->_dec_buf, "0..1275, 5 ug/m3", _aq_pm_names[i]);
+        }
+    return n;
+}
+#endif
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+static inline void print_aq_pm(const iotdata_decoded_t *d, FILE *fp, const char *l) {
+    fprintf(fp, "  %s:%s", l, _padd(l));
+    for (int i = 0, first = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        if (d->aq_pm_present & (1U << i))
+            fprintf(fp, "%s %s=%u", first++ ? "," : "", _aq_pm_labels[i], d->aq_pm[i]);
+    fprintf(fp, " ug/m3\n");
+}
+#endif
+// clang-format off
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_PM)
+static const iotdata_field_ops_t _iotdata_field_def_aq_pm = {
+    _IOTDATA_OP_NAME("air_quality_pm")
+    _IOTDATA_OP_BITS(0)
+    _IOTDATA_OP_PACK(pack_aq_pm)
+    _IOTDATA_OP_UNPACK(unpack_aq_pm)
+    _IOTDATA_OP_DUMP(dump_aq_pm)
+    _IOTDATA_OP_PRINT(print_aq_pm)
+    _IOTDATA_OP_JSON_SET(json_set_aq_pm)
+    _IOTDATA_OP_JSON_GET(json_get_aq_pm)
+};
+#define _IOTDATA_ENT_AIR_QUALITY_PM [IOTDATA_FIELD_AIR_QUALITY_PM] = &_iotdata_field_def_aq_pm,
+#else
+#define _IOTDATA_ENT_AIR_QUALITY_PM
+#endif
+#define _IOTDATA_ERR_AIR_QUALITY_PM \
+    case IOTDATA_ERR_AIR_QUALITY_PM_VALUE_HIGH: \
+        return "AQ PM value above 1275 ug/m3";
+#else
+#define _IOTDATA_ENT_AIR_QUALITY_PM
+#define _IOTDATA_ERR_AIR_QUALITY_PM
+#endif
+// clang-format on
+
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS) || defined(IOTDATA_ENABLE_AIR_QUALITY)
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS) && !defined(IOTDATA_NO_ENCODE)
+iotdata_status_t iotdata_encode_air_quality_gas(iotdata_encoder_t *enc, uint8_t gas_present, const uint16_t gas[8]) {
+    CHECK_CTX_ACTIVE(enc);
+    CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY_GAS);
+#if !defined(IOTDATA_NO_CHECKS_TYPES)
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        if ((gas_present & (1U << i)) && gas[i] > _aq_gas_max[i])
+            return IOTDATA_ERR_AIR_QUALITY_GAS_VALUE_HIGH;
+#endif
+    enc->aq_gas_present = gas_present;
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        enc->aq_gas[i] = gas[i];
+    IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_AIR_QUALITY_GAS);
+    return IOTDATA_OK;
+}
+#endif
+#if !defined(IOTDATA_NO_ENCODE)
+static inline void pack_aq_gas(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc) {
+    bits_write(buf, bp, enc->aq_gas_present, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS);
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        if (enc->aq_gas_present & (1U << i))
+            bits_write(buf, bp, enc->aq_gas[i] / _aq_gas_res[i], _aq_gas_bits[i]);
+}
+#endif
+#if !defined(IOTDATA_NO_DECODE)
+static inline void unpack_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out) {
+    out->aq_gas_present = (uint8_t)bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS);
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        out->aq_gas[i] = out->aq_gas_present & (1U << i) ? (uint16_t)(bits_read(buf, bb, bp, _aq_gas_bits[i]) * _aq_gas_res[i]) : 0;
+}
+#endif
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+static inline void json_set_aq_gas(cJSON *root, const iotdata_decoded_t *d, const char *label) {
+    cJSON *obj = cJSON_AddObjectToObject(root, label);
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        if (d->aq_gas_present & (1U << i))
+            cJSON_AddNumberToObject(obj, _aq_gas_names[i], d->aq_gas[i]);
+}
+#endif
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS) && !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
+static inline iotdata_status_t json_get_aq_gas(cJSON *root, iotdata_encoder_t *enc, const char *label) {
+    cJSON *j = cJSON_GetObjectItem(root, label);
+    if (!j)
+        return IOTDATA_OK;
+    uint8_t present = 0;
+    uint16_t gas[IOTDATA_AIR_QUALITY_GAS_COUNT] = { 0 };
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++) {
+        cJSON *v = cJSON_GetObjectItem(j, _aq_gas_names[i]);
+        if (v) {
+            present |= (1U << i);
+            gas[i] = (uint16_t)v->valueint;
+        }
+    }
+    return iotdata_encode_air_quality_gas(enc, present, gas);
+}
+#endif
+#if !defined(IOTDATA_NO_DUMP)
+static inline int dump_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
+    (void)label;
+    size_t s = *bp;
+    uint32_t present = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02X", (unsigned)present);
+    n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS, present, dump->_dec_buf, "8-bit mask", "aq_gas_present");
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++) {
+        if (present & (1U << i)) {
+            s = *bp;
+            uint32_t r = bits_read(buf, bb, bp, _aq_gas_bits[i]);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u %s", r * _aq_gas_res[i], _aq_gas_units[i]);
+            n = dump_add(dump, n, s, _aq_gas_bits[i], r, dump->_dec_buf, _aq_gas_range[i], _aq_gas_names[i]);
+        }
+    }
+    return n;
+}
+#endif
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+static inline void print_aq_gas(const iotdata_decoded_t *d, FILE *fp, const char *l) {
+    fprintf(fp, "  %s:%s", l, _padd(l));
+    for (int i = 0, first = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        if (d->aq_gas_present & (1U << i)) {
+            fprintf(fp, "%s %s=%u", first++ ? "," : "", _aq_gas_labels[i], d->aq_gas[i]);
+            if (_aq_gas_units[i][0])
+                fprintf(fp, " %s", _aq_gas_units[i]);
+        }
+    fprintf(fp, "\n");
+}
+#endif
+// clang-format off
+#if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS)
+static const iotdata_field_ops_t _iotdata_field_def_aq_gas = {
+    _IOTDATA_OP_NAME("air_quality_gas")
+    _IOTDATA_OP_BITS(0)
+    _IOTDATA_OP_PACK(pack_aq_gas)
+    _IOTDATA_OP_UNPACK(unpack_aq_gas)
+    _IOTDATA_OP_DUMP(dump_aq_gas)
+    _IOTDATA_OP_PRINT(print_aq_gas)
+    _IOTDATA_OP_JSON_SET(json_set_aq_gas)
+    _IOTDATA_OP_JSON_GET(json_get_aq_gas)
+};
+#define _IOTDATA_ENT_AIR_QUALITY_GAS [IOTDATA_FIELD_AIR_QUALITY_GAS] = &_iotdata_field_def_aq_gas,
+#else
+#define _IOTDATA_ENT_AIR_QUALITY_GAS
+#endif
+#define _IOTDATA_ERR_AIR_QUALITY_GAS \
+    case IOTDATA_ERR_AIR_QUALITY_GAS_VALUE_HIGH: \
+        return "AQ gas value above slot maximum";
+#else
+#define _IOTDATA_ENT_AIR_QUALITY_GAS
+#define _IOTDATA_ERR_AIR_QUALITY_GAS
+#endif
+// clang-format on
 
 #if defined(IOTDATA_ENABLE_AIR_QUALITY)
 #if !defined(IOTDATA_NO_ENCODE)
-iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aqi) {
+iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aq_index, uint8_t pm_present, const uint16_t pm[4], uint8_t gas_present, const uint16_t gas[8]) {
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY);
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
-    if (aqi > IOTDATA_AIR_QUALITY_MAX)
-        return IOTDATA_ERR_AIR_QUALITY_HIGH;
+    if (aq_index > IOTDATA_AIR_QUALITY_INDEX_MAX)
+        return IOTDATA_ERR_AIR_QUALITY_INDEX_HIGH;
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        if ((pm_present & (1U << i)) && pm[i] > IOTDATA_AIR_QUALITY_PM_VALUE_MAX)
+            return IOTDATA_ERR_AIR_QUALITY_PM_VALUE_HIGH;
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        if ((gas_present & (1U << i)) && gas[i] > _aq_gas_max[i])
+            return IOTDATA_ERR_AIR_QUALITY_GAS_VALUE_HIGH;
 #endif
-    enc->air_quality = aqi;
+    enc->aq_index = aq_index;
+    enc->aq_pm_present = pm_present & 0x0F;
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
+        enc->aq_pm[i] = pm[i];
+    enc->aq_gas_present = gas_present;
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
+        enc->aq_gas[i] = gas[i];
     IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_AIR_QUALITY);
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_air_quality(uint16_t air_quality) {
-    return (uint32_t)air_quality;
-}
-static inline uint16_t dequantise_air_quality(uint32_t raw) {
-    return (uint16_t)raw;
-}
 #if !defined(IOTDATA_NO_ENCODE)
 static inline void pack_air_quality(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc) {
-    bits_write(buf, bp, quantise_air_quality(enc->air_quality), IOTDATA_AIR_QUALITY_BITS);
+    pack_aq_index(buf, bp, enc);
+    pack_aq_pm(buf, bp, enc);
+    pack_aq_gas(buf, bp, enc);
 }
 #endif
 #if !defined(IOTDATA_NO_DECODE)
 static inline void unpack_air_quality(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out) {
-    out->air_quality = dequantise_air_quality(bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_BITS));
+    unpack_aq_index(buf, bb, bp, out);
+    unpack_aq_pm(buf, bb, bp, out);
+    unpack_aq_gas(buf, bb, bp, out);
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
@@ -1694,33 +2047,65 @@ static inline iotdata_status_t json_get_air_quality(cJSON *root, iotdata_encoder
     cJSON *j = cJSON_GetObjectItem(root, label);
     if (!j)
         return IOTDATA_OK;
-    return iotdata_encode_air_quality(enc, (uint16_t)j->valueint);
+    /* Extract index */
+    uint16_t idx = 0;
+    cJSON *ji = cJSON_GetObjectItem(j, "index");
+    if (ji)
+        idx = (uint16_t)ji->valueint;
+    /* Extract PM */
+    uint8_t pm_present = 0;
+    uint16_t pm[IOTDATA_AIR_QUALITY_PM_COUNT] = { 0 };
+    cJSON *jp = cJSON_GetObjectItem(j, "pm");
+    if (jp)
+        for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++) {
+            cJSON *v = cJSON_GetObjectItem(jp, _aq_pm_names[i]);
+            if (v) {
+                pm_present |= (1U << i);
+                pm[i] = (uint16_t)v->valueint;
+            }
+        }
+    /* Extract gas */
+    uint8_t gas_present = 0;
+    uint16_t gas[IOTDATA_AIR_QUALITY_GAS_COUNT] = { 0 };
+    cJSON *jg = cJSON_GetObjectItem(j, "gas");
+    if (jg)
+        for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++) {
+            cJSON *v = cJSON_GetObjectItem(jg, _aq_gas_names[i]);
+            if (v) {
+                gas_present |= (1U << i);
+                gas[i] = (uint16_t)v->valueint;
+            }
+        }
+    return iotdata_encode_air_quality(enc, idx, pm_present, pm, gas_present, gas);
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
 static inline void json_set_air_quality(cJSON *root, const iotdata_decoded_t *d, const char *label) {
-    cJSON_AddNumberToObject(root, label, d->air_quality);
+    cJSON *obj = cJSON_AddObjectToObject(root, label);
+    json_set_aq_index(obj, d, "index");
+    json_set_aq_pm(obj, d, "pm");
+    json_set_aq_gas(obj, d, "gas");
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
 static inline int dump_air_quality(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
-    (void)label;
-    size_t s = *bp;
-    uint32_t r = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u AQI", dequantise_air_quality(r));
-    n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_BITS, r, dump->_dec_buf, "0..500 AQI", "air_quality");
+    n = dump_aq_index(buf, bb, bp, dump, n, label);
+    n = dump_aq_pm(buf, bb, bp, dump, n, label);
+    n = dump_aq_gas(buf, bb, bp, dump, n, label);
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static inline void print_air_quality(const iotdata_decoded_t *d, FILE *fp, const char *l) {
-    fprintf(fp, "  %s:%s %u AQI\n", l, _padd(l), d->air_quality);
+    print_aq_index(d, fp, l);
+    print_aq_pm(d, fp, l);
+    print_aq_gas(d, fp, l);
 }
 #endif
 // clang-format off
 static const iotdata_field_ops_t _iotdata_field_def_air_quality = {
     _IOTDATA_OP_NAME("air_quality")
-    _IOTDATA_OP_BITS(IOTDATA_AIR_QUALITY_BITS)
+    _IOTDATA_OP_BITS(0)
     _IOTDATA_OP_PACK(pack_air_quality)
     _IOTDATA_OP_UNPACK(unpack_air_quality)
     _IOTDATA_OP_DUMP(dump_air_quality)
@@ -1729,9 +2114,7 @@ static const iotdata_field_ops_t _iotdata_field_def_air_quality = {
     _IOTDATA_OP_JSON_GET(json_get_air_quality)
 };
 #define _IOTDATA_ENT_AIR_QUALITY [IOTDATA_FIELD_AIR_QUALITY] = &_iotdata_field_def_air_quality,
-#define _IOTDATA_ERR_AIR_QUALITY \
-    case IOTDATA_ERR_AIR_QUALITY_HIGH: \
-        return "Air quality above 500 AQI";
+#define _IOTDATA_ERR_AIR_QUALITY
 #else
 #define _IOTDATA_ENT_AIR_QUALITY
 #define _IOTDATA_ERR_AIR_QUALITY
@@ -2642,6 +3025,9 @@ static const iotdata_field_ops_t *_iotdata_field_ops[IOTDATA_FIELD_COUNT] = {
     _IOTDATA_ENT_SOLAR
     _IOTDATA_ENT_CLOUDS
     _IOTDATA_ENT_AIR_QUALITY
+    _IOTDATA_ENT_AIR_QUALITY_INDEX
+    _IOTDATA_ENT_AIR_QUALITY_PM
+    _IOTDATA_ENT_AIR_QUALITY_GAS
     _IOTDATA_ENT_RADIATION
     _IOTDATA_ENT_RADIATION_CPM
     _IOTDATA_ENT_RADIATION_DOSE
@@ -3284,6 +3670,9 @@ const char *iotdata_strerror(iotdata_status_t status) {
         _IOTDATA_ERR_SOLAR
         _IOTDATA_ERR_CLOUDS
         _IOTDATA_ERR_AIR_QUALITY
+        _IOTDATA_ERR_AIR_QUALITY_INDEX
+        _IOTDATA_ERR_AIR_QUALITY_PM
+        _IOTDATA_ERR_AIR_QUALITY_GAS
         _IOTDATA_ERR_RADIATION_CPM
         _IOTDATA_ERR_RADIATION_DOSE
         _IOTDATA_ERR_DEPTH
