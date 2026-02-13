@@ -1862,7 +1862,7 @@ static inline void print_aq_pm(const iotdata_decoded_t *d, FILE *fp, const char 
     for (int i = 0, first = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
         if (d->aq_pm_present & (1U << i))
             fprintf(fp, "%s %s=%u", first++ ? "," : "", _aq_pm_labels[i], d->aq_pm[i]);
-    fprintf(fp, " ug/m3\n");
+    fprintf(fp, "%s\n", d->aq_pm_present ? " ug/m3" : "");
 }
 #endif
 // clang-format off
@@ -1969,11 +1969,8 @@ static inline int dump_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata
 static inline void print_aq_gas(const iotdata_decoded_t *d, FILE *fp, const char *l) {
     fprintf(fp, "  %s:%s", l, _padd(l));
     for (int i = 0, first = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
-        if (d->aq_gas_present & (1U << i)) {
-            fprintf(fp, "%s %s=%u", first++ ? "," : "", _aq_gas_labels[i], d->aq_gas[i]);
-            if (_aq_gas_units[i][0])
-                fprintf(fp, " %s", _aq_gas_units[i]);
-        }
+        if (d->aq_gas_present & (1U << i))
+            fprintf(fp, "%s %s=%u%s%s", first++ ? "," : "", _aq_gas_labels[i], d->aq_gas[i], _aq_gas_units[i][0] ? " " : "", _aq_gas_units[i][0] ? _aq_gas_units[i] : "");
     fprintf(fp, "\n");
 }
 #endif
