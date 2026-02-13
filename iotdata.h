@@ -436,15 +436,15 @@ typedef float iotdata_float_t;
  * Header: variant(4) + station(12) + sequence(16) = 32 bits
  * -------------------------------------------------------------------------*/
 
-#define IOTDATA_VARIANT_BITS      4
-#define IOTDATA_STATION_BITS      12
-#define IOTDATA_SEQUENCE_BITS     16
-#define IOTDATA_HEADER_BITS       (IOTDATA_VARIANT_BITS + IOTDATA_STATION_BITS + IOTDATA_SEQUENCE_BITS)
+#define IOTDATA_VARIANT_BITS          4
+#define IOTDATA_STATION_BITS          12
+#define IOTDATA_SEQUENCE_BITS         16
+#define IOTDATA_HEADER_BITS           (IOTDATA_VARIANT_BITS + IOTDATA_STATION_BITS + IOTDATA_SEQUENCE_BITS)
 
-#define IOTDATA_VARIANT_MAX       14
-#define IOTDATA_VARIANT_RESERVED  15
-#define IOTDATA_STATION_MAX       4095
-#define IOTDATA_SEQUENCE_MAX      65535
+#define IOTDATA_VARIANT_MAX           14
+#define IOTDATA_VARIANT_RESERVED      15
+#define IOTDATA_STATION_MAX           4095
+#define IOTDATA_SEQUENCE_MAX          65535
 
 /* ---------------------------------------------------------------------------
  * Presence byte layout (N-byte extension chain)
@@ -464,19 +464,20 @@ typedef float iotdata_float_t;
  * but that is not a limitation in the protocol.
  * -------------------------------------------------------------------------*/
 
-#define IOTDATA_PRES_TLV          (1U << 6)
-#define IOTDATA_PRES_EXT          (1U << 7)
-#define IOTDATA_PRES0_DATA_FIELDS 6
-#define IOTDATA_PRESN_DATA_FIELDS 7
-#define IOTDATA_PRES_MINIMUM      1
-#define IOTDATA_PRES_MAXIMUM      4
-#define IOTDATA_MAX_DATA_FIELDS   (IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (IOTDATA_PRES_MAXIMUM - 1))
+#define IOTDATA_PRES_TLV              (1U << 6)
+#define IOTDATA_PRES_EXT              (1U << 7)
+#define IOTDATA_PRES0_DATA_FIELDS     6
+#define IOTDATA_PRESN_DATA_FIELDS     7
+#define IOTDATA_PRES_MINIMUM          1
+#define IOTDATA_PRES_MAXIMUM          4
+#define IOTDATA_MAX_DATA_FIELDS       (IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (IOTDATA_PRES_MAXIMUM - 1))
 
 /* ---------------------------------------------------------------------------
  * Packet
  * -------------------------------------------------------------------------*/
 
-#define IOTDATA_PACKET_MINIMUM    ((IOTDATA_HEADER_BITS / 8) + IOTDATA_PRES_MINIMUM)
+#define IOTDATA_PACKET_MINIMUM        ((IOTDATA_HEADER_BITS / 8) + IOTDATA_PRES_MINIMUM)
+#define IOTDATA_PACKET_MAXIMUM_NO_TLV (128) // XXX fix me
 
 /* ---------------------------------------------------------------------------
  * Field types
@@ -561,7 +562,7 @@ typedef enum {
 
 _Static_assert(IOTDATA_FIELD_COUNT <= 32, "fields overflow");
 
-#define IOTDATA_FIELD_EMPTY		(0)
+#define IOTDATA_FIELD_EMPTY             (0)
 #define IOTDATA_FIELD_BIT(id)           (1U << (id))
 #define IOTDATA_FIELD_PRESENT(mask, id) (((mask) >> (id)) & 1U)
 #define IOTDATA_FIELD_SET(mask, id)     ((mask) |= (1U << (id)))
@@ -894,6 +895,7 @@ iotdata_status_t iotdata_encode_flags(iotdata_encoder_t *enc, uint8_t flags);
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_DECODE)
+iotdata_status_t iotdata_peek(const uint8_t *buf, size_t len, uint8_t *variant, uint16_t *station, uint16_t *sequence);
 iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_t *out);
 #endif /* !IOTDATA_NO_DECODE */
 
