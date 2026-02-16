@@ -2869,7 +2869,7 @@ Station 42 seq=2 var=0 (weather_station) [124 bits, 16 bytes]
 
 ### Overview
 
-The iotdata mesh relay protocol extends the reach of sensor networks by allowing dedicated relays to forward sensor data across multiple radio relays toward one or more gateways. The protocol is designed to be **seamless** — existing sensors require no firmware changes, the system works without mesh infrastructure, and relays can be inserted into a live deployment to fill coverage gaps.
+The iotdata mesh relay protocol extends the reach of sensor networks by allowing dedicated relays to forward sensor data across multiple relays toward one or more gateways. The protocol is designed to be **seamless** — existing sensors require no firmware changes, the system works without mesh infrastructure, and relays can be inserted into a live deployment to fill coverage gaps.
 
 The mesh layer is carried within the existing iotdata wire format using variant ID 15 (0x0F) for all control-plane traffic. This means mesh packets share the same 4-byte header structure as sensor data, can coexist on the same radio channel, and are handled by the same receive path up to the point of variant dispatch. Relay nodes have a dedicated station ID and can also convey sensor data under that ID.
 
@@ -2889,11 +2889,11 @@ Rather than requiring all sensors to participate in a mesh network (which adds c
 
 The protocol defines three roles. A single physical device may implement one or two of these roles simultaneously.
 
-**Sensor** — A device that periodically transmits iotdata-encoded packets containing measurement data. Sensors are transmit-only, fire-and-forget. They have no awareness of the mesh, do not listen for packets, and do not participate in routing. A sensor's firmware is identical whether or not mesh infrastructure is deployed. Sensors use iotdata variant IDs 0–14 as defined by their measurement type.
+**Sensor** — A device that periodically transmits iotdata-encoded packets containing measurement data. Sensors are transmit-only, fire-and-forget. They have no awareness of the mesh, do not listen for packets, and do not participate in routing. A sensor's firmware is identical whether or not mesh infrastructure is deployed. Sensors use iotdata variant IDs 0–14 as defined by their measurement type. Sensors are typically power constrained.
 
-**Relay** — A mesh-aware device that listens for both sensor packets and mesh control packets. Its primary function is to forward sensor data toward a gateway when the sensor cannot reach the gateway directly. Relay nodes form a self-organising tree topology rooted at gateways, using periodic beacon messages to discover routes. A relay treats sensor payloads as opaque byte sequences — it never inspects or interprets measurement fields. A relay may optionally also function as a sensor (dual-role), transmitting its own measurement data (e.g. position, battery level, environment) using a standard iotdata variant alongside its mesh traffic on variant 15.
+**Relay** — A mesh-aware device that listens for both sensor packets and mesh control packets. Its primary function is to forward sensor data toward a gateway when the sensor cannot reach the gateway directly. Relay nodes form a self-organising tree topology rooted at gateways, using periodic beacon messages to discover routes. A relay treats sensor payloads as opaque byte sequences — it never inspects or interprets measurement fields. A relay may optionally also function as a sensor (dual-role), transmitting its own measurement data (e.g. position, battery level, environment) using a standard iotdata variant alongside its mesh traffic on variant 15. Relays have higher power demand than sensors, but are more than likely not to be mains powered.
 
-**Gateway** — A mesh-aware device that receives sensor data (directly or via relays) and delivers it to upstream systems for processing, storage, and display. Gateways originate beacon messages that define the routing topology. A deployment may include multiple gateways for redundancy or to cover a wide area. Each gateway is identified by a unique station ID. Gateways perform duplicate suppression — if the same sensor packet arrives both directly and via a relay, only the first arrival is processed.
+**Gateway** — A mesh-aware device that receives sensor data (directly or via relays) and delivers it to upstream systems for processing, storage, and display. Gateways originate beacon messages that define the routing topology. A deployment may include multiple gateways for redundancy or to cover a wide area. Each gateway is identified by a unique station ID. Gateways perform duplicate suppression — if the same sensor packet arrives both directly and via a relay, only the first arrival is processed. Gateways are typically mains powered and likely to be connected to network and internet infrastructure.
 
 #### A.4 Role Capabilities
 
@@ -2920,7 +2920,7 @@ The mesh layer is an optional enhancement, not a prerequisite. A deployment cons
 
 Mesh control packets use iotdata variant ID 15 (0x0F). This reserves the final variant slot for mesh traffic while leaving variants 0–14 available for sensor data definitions. The 4-byte iotdata header (variant, station_id, sequence) is shared by all packet types, meaning mesh packets are structurally valid iotdata packets with a different interpretation of the payload.
 
-Byte 4, which serves as the presence bitmap in sensor variants, is repurposed as the control type field in variant 15 packets. The upper nibble identifies the mesh packet type (4 bits, supporting up to 16 types). This allows the receive path to branch on variant ID alone: variants 0–14 route to the sensor data decoder, variant 15 routes to the mesh handler.
+Byte 4, which serves as a presence bitmap in sensor variants, serves as a control type field in variant 15 packets. The upper nibble identifies the mesh packet type (4 bits, supporting up to 16 types). This allows the receive path to branch on variant ID alone: variants 0–14 route to the sensor data decoder, variant 15 routes to the mesh handler.
 
 #### B.3 Opaque Forwarding
 
@@ -2930,7 +2930,7 @@ The sole structural dependency is the position and size of station_id (12 bits a
 
 #### B.4 Multiple Gateway Support
 
-Each gateway originates its own beacon stream identified by its station_id (carried as `gateway_id` in the beacon). Relays independently track which gateway tree they belong to and select the best gateway by cost (relay count), breaking ties by received signal strength. If a gateway fails, its beacons cease, relays time out after a configurable number of missed beacon rounds, and automatically adopt an alternative gateway's tree.
+Each gateway originates its own beacon stream identified by its station_id (carried as `gateway_id` in the beacon). Relays independently track which gateway trees they belong to and select the best gateway by cost (relay count), breaking ties by received signal strength. If a gateway fails, its beacons cease, and so relays in its tree will time out after a configurable number of missed beacon rounds, and automatically adopt an alternative gateway's tree.
 
 #### B.5 Gradient-Based Routing
 
@@ -2963,7 +2963,7 @@ Relay B hears Relay A's rebroadcast, adopts Relay A as parent, sets cost=2
 ...continues outward until no new nodes hear the beacon
 ```
 
-Gateways transmit beacons at a regular interval (recommended: 60 seconds). Each beacon carries a generation counter that increments per round. Relays compare incoming beacons against their current state:
+Gateways transmit beacons at a regular interval (of which there is no recommended default, as this should be a function of the periodicity and density of sensor network, but 60 seconds is a reasonable figure). Each beacon carries a generation counter that increments per round. Relays compare incoming beacons against their current state:
 
 - Newer generation (modular comparison within half the 12-bit range): update parent if cost is equal or better.
 - Same generation, lower cost: adopt the new sender as parent.
@@ -3006,16 +3006,16 @@ Each FORWARD is acknowledged by the receiving parent to confirm delivery.
 
 ```
 Relay A                          Relay B (A's parent)
-  │                              │
+  │                             │
   │──── FORWARD (seq=X) ───────>│
-  │                              │
-  │<──── ACK (fwd_station=A, ──│
-  │           fwd_seq=X)        │
-  │                              │
+  │                             │
+  │<──── ACK (fwd_station=A, ──>│
+  │           fwd_seq=X)        |
+  │                             |
   [clear retry timer]           [forward inner packet upstream]
 ```
 
-If no ACK is received within a timeout (recommended: 500ms), the sender retries up to a configurable number of attempts (recommended: 3). After exhausting retries, the sender marks its parent as unreliable, promotes its backup parent (if available), and retransmits the FORWARD to the new parent. If no backup parent is available, the node broadcasts a ROUTE_ERROR and enters an orphaned state, listening for beacons to reattach to the tree.
+If no ACK is received within a timeout (recommended 500ms for high frequency sensor networks, up to 15-30 seconds for low frequency networks), the sender retries up to a configurable number of attempts (recommended: 3). After exhausting retries, the sender marks its parent as unreliable, promotes its backup parent (if available), and retransmits the FORWARD to the new parent. If no backup parent is available, the node broadcasts a ROUTE_ERROR and enters an orphaned state, listening for beacons to reattach to the tree.
 
 #### C.4 Fast Failover
 
@@ -3023,15 +3023,13 @@ When a relay loses all upstream paths, it broadcasts a ROUTE_ERROR so downstream
 
 ```
 Relay B (was Relay C's parent)    Relay C (child of B)
-  │                              │
-  [B loses its parent]          │
-  │                              │
+  │                            │
+  [B loses its parent]         │
+  │                            │
   │──── ROUTE_ERROR ──────────>│
-  │     (reason=parent_lost)    │
-  │                              │
-                                [C immediately seeks
-                                 alternative parent from
-                                 neighbour table]
+  │     (reason=parent_lost)   │
+  │                            │
+                               [C immediately seeks alternative parent from neighbour table]
 ```
 
 This converts a multi-minute outage (waiting for 3 missed beacon rounds × 60s = 180s) into sub-second failover in the best case.
@@ -3128,7 +3126,7 @@ buf[5] = (ttl & 0x0F) << 4          /* lower nibble is zero pad */
 memcpy(&buf[6], inner_packet, N)     /* byte-aligned, no shifting */
 ```
 
-The 4-bit pad at byte 5 lower nibble ensures the inner packet starts at a byte boundary (offset 6). This is a deliberate trade-off: the pad may add up to 7 bits of wasted space in the worst case, but avoids requiring every relay to bit-shift the entire opaque payload. For relay hot-path performance (just a memcpy), this is the right choice. The pad nibble is reserved for future use (e.g. priority, retry count).
+The 4-bit pad at byte 5 lower nibble ensures the inner packet starts at a byte boundary (offset 6). This is a deliberate trade-off: the pad may cause up to 11 bits of wasted space in the worst case (as the inner packet may already have up to 7 bits wasted in the final byte alignment), but avoids requiring every relay to bit-shift the entire opaque payload. For relay hot-path performance (just a memcpy), this is the right choice. The pad nibble is reserved for future use (e.g. priority, retry count).
 
 Inner packet length is derived from the radio layer: `N = rx_packet_len - 6`.
 
@@ -3187,8 +3185,9 @@ Periodic topology snapshot sent upstream to the gateway.
 | 2–3 | 16 | `sender_seq` | 0–65535 | |
 | 4–5 | 4+12 | `ctrl=0x4` \| `parent_id` | 0–4095 | Current parent (0xFFF if orphaned) |
 | 6 | 8 | `my_cost` | 0–255 | Reporting node's cost |
-| 7 | 2+6 | `0` \| `num_neighbours` | 0–63 | 2-bit reserved + 6-bit count |
-| 8–9 | 4+12 | `0` \| `gateway_id` | 0–4095 | Which gateway tree |
+| 7 | 6+2 | `num_neighbours` \| `gateway_id[11:10]` | 0–63 | Number of neighbour entries that follow |
+| 8 | 8 | `gateway_id[9:2]` | 0–4095 | Current active gateway tree |
+| 9 | 2 | `gateway_id[1:0]` |  |  |
 
 **Neighbour entry (3 bytes each):**
 
@@ -3197,7 +3196,7 @@ Periodic topology snapshot sent upstream to the gateway.
 | +0 | 8 | `cost` | 0–255 | Neighbour's advertised cost |
 | +1–2 | 4+12 | `rssi_q4` \| `station_id` | | RSSI quantised to 4 bits + station_id |
 
-**Total: 10 + 3N bytes.**
+**Total: 9.2 bytes + 3N bytes.**
 
 RSSI quantisation uses 5 dBm steps from a floor of −120 dBm:
 
@@ -3234,8 +3233,8 @@ Gateway-originated reachability test, routed downstream toward a target node.
 | 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Current forwarding relay |
 | 2–3 | 16 | `sender_seq` | 0–65535 | |
 | 4–5 | 4+12 | `ctrl=0x5` \| `target_id` | 0–4095 | Destination node |
-| 6 | 8 | `ttl` | 0–255 | Decremented per relay |
-| 7 | 4+4 | `0` \| `ping_id` | 0–15 | Correlates with PONG |
+| 6 | 8 | `ttl` | 0–255 | Decremented per relay on downstream path |
+| 7 | 8 | `ping_id` | 0–255 | Correlates with PONG |
 
 **Total: 8 bytes.**
 
@@ -3249,7 +3248,7 @@ Response to PING, flows upstream toward the gateway.
 | 2–3 | 16 | `sender_seq` | 0–65535 | |
 | 4–5 | 4+12 | `ctrl=0x6` \| `gateway_id` | 0–4095 | Route back to originating gateway |
 | 6 | 8 | `relays` | 0–255 | Incremented each relay on return path |
-| 7 | 4+4 | `0` \| `ping_id` | 0–15 | Echoed from PING |
+| 7 | 8 | `ping_id` | 0–255 | Echoed from PING |
 
 **Total: 8 bytes.**
 
@@ -3265,7 +3264,7 @@ Reserved for future use. Relays receiving an unrecognised ctrl_type should silen
 | 0x1 | FORWARD | inward (relays → gateway) | 6 + N | v1 |
 | 0x2 | ACK | single relay (parent → child) | 8 | v1 |
 | 0x3 | ROUTE_ERROR | broadcast | 5 | v1 |
-| 0x4 | NEIGHBOUR_REPORT | inward (relays → gateway) | 10 + 3N | v1 |
+| 0x4 | NEIGHBOUR_REPORT | inward (relays → gateway) | 9.2 + 3N | v1 |
 | 0x5 | PING | outward (gateway → target) | 8 | v2 |
 | 0x6 | PONG | inward (target → gateway) | 8 | v2 |
 | 0x7–0xF | reserved | — | — | — |
@@ -3334,7 +3333,7 @@ periodic timers:
 
 An existing iotdata gateway requires three additions to support mesh:
 
-**Beacon origination:** Every 60 seconds, transmit a BEACON with cost=0 and an incrementing generation counter. The gateway_id is the gateway's own station_id.
+**Beacon origination:** Every N seconds (60 default), transmit a BEACON with cost=0 and an incrementing generation counter. The gateway_id is the gateway's own station_id.
 
 **FORWARD handling:** On receiving a variant 15 packet with ctrl_type 0x1, extract the inner packet starting at byte 6 and process it through the normal iotdata receive path (decode, store, display). Send an ACK back to the FORWARD's sender.
 
@@ -3482,13 +3481,13 @@ A 500-hectare farm with a central farmhouse, outlying barns, fields extending 2�
 **Deployment:**
 
 ```
-                                    [WS-4] weather station (hilltop)
-                                       |
-                                     direct
-                                       |
+                [WS-4] weather station (hilltop)
+                              |
+                           direct
+                             |
 [SM-1] soil ──direct──> [GATEWAY] farmhouse
-[SM-2] soil ──direct──/     |
-[WL-1] water ─direct──/     |
+[SM-2] soil ──direct──/      |
+[WL-1] water ─direct──/      |
                              |
                          direct
                              |
@@ -3496,7 +3495,7 @@ A 500-hectare farm with a central farmhouse, outlying barns, fields extending 2�
                              |
                          1 relay
                          /       \
-               [SM-3] soil    [SM-4] soil     (low field, behind ridge)
+               [SM-3] soil    [SM-4] soil      (low field, behind ridge)
                [WS-5] weather station          (river valley)
                [WL-2] water level              (river gauge)
 ```
