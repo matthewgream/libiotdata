@@ -2275,8 +2275,6 @@ selection a runtime decision rather than a compile-time decision.
 The same encoder can produce a 10-byte packet for Sigfox and a
 24-byte packet for LoRa, with the receiver handling both identically.
 
----
-
 ## Appendix E. System Implementation Considerations
 
 ### E.1. Microcontroller Class Taxonomy
@@ -2873,8 +2871,6 @@ The iotdata mesh relay protocol extends the reach of sensor networks by allowing
 
 The mesh layer is carried within the existing iotdata wire format using variant ID 15 (0x0F) for all control-plane traffic. This means mesh packets share the same 4-byte header structure as sensor data, can coexist on the same radio channel, and are handled by the same receive path up to the point of variant dispatch. Relay nodes have a dedicated station ID and can also convey sensor data under that ID.
 
----
-
 ### A. Use Cases and System Roles
 
 #### A.1 The Problem
@@ -2908,8 +2904,6 @@ The protocol defines three roles. A single physical device may implement one or 
 | Requires iotdata field knowledge | yes (own variant) | no (opaque relay) | yes (all variants) |
 | Firmware changes for mesh | none | mesh-specific | mesh additions |
 
----
-
 ### B. Design Principles
 
 #### B.1 Seamless Operation
@@ -2935,8 +2929,6 @@ Each gateway originates its own beacon stream identified by its station_id (carr
 #### B.5 Gradient-Based Routing
 
 The mesh uses a simplified distance-vector approach where each relay knows its cost (number of relays to reach the gateway) and forwards data toward lower-cost neighbours. This is conceptually similar to RPL (RFC 6550, Routing Protocol for Low-Power and Lossy Networks) but dramatically simplified — no full topology state, no Directed Acyclic Graph computation, no IPv6 dependency. Each node stores only its parent, a backup parent, and a small neighbour table.
-
----
 
 ### C. Protocol Flows
 
@@ -3042,8 +3034,6 @@ Relays periodically send NEIGHBOUR_REPORT messages upstream to the gateway, prov
 
 In a future protocol revision, the gateway may send PING messages routed downstream toward a specific target node. The target responds with a PONG that routes back upstream. This provides on-demand reachability confirmation and round-trip-time measurement without waiting for the target's next scheduled data or neighbour report transmission.
 
----
-
 ### D. Packet Structures
 
 #### D.1 Standard iotdata Header (all packets, all variants)
@@ -3053,7 +3043,7 @@ In a future protocol revision, the gateway may send PING messages routed downstr
 | 0 | [7:4] | variant_id (4 bits: 0–14 = sensor data, 15 = mesh control) |
 | 0–1 | [3:0]+[7:0] | station_id (12 bits: 0–4095) |
 | 2–3 | [15:0] | sequence (16 bits, big-endian) |
-| 4 | [7:0] | presence bitmap (variants 0–14) or ctrl_type + payload (variant 15) |
+| 4 | [7:0] | presence bitmap (variants 0–14) \| ctrl_type + payload (variant 15) |
 
 The variant and station_id are packed into a 4+12 bit structure:
 
@@ -3075,7 +3065,7 @@ All mesh control packets share this structure:
 | 4 | [7:4] | `ctrl_type` | Mesh packet type (0x0–0xF) |
 | 4 | [3:0] | type-specific | Upper nibble of first payload field |
 
-Bytes 5 onward are control-type-specific. Fields pack as a bitstream from byte 4, MSB-first, with no padding except where explicitly noted.
+The remaining 4 bits of Byte 4 and the whole bytes of Byte 5 onward are control-type-specific. Fields pack as a bitstream from byte 4, MSB-first, with no padding except where explicitly noted.
 
 #### D.3 BEACON (ctrl_type 0x0)
 
@@ -3269,8 +3259,6 @@ Reserved for future use. Relays receiving an unrecognised ctrl_type should silen
 | 0x6 | PONG | inward (target → gateway) | 8 | v2 |
 | 0x7–0xF | reserved | — | — | — |
 
----
-
 ### E. Node Operation and Requirements
 
 #### E.1 Relay Node State
@@ -3347,7 +3335,7 @@ Duplicate suppression is critical because the same sensor packet may arrive at a
 
 The dedup key is {origin_station_id, origin_sequence}, extracted from the iotdata header of the original sensor packet. Both relays and gateways maintain dedup rings:
 
-- **At relays:** prevents forwarding the same sensor packet twice (e.g. two relays both hear the same sensor and both forward upstream — the upstream relay deduplicates).
+- **At the relays:** prevents forwarding the same sensor packet twice (e.g. two relays both hear the same sensor and both forward upstream — the upstream relay deduplicates).
 - **At the gateway:** prevents processing the same data twice when it arrives both directly and via relay.
 
 A ring buffer of 64 entries is sufficient for most deployments. With 16 sensors transmitting every 5–15 seconds, the ring covers approximately 5–20 minutes of history. The ring is FIFO — the oldest entry is evicted when the buffer is full.
@@ -3384,8 +3372,6 @@ If the beacon does not meet either condition, it is suppressed. This prevents be
 When a relay hears a raw sensor packet that it intends to forward, it waits a random backoff period (200–1000ms) before transmitting the FORWARD. During this backoff, if the node hears another relay transmit a FORWARD containing the same inner packet (identified by matching origin station and sequence in the inner header), it cancels its own forward.
 
 This Trickle-style suppression (inspired by RFC 6206) significantly reduces redundant airtime in areas where multiple relay nodes have overlapping coverage. In the worst case (no other relay forwards), it adds 200–1000ms latency to the first relay. In dense areas, it eliminates duplicate transmissions entirely.
-
----
 
 ### F. Deployment Considerations
 
@@ -3467,8 +3453,6 @@ For deployments requiring higher throughput, use the 915MHz ISM band (Americas, 
 | Gateways per deployment | 2–5 | No hard limit (each runs independent tree) |
 | Neighbour table size per relay | 8–16 typical | 63 (protocol limit) |
 | Total nodes (sensors + relays) | 100–200 | 4095 (station_id space) |
-
----
 
 ### G. Example Deployments
 
@@ -3552,8 +3536,6 @@ If a sensor is mounted on a vehicle (e.g. a tractor, livestock tracker, or patro
 
 **The sensor firmware needs no changes.** The mesh adapts to the sensor's location in real time. The gateway sees the same station_id and sequence numbers regardless of which relay forwarded the data. Duplicate suppression handles cases where the sensor is within range of multiple relays simultaneously.
 
----
-
 ### H. Protocol Version History
 
 | Version | Description |
@@ -3571,8 +3553,6 @@ If a sensor is mounted on a vehicle (e.g. a tractor, livestock tracker, or patro
 | parent_id | 0xFFF | Orphaned (no parent) |
 | station_id | 0x000 | Reserved (do not assign to nodes) |
 | reason codes | 0x3–0xF | Reserved for future use |
-
----
 
 ### J. Future Considerations
 
