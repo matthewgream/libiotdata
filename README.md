@@ -111,6 +111,7 @@ place on the project's GitHub repository.
   - [E.11. Platform-Specific Notes](#e11-platform-specific-notes)
   - [E.12. Class 1 Hand-Rolled Encoder Example](#e12-class-1-hand-rolled-encoder-example)
 - [Appendix F. Example Weather Station Output](#appendix-f-example-weather-station-output)
+- [Appendix G. Mesh Relay Protocol](#appendix-g-mesh-relay-protocol)
 
 ---
 
@@ -2863,6 +2864,836 @@ Station 42 seq=2 var=0 (weather_station) [124 bits, 16 bytes]
 ** JSON:
 {"variant":0,"station":42,"sequence":2,"packed_bits":124,"packed_bytes":16,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":10},"environment":{"temperature":14.5,"pressure":1013,"humidity":55},"wind":{"speed":3.5,"direction":172,"gust":7},"rain":{"rate":5,"size":0},"solar":{"irradiance":390,"ultraviolet":3}}
 ```
+
+## Appendix G. Mesh Relay Protocol
+
+### Overview
+
+The iotdata mesh relay protocol extends the reach of sensor networks by allowing dedicated relays to forward sensor data across multiple radio relays toward one or more gateways. The protocol is designed to be **seamless** — existing sensors require no firmware changes, the system works without mesh infrastructure, and relays can be inserted into a live deployment to fill coverage gaps.
+
+The mesh layer is carried within the existing iotdata wire format using variant ID 15 (0x0F) for all control-plane traffic. This means mesh packets share the same 4-byte header structure as sensor data, can coexist on the same radio channel, and are handled by the same receive path up to the point of variant dispatch. Relay nodes have a dedicated station ID and can also convey sensor data under that ID.
+
+---
+
+### A. Use Cases and System Roles
+
+#### A.1 The Problem
+
+LoRa radio links between sensors and gateways are subject to terrain, vegetation, buildings, and seasonal variation. A sensor that works reliably in winter may become intermittent when foliage returns in spring. A sensor placed in a valley or behind a structure may never reach the gateway directly. Increasing transmit power or antenna height is not always practical or permitted.
+
+#### A.2 The Solution
+
+Rather than requiring all sensors to participate in a mesh network (which adds complexity, power consumption, and firmware requirements), the protocol introduces a separate class of mesh-aware relays that transparently extend range. Sensors remain simple transmit-only devices. The mesh is an overlay infrastructure.
+
+#### A.3 System Roles
+
+The protocol defines three roles. A single physical device may implement one or two of these roles simultaneously.
+
+**Sensor** — A device that periodically transmits iotdata-encoded packets containing measurement data. Sensors are transmit-only, fire-and-forget. They have no awareness of the mesh, do not listen for packets, and do not participate in routing. A sensor's firmware is identical whether or not mesh infrastructure is deployed. Sensors use iotdata variant IDs 0–14 as defined by their measurement type.
+
+**Relay** — A mesh-aware device that listens for both sensor packets and mesh control packets. Its primary function is to forward sensor data toward a gateway when the sensor cannot reach the gateway directly. Relay nodes form a self-organising tree topology rooted at gateways, using periodic beacon messages to discover routes. A relay treats sensor payloads as opaque byte sequences — it never inspects or interprets measurement fields. A relay may optionally also function as a sensor (dual-role), transmitting its own measurement data (e.g. position, battery level, environment) using a standard iotdata variant alongside its mesh traffic on variant 15.
+
+**Gateway** — A mesh-aware device that receives sensor data (directly or via relays) and delivers it to upstream systems for processing, storage, and display. Gateways originate beacon messages that define the routing topology. A deployment may include multiple gateways for redundancy or to cover a wide area. Each gateway is identified by a unique station ID. Gateways perform duplicate suppression — if the same sensor packet arrives both directly and via a relay, only the first arrival is processed.
+
+#### A.4 Role Capabilities
+
+| Capability | Sensor | Relay | Gateway |
+|---|---|---|---|
+| Transmits own sensor data | yes | optional (dual-role) | no |
+| Listens for packets | no | yes | yes |
+| Forwards sensor data | no | yes | no (endpoint) |
+| Participates in mesh routing | no | yes | yes (root) |
+| Originates beacons | no | no | yes |
+| Rebroadcasts beacons | no | yes | no |
+| Requires iotdata field knowledge | yes (own variant) | no (opaque relay) | yes (all variants) |
+| Firmware changes for mesh | none | mesh-specific | mesh additions |
+
+---
+
+### B. Design Principles
+
+#### B.1 Seamless Operation
+
+The mesh layer is an optional enhancement, not a prerequisite. A deployment consisting only of sensors and gateways works exactly as it does today. Mesh infrastructure can be added incrementally — deploying a relay between a struggling sensor and the gateway immediately improves reliability without touching the sensor.
+
+#### B.2 Protocol Integration
+
+Mesh control packets use iotdata variant ID 15 (0x0F). This reserves the final variant slot for mesh traffic while leaving variants 0–14 available for sensor data definitions. The 4-byte iotdata header (variant, station_id, sequence) is shared by all packet types, meaning mesh packets are structurally valid iotdata packets with a different interpretation of the payload.
+
+Byte 4, which serves as the presence bitmap in sensor variants, is repurposed as the control type field in variant 15 packets. The upper nibble identifies the mesh packet type (4 bits, supporting up to 16 types). This allows the receive path to branch on variant ID alone: variants 0–14 route to the sensor data decoder, variant 15 routes to the mesh handler.
+
+#### B.3 Opaque Forwarding
+
+Relays never inspect the contents of sensor packets beyond the 4-byte iotdata header. The header is read only to extract the originating sensor's station_id and sequence number for duplicate suppression. All remaining bytes are treated as an opaque blob, copied verbatim during forwarding. This means the mesh layer has zero coupling to field definitions, variant suites, encoding formats, or any future changes to the iotdata measurement schema.
+
+The sole structural dependency is the position and size of station_id (12 bits at bytes 0–1) and sequence (16 bits at bytes 2–3) in the iotdata header. This is the most stable contract in the protocol and is not expected to change.
+
+#### B.4 Multiple Gateway Support
+
+Each gateway originates its own beacon stream identified by its station_id (carried as `gateway_id` in the beacon). Relays independently track which gateway tree they belong to and select the best gateway by cost (relay count), breaking ties by received signal strength. If a gateway fails, its beacons cease, relays time out after a configurable number of missed beacon rounds, and automatically adopt an alternative gateway's tree.
+
+#### B.5 Gradient-Based Routing
+
+The mesh uses a simplified distance-vector approach where each relay knows its cost (number of relays to reach the gateway) and forwards data toward lower-cost neighbours. This is conceptually similar to RPL (RFC 6550, Routing Protocol for Low-Power and Lossy Networks) but dramatically simplified — no full topology state, no Directed Acyclic Graph computation, no IPv6 dependency. Each node stores only its parent, a backup parent, and a small neighbour table.
+
+---
+
+### C. Protocol Flows
+
+#### C.1 Topology Discovery
+
+Topology is built through periodic beacon propagation from gateways outward.
+
+```
+Gateway (cost=0)
+    │
+    │  BEACON (gateway_id=G, generation=N, cost=0)
+    │
+    ▼
+Relay A hears beacon, adopts Gateway as parent, sets cost=1
+    │
+    │  BEACON (gateway_id=G, generation=N, cost=1)   [after random 1–5s jitter]
+    │
+    ▼
+Relay B hears Relay A's rebroadcast, adopts Relay A as parent, sets cost=2
+    │
+    │  BEACON (gateway_id=G, generation=N, cost=2)   [after random 1–5s jitter]
+    │
+    ▼
+...continues outward until no new nodes hear the beacon
+```
+
+Gateways transmit beacons at a regular interval (recommended: 60 seconds). Each beacon carries a generation counter that increments per round. Relays compare incoming beacons against their current state:
+
+- Newer generation (modular comparison within half the 12-bit range): update parent if cost is equal or better.
+- Same generation, lower cost: adopt the new sender as parent.
+- Same generation, equal or higher cost: suppress — do not rebroadcast.
+
+The random rebroadcast jitter (1–5 seconds) prevents synchronised retransmission from nodes that hear the same beacon simultaneously, reducing collisions in dense areas.
+
+#### C.2 Sensor Data Forwarding
+
+Sensor data flows inward from sensors toward gateways, relayed transparently by relays.
+
+```
+Sensor S transmits raw iotdata packet (variant=V, station=S, seq=N)
+    │
+    │  [raw packet, no mesh awareness]
+    │
+    ├──────────────────────┐
+    ▼                      ▼
+Gateway (hears directly)   Relay A (hears sensor)
+    │                      │
+    │ process normally     │ wrap in FORWARD, send to parent
+    │                      │
+    │                      ▼
+    │                  Gateway (receives FORWARD)
+    │                      │
+    │                      │ unwrap inner packet
+    │                      │ dedup: {S, N} already seen? → discard
+    │                      │ otherwise process normally
+    ▼                      ▼
+    [sensor data processed once]
+```
+
+When a relay hears a raw sensor packet (any variant 0–14), it waits a short random backoff (200–1000ms). If during that backoff it hears another relay forward the same packet (identified by matching origin station and sequence), it suppresses its own forward. This Trickle-style suppression reduces redundant airtime in areas where multiple relays overlap.
+
+If no suppression occurs, the relay wraps the raw sensor packet in a FORWARD control message (variant 15, ctrl_type 0x1) addressed to its parent and transmits. The parent, if another relay, repeats the process — unwrap, dedup, re-wrap with its own header, forward to its parent — until the packet reaches a gateway.
+
+#### C.3 Relay-by-Relay Acknowledgement
+
+Each FORWARD is acknowledged by the receiving parent to confirm delivery.
+
+```
+Relay A                          Relay B (A's parent)
+  │                              │
+  │──── FORWARD (seq=X) ───────>│
+  │                              │
+  │<──── ACK (fwd_station=A, ──│
+  │           fwd_seq=X)        │
+  │                              │
+  [clear retry timer]           [forward inner packet upstream]
+```
+
+If no ACK is received within a timeout (recommended: 500ms), the sender retries up to a configurable number of attempts (recommended: 3). After exhausting retries, the sender marks its parent as unreliable, promotes its backup parent (if available), and retransmits the FORWARD to the new parent. If no backup parent is available, the node broadcasts a ROUTE_ERROR and enters an orphaned state, listening for beacons to reattach to the tree.
+
+#### C.4 Fast Failover
+
+When a relay loses all upstream paths, it broadcasts a ROUTE_ERROR so downstream nodes can immediately reroute rather than waiting for beacon timeout.
+
+```
+Relay B (was Relay C's parent)    Relay C (child of B)
+  │                              │
+  [B loses its parent]          │
+  │                              │
+  │──── ROUTE_ERROR ──────────>│
+  │     (reason=parent_lost)    │
+  │                              │
+                                [C immediately seeks
+                                 alternative parent from
+                                 neighbour table]
+```
+
+This converts a multi-minute outage (waiting for 3 missed beacon rounds × 60s = 180s) into sub-second failover in the best case.
+
+#### C.5 Network Monitoring
+
+Relays periodically send NEIGHBOUR_REPORT messages upstream to the gateway, providing a snapshot of their local topology view. These reports are forwarded like any other data (wrapped in FORWARD by upstream relays). The gateway aggregates reports from all relays to build a complete network topology graph, enabling operators to visualise the mesh, identify weak links, and plan node placement.
+
+#### C.6 Reachability Testing (v2)
+
+In a future protocol revision, the gateway may send PING messages routed downstream toward a specific target node. The target responds with a PONG that routes back upstream. This provides on-demand reachability confirmation and round-trip-time measurement without waiting for the target's next scheduled data or neighbour report transmission.
+
+---
+
+### D. Packet Structures
+
+#### D.1 Standard iotdata Header (all packets, all variants)
+
+| Byte | Bits | Field |
+|------|------|-------|
+| 0 | [7:4] | variant_id (4 bits: 0–14 = sensor data, 15 = mesh control) |
+| 0–1 | [3:0]+[7:0] | station_id (12 bits: 0–4095) |
+| 2–3 | [15:0] | sequence (16 bits, big-endian) |
+| 4 | [7:0] | presence bitmap (variants 0–14) or ctrl_type + payload (variant 15) |
+
+The variant and station_id are packed into a 4+12 bit structure:
+
+```
+byte[0] = (variant << 4) | (station_id >> 8)
+byte[1] = station_id & 0xFF
+```
+
+This packing primitive recurs throughout the mesh protocol wherever a 4-bit field is paired with a 12-bit station_id or generation counter.
+
+#### D.2 Variant 15 Common Header
+
+All mesh control packets share this structure:
+
+| Byte | Bits | Field | Notes |
+|------|------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | The mesh node transmitting this packet |
+| 2–3 | 16 | `sender_seq` | Mesh sequence counter (separate from any sensor data sequence if dual-role) |
+| 4 | [7:4] | `ctrl_type` | Mesh packet type (0x0–0xF) |
+| 4 | [3:0] | type-specific | Upper nibble of first payload field |
+
+Bytes 5 onward are control-type-specific. Fields pack as a bitstream from byte 4, MSB-first, with no padding except where explicitly noted.
+
+#### D.3 BEACON (ctrl_type 0x0)
+
+Originated by gateways, rebroadcast by relays. Flows outward from gateway.
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Who (re)broadcast this copy |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4–5 | 4+12 | `ctrl=0x0` \| `gateway_id` | 0–4095 | Originating gateway |
+| 6 | 8 | `cost` | 0–255 | 0 at gateway, +1 per relay |
+| 7 | 4+4 | `flags` \| `generation[11:8]` | | flags: b0 = accepting forwards, b1–b3 reserved |
+| 8 | 8 | `generation[7:0]` | 0–4095 | Beacon round counter |
+
+**Total: 9 bytes.**
+
+Byte packing detail:
+
+```
+buf[4] = (0x0 << 4) | (gateway_id >> 8)
+buf[5] = gateway_id & 0xFF
+buf[6] = cost
+buf[7] = (flags << 4) | ((generation >> 8) & 0x0F)
+buf[8] = generation & 0xFF
+```
+
+Generation uses wraparound comparison: beacon A is newer than B if `(A - B) mod 4096` is in the range 1–2047. At a 60-second beacon interval, generation wraps every ~68 hours.
+
+#### D.4 FORWARD (ctrl_type 0x1)
+
+Wraps a raw sensor packet for relay toward the gateway.
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | This relay |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4 | 4+4 | `ctrl=0x1` \| `ttl[7:4]` | | |
+| 5 | 4+4 | `ttl[3:0]` \| `0` | 0–255 | 4-bit pad aligns inner packet to byte boundary |
+| 6+ | 8×N | `inner_packet` | | Raw iotdata bytes, opaque |
+
+**Total: 6 + N bytes.**
+
+Byte packing detail:
+
+```
+buf[4] = (0x1 << 4) | (ttl >> 4)
+buf[5] = (ttl & 0x0F) << 4          /* lower nibble is zero pad */
+memcpy(&buf[6], inner_packet, N)     /* byte-aligned, no shifting */
+```
+
+The 4-bit pad at byte 5 lower nibble ensures the inner packet starts at a byte boundary (offset 6). This is a deliberate trade-off: the pad may add up to 7 bits of wasted space in the worst case, but avoids requiring every relay to bit-shift the entire opaque payload. For relay hot-path performance (just a memcpy), this is the right choice. The pad nibble is reserved for future use (e.g. priority, retry count).
+
+Inner packet length is derived from the radio layer: `N = rx_packet_len - 6`.
+
+For duplicate suppression, the relay reads bytes 6–9 of the radio frame (the inner packet's iotdata header) to extract the originating sensor's station_id and sequence:
+
+```
+origin_station = ((buf[6] & 0x0F) << 8) | buf[7]
+origin_sequence = (buf[8] << 8) | buf[9]
+```
+
+No FORWARD nesting occurs. Each relay creates a fresh FORWARD with its own sender_station and sender_seq. The inner_packet bytes are always the original sensor transmission, regardless of how many relays have occurred.
+
+#### D.5 ACK (ctrl_type 0x2)
+
+Relay-by-relay acknowledgement of a received FORWARD.
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Parent sending the ACK |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4–5 | 4+12 | `ctrl=0x2` \| `fwd_station` | 0–4095 | Child whose FORWARD is being ACKed |
+| 6–7 | 16 | `fwd_seq` | 0–65535 | Child's sender_seq from the FORWARD |
+
+**Total: 8 bytes.**
+
+#### D.6 ROUTE_ERROR (ctrl_type 0x3)
+
+Broadcast by a relay that has lost all upstream paths.
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Orphaned node |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4 | 4+4 | `ctrl=0x3` \| `reason` | 0–15 | 0=parent_lost, 1=overloaded, 2=shutdown |
+
+**Total: 5 bytes.** The minimum possible mesh packet — just the common header with a reason code.
+
+Reason codes:
+
+| Value | Meaning |
+|-------|---------|
+| 0x0 | parent_lost — all upstream links failed |
+| 0x1 | overloaded — too many children, shedding load |
+| 0x2 | shutdown — graceful node shutdown |
+| 0x3–0xF | reserved |
+
+#### D.7 NEIGHBOUR_REPORT (ctrl_type 0x4)
+
+Periodic topology snapshot sent upstream to the gateway.
+
+**Header:**
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Reporting node |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4–5 | 4+12 | `ctrl=0x4` \| `parent_id` | 0–4095 | Current parent (0xFFF if orphaned) |
+| 6 | 8 | `my_cost` | 0–255 | Reporting node's cost |
+| 7 | 2+6 | `0` \| `num_neighbours` | 0–63 | 2-bit reserved + 6-bit count |
+| 8–9 | 4+12 | `0` \| `gateway_id` | 0–4095 | Which gateway tree |
+
+**Neighbour entry (3 bytes each):**
+
+| Offset | Bits | Field | Range | Notes |
+|--------|------|-------|-------|-------|
+| +0 | 8 | `cost` | 0–255 | Neighbour's advertised cost |
+| +1–2 | 4+12 | `rssi_q4` \| `station_id` | | RSSI quantised to 4 bits + station_id |
+
+**Total: 10 + 3N bytes.**
+
+RSSI quantisation uses 5 dBm steps from a floor of −120 dBm:
+
+| rssi_q4 | Approximate dBm |
+|---------|-----------------|
+| 0 | ≤ −120 |
+| 1 | −115 |
+| 2 | −110 |
+| ... | ... |
+| 10 | −70 |
+| 15 | ≥ −45 |
+
+Encode: `rssi_q4 = clamp((rssi_dbm + 120) / 5, 0, 15)`.
+Decode: `rssi_dbm ≈ (rssi_q4 × 5) − 120`.
+
+Example sizes:
+
+| Neighbours | Total bytes |
+|-----------|-------------|
+| 4 | 22 |
+| 8 | 34 |
+| 16 | 58 |
+| 32 | 106 |
+| 63 | 199 |
+
+All fit within standard LoRa maximum payload sizes (222 bytes at SF7/125kHz, up to 255 at lower spreading factors).
+
+#### D.8 PING (ctrl_type 0x5) — v2
+
+Gateway-originated reachability test, routed downstream toward a target node.
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Current forwarding relay |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4–5 | 4+12 | `ctrl=0x5` \| `target_id` | 0–4095 | Destination node |
+| 6 | 8 | `ttl` | 0–255 | Decremented per relay |
+| 7 | 4+4 | `0` \| `ping_id` | 0–15 | Correlates with PONG |
+
+**Total: 8 bytes.**
+
+#### D.9 PONG (ctrl_type 0x6) — v2
+
+Response to PING, flows upstream toward the gateway.
+
+| Byte | Bits | Field | Range | Notes |
+|------|------|-------|-------|-------|
+| 0–1 | 4+12 | `0xF` \| `sender_station` | 0–4095 | Responding node |
+| 2–3 | 16 | `sender_seq` | 0–65535 | |
+| 4–5 | 4+12 | `ctrl=0x6` \| `gateway_id` | 0–4095 | Route back to originating gateway |
+| 6 | 8 | `relays` | 0–255 | Incremented each relay on return path |
+| 7 | 4+4 | `0` \| `ping_id` | 0–15 | Echoed from PING |
+
+**Total: 8 bytes.**
+
+#### D.10 Reserved (ctrl_type 0x7–0xF)
+
+Reserved for future use. Relays receiving an unrecognised ctrl_type should silently discard the packet.
+
+#### D.11 Packet Summary
+
+| ctrl | Name | Direction | Bytes | Version |
+|------|------|-----------|-------|---------|
+| 0x0 | BEACON | outward (gateway → relays) | 9 | v1 |
+| 0x1 | FORWARD | inward (relays → gateway) | 6 + N | v1 |
+| 0x2 | ACK | single relay (parent → child) | 8 | v1 |
+| 0x3 | ROUTE_ERROR | broadcast | 5 | v1 |
+| 0x4 | NEIGHBOUR_REPORT | inward (relays → gateway) | 10 + 3N | v1 |
+| 0x5 | PING | outward (gateway → target) | 8 | v2 |
+| 0x6 | PONG | inward (target → gateway) | 8 | v2 |
+| 0x7–0xF | reserved | — | — | — |
+
+---
+
+### E. Node Operation and Requirements
+
+#### E.1 Relay Node State
+
+A relay maintains the following state in RAM. Total memory footprint is under 512 bytes for typical configurations.
+
+**Routing state:**
+
+- `parent` — station_id, cost, RSSI, last beacon time (8 bytes)
+- `backup_parent` — same structure (8 bytes)
+- `my_cost` — current relay count to gateway (1 byte)
+- `my_gateway` — gateway_id of the tree this node belongs to (2 bytes)
+- `beacon_generation` — most recently processed generation (2 bytes)
+
+**Neighbour table (up to 63 entries):**
+
+- Per entry: station_id, cost, RSSI, last_heard timestamp (8 bytes each)
+- Typical: 8–16 entries = 64–128 bytes
+- Entries expire after a configurable timeout (recommended: 5× beacon interval)
+
+**Duplicate suppression ring (32–64 entries):**
+
+- Per entry: origin_station_id (12 bits) + origin_sequence (16 bits) = 4 bytes packed
+- Ring of 64 entries = 256 bytes
+- FIFO: oldest entry evicted when ring is full
+
+**Forward retry queue (4–8 entries):**
+
+- Per entry: pending FORWARD packet buffer, retry count, timestamp of last attempt, parent at time of send
+- Entries cleared on ACK receipt or after max retries
+
+#### E.2 Relay Node Main Loop
+
+```
+initialise:
+    listen for beacons to join a tree
+    set status = orphaned
+
+on receive packet:
+    if variant == 15:
+        switch (ctrl_type):
+            BEACON:     process_beacon()
+            FORWARD:    unwrap, dedup, re-wrap, forward to parent
+            ACK:        match against forward retry queue, clear entry
+            ROUTE_ERROR: if sender is my parent, trigger parent reselection
+            other:      discard
+    else:
+        // raw sensor packet (variant 0–14)
+        schedule_forward(packet)   // backoff, dedup, wrap, send to parent
+
+periodic timers:
+    beacon rebroadcast   — on beacon receipt, after 1–5s random jitter
+    forward retry        — check pending queue, retransmit if ACK timeout
+    parent timeout       — if no beacon for 3 rounds, orphan and reselect
+    neighbour report     — send report upstream every N minutes
+    own sensor readings  — if dual-role, encode and transmit own data
+```
+
+#### E.3 Gateway Additions
+
+An existing iotdata gateway requires three additions to support mesh:
+
+**Beacon origination:** Every 60 seconds, transmit a BEACON with cost=0 and an incrementing generation counter. The gateway_id is the gateway's own station_id.
+
+**FORWARD handling:** On receiving a variant 15 packet with ctrl_type 0x1, extract the inner packet starting at byte 6 and process it through the normal iotdata receive path (decode, store, display). Send an ACK back to the FORWARD's sender.
+
+**Duplicate suppression:** Maintain a ring buffer of recently-seen {station_id, sequence} pairs. Check every incoming sensor packet (whether received directly or unwrapped from a FORWARD) against this ring. Discard duplicates, keeping the first arrival.
+
+The existing iotdata decode path for variants 0–14 is completely untouched.
+
+#### E.4 Duplicate Suppression
+
+Duplicate suppression is critical because the same sensor packet may arrive at a gateway via multiple paths: directly, via one relay, or via different relay chains. Without dedup, every measurement would be recorded multiple times.
+
+The dedup key is {origin_station_id, origin_sequence}, extracted from the iotdata header of the original sensor packet. Both relays and gateways maintain dedup rings:
+
+- **At relays:** prevents forwarding the same sensor packet twice (e.g. two relays both hear the same sensor and both forward upstream — the upstream relay deduplicates).
+- **At the gateway:** prevents processing the same data twice when it arrives both directly and via relay.
+
+A ring buffer of 64 entries is sufficient for most deployments. With 16 sensors transmitting every 5–15 seconds, the ring covers approximately 5–20 minutes of history. The ring is FIFO — the oldest entry is evicted when the buffer is full.
+
+#### E.5 Parent Selection and Failover
+
+A relay selects its parent using the following priority:
+
+1. Lowest cost (fewest relays to gateway)
+2. If equal cost, highest RSSI (strongest signal)
+3. If equal cost and RSSI, prefer existing parent (stability)
+
+The backup parent is the second-best candidate by the same criteria.
+
+**Failover triggers:**
+
+- FORWARD ACK timeout after max retries — parent is unreachable.
+- ROUTE_ERROR received from parent — parent has lost its own uplink.
+- Beacon timeout — no beacon from parent's tree for 3 consecutive rounds.
+
+On failover, the node promotes its backup parent, recalculates cost (new parent's cost + 1), and continues forwarding. If no backup is available, the node broadcasts a ROUTE_ERROR with reason=parent_lost and enters orphaned state, listening for beacons from any tree.
+
+#### E.6 Beacon Rebroadcast Rules
+
+A relay rebroadcasts a received beacon only if:
+
+1. The beacon's generation is newer than the last processed generation for this gateway_id (modular comparison: newer if difference mod 4096 is in range 1–2047), OR
+2. The beacon has the same generation but offers a strictly lower cost than the current best seen for this generation.
+
+If the beacon does not meet either condition, it is suppressed. This prevents beacon storms in dense deployments where many nodes hear the same beacon simultaneously. The random rebroadcast jitter (1–5 seconds) further reduces collision probability.
+
+#### E.7 Forward Suppression (Trickle)
+
+When a relay hears a raw sensor packet that it intends to forward, it waits a random backoff period (200–1000ms) before transmitting the FORWARD. During this backoff, if the node hears another relay transmit a FORWARD containing the same inner packet (identified by matching origin station and sequence in the inner header), it cancels its own forward.
+
+This Trickle-style suppression (inspired by RFC 6206) significantly reduces redundant airtime in areas where multiple relay nodes have overlapping coverage. In the worst case (no other relay forwards), it adds 200–1000ms latency to the first relay. In dense areas, it eliminates duplicate transmissions entirely.
+
+---
+
+### F. Deployment Considerations
+
+#### F.1 Hardware
+
+The mesh protocol is designed for off-the-shelf LoRa modules (e.g. Semtech SX1262-based modules like Ebyte E22-900T22D) connected to ESP32-class microcontrollers. No specialised radio hardware is required.
+
+Recommended relay hardware:
+
+- ESP32-C3 or ESP32-S3 (low cost, low power, sufficient RAM and compute)
+- LoRa module with RSSI reporting (for neighbour quality assessment)
+- Reliable power: mains, solar + battery, or PoE where available
+- Weatherproof enclosure with external antenna for outdoor deployment
+
+Relays should have reliable power supplies. Unlike sensors which can sleep between transmissions, relays must listen continuously. Solar + battery is viable in most climates with an appropriately sized panel (5–10W) and battery (5–10Ah).
+
+#### F.2 Range and Relay Budgets
+
+Typical LoRa range per relay in different environments at commonly used settings (SF7–SF9, 125kHz bandwidth, 14–22 dBm transmit power):
+
+| Environment | Typical range per relay | Notes |
+|---|---|---|
+| Open farmland | 2–8 km | Line-of-sight, minimal obstructions |
+| Rolling hills | 1–4 km | Terrain shadowing, partial LOS |
+| Forest / dense vegetation | 0.5–2 km | Significant attenuation, seasonal variation |
+| Urban / buildings | 0.3–1.5 km | Multipath, reflection, penetration loss |
+| Indoor-to-outdoor | 50–500 m | Wall penetration, highly variable |
+
+With a maximum TTL of 255 relays, the theoretical network span is enormous (hundreds of kilometres). In practice, latency and airtime constraints limit useful depth to 5–10 relays in most deployments. Beyond 10 relays, per-packet latency (including backoff, transmission time, and ACK round-trips) accumulates significantly.
+
+#### F.3 Latency Budget
+
+Per-relay latency for a forwarded packet:
+
+| Component | Typical | Notes |
+|---|---|---|
+| Trickle backoff | 200–1000 ms | Random, first-relay only for sensor→relay |
+| LoRa TX time (30 bytes, SF7) | ~50 ms | Higher SF increases proportionally |
+| ACK wait | 0–500 ms | Timeout before retry |
+| Processing overhead | < 1 ms | Negligible on ESP32 |
+
+Estimated end-to-end latency by relay count:
+
+| Relays | Best case | Typical |
+|------|-----------|---------|
+| 1 | ~300 ms | ~700 ms |
+| 2 | ~400 ms | ~1.2 s |
+| 3 | ~500 ms | ~1.8 s |
+| 5 | ~700 ms | ~3.0 s |
+| 10 | ~1.2 s | ~6.0 s |
+
+For environmental sensor data with transmission intervals of 5–15 seconds, these latencies are entirely acceptable. The data is not time-critical — a few seconds of additional delay has no impact on the value of temperature, moisture, or depth readings.
+
+#### F.4 Airtime and Duty Cycle
+
+Every relay consumes airtime. A packet forwarded across 3 relays uses 3× the airtime of a direct transmission plus ACK overhead. In regions with regulatory duty cycle limits (e.g. 1% in EU 868MHz sub-band h1.4), this constrains the aggregate throughput.
+
+Example: 16 sensors transmitting every 10 seconds, average packet 25 bytes.
+
+| Scenario | Packets/sec | Airtime/sec (SF7) | Effective duty cycle |
+|---|---|---|---|
+| All direct to gateway | 1.6 | ~80 ms | ~0.8% |
+| All via 1 relay | 1.6 × 2 (fwd+ack) | ~210 ms | ~2.1% |
+| All via 2 relays | 1.6 × 4 (2×fwd + 2×ack) | ~420 ms | ~4.2% |
+| Mixed (50% direct, 50% 1-relay) | ~2.4 | ~145 ms | ~1.5% |
+
+In practice, most sensors will be direct to gateway. Only sensors with poor direct links use mesh relays. A typical deployment with 3–5 sensors using 1-relay stays well within 1% duty cycle for the relay and gateway.
+
+For deployments requiring higher throughput, use the 915MHz ISM band (Americas, Australia) which has more relaxed duty cycle requirements, or use LoRa spreading factor 7 (fastest airtime) with forward error correction.
+
+#### F.5 Recommended Maximum Configuration Per Deployment
+
+| Parameter | Recommended limit | Hard limit |
+|---|---|---|
+| Sensors per gateway | 50–100 | 4095 (station_id space) |
+| Relays per gateway | 10–20 | No hard limit, bounded by airtime |
+| Maximum useful relays | 5–10 | 255 (TTL field) |
+| Network span | 10–50 km | Limited by relay count × range |
+| Gateways per deployment | 2–5 | No hard limit (each runs independent tree) |
+| Neighbour table size per relay | 8–16 typical | 63 (protocol limit) |
+| Total nodes (sensors + relays) | 100–200 | 4095 (station_id space) |
+
+---
+
+### G. Example Deployments
+
+#### G.1 Moderate Farm (Mixed Arable and Livestock)
+
+A 500-hectare farm with a central farmhouse, outlying barns, fields extending 2–3 km in each direction, and a river valley at the property boundary.
+
+**Challenge:** Sensors in low-lying fields near the river are 3 km from the farmhouse with a ridge blocking line-of-sight. A weather station on a north-facing hillside has intermittent connectivity.
+
+**Deployment:**
+
+```
+                                    [WS-4] weather station (hilltop)
+                                       |
+                                     direct
+                                       |
+[SM-1] soil ──direct──> [GATEWAY] farmhouse
+[SM-2] soil ──direct──/     |
+[WL-1] water ─direct──/     |
+                             |
+                         direct
+                             |
+                    [HOP-A] barn roof (solar powered)
+                             |
+                         1 relay
+                         /       \
+               [SM-3] soil    [SM-4] soil     (low field, behind ridge)
+               [WS-5] weather station          (river valley)
+               [WL-2] water level              (river gauge)
+```
+
+Configuration: 1 gateway, 1 relay, 8 sensors. Relay A sits on a barn roof at mid-elevation with clear line-of-sight to both the gateway and the river valley. Sensors SM-3, SM-4, WS-5, and WL-2 transmit normally. Relay A hears them (they cannot reach the gateway directly), wraps their data in FORWARD messages, and sends upstream to the gateway. Total relay load on Relay A: 4 sensors × ~0.1 packets/sec = ~0.4 FORWARD packets/sec. Well within capacity.
+
+**Seasonal variation:** In summer, tree canopy growth may degrade Relay A's link to WS-5. If WS-5's data becomes intermittent, deploy Relay B near the river to provide a 2-relay path: WS-5 → Relay B → Relay A → Gateway. Relay B automatically integrates — it hears Relay A's rebroadcast beacon (cost=1), sets itself as cost=2, and begins forwarding.
+
+#### G.2 Forest Research Station
+
+A 2000-hectare managed forest with environmental sensors distributed along trails and watercourses. Dense canopy limits per-relay range to 500m–1.5km. A research cabin at the forest edge serves as the gateway location, with a second gateway at a fire lookout tower 4 km away.
+
+**Challenge:** Sensors deep in the forest are 3–5 km from either gateway with no line-of-sight. Canopy attenuation is severe.
+
+**Deployment:**
+
+```
+[GATEWAY-1] research cabin          [GATEWAY-2] fire tower
+      |                                    |
+   direct                              direct
+      |                                    |
+  [HOP-1] ridge clearing              [HOP-4] trail junction
+      |                                    |
+  1 relay from GW-1                     1 relay from GW-2
+      |                                    |
+  [HOP-2] stream crossing             [HOP-5] canopy gap
+      |                                    |
+  2 relays from GW-1                    2 relays from GW-2
+      |                                    |
+  [SM-1..4] soil sensors              [ENV-1..3] environment
+  [WL-1] water level                  [WS-1] weather station
+      |
+  [HOP-3] deep forest
+      |
+  3 relays from GW-1
+      |
+  [SM-5..8] deep soil sensors
+  [AQ-1] air quality
+```
+
+Configuration: 2 gateways, 5 relays, ~16 sensors. Maximum depth is 3 relays. Relays are placed at natural clearings, ridge lines, trail junctions, and stream crossings where canopy gaps improve radio propagation.
+
+**Redundancy:** HOP-2 can hear beacons from both GW-1 (via HOP-1, cost=2) and GW-2 (via HOP-4 and HOP-5, cost=3). It normally routes via GW-1 (lower cost). If HOP-1 fails, HOP-2 receives no beacons from GW-1's tree, times out after 3 rounds, and adopts GW-2's tree via HOP-5 at cost=3. Sensors SM-1..4 and WL-1 continue to operate without interruption — they are unaware of the topology change.
+
+#### G.3 Considerations for Moving Sensors
+
+If a sensor is mounted on a vehicle (e.g. a tractor, livestock tracker, or patrol vehicle) that moves between coverage areas, the protocol handles this naturally because sensors are not mesh-aware.
+
+**How it works:** The vehicle-mounted sensor transmits periodically as always. As it moves, different relays (or the gateway directly) hear its transmissions. Whichever relay hears the packet forwards it. If multiple relays hear it, Trickle suppression ensures only one forwards. As the vehicle moves out of one relay's range and into another's, forwarding seamlessly transitions.
+
+**What works well:** Slow-moving vehicles (tractors, livestock) that spend minutes to hours within each relay's coverage area. The sensor's transmission interval (5–15 seconds) means multiple packets are sent during each coverage window.
+
+**What works less well:** Fast-moving vehicles passing through a relay's range in seconds. If the sensor's transmission interval is longer than the transit time through coverage, packets may be missed during the transition between nodes. This is inherent to any non-continuous transmission scheme and is not specific to the mesh protocol.
+
+**The sensor firmware needs no changes.** The mesh adapts to the sensor's location in real time. The gateway sees the same station_id and sequence numbers regardless of which relay forwarded the data. Duplicate suppression handles cases where the sensor is within range of multiple relays simultaneously.
+
+---
+
+### H. Protocol Version History
+
+| Version | Description |
+|---------|-------------|
+| v1 | Initial mesh protocol. BEACON, FORWARD, ACK, ROUTE_ERROR, NEIGHBOUR_REPORT. Gradient-based routing with single parent selection and relay-by-relay acknowledgement. |
+| v2 (planned) | Adds PING/PONG for gateway-initiated reachability testing. Requires downstream routing capability at relays. |
+
+### I. Reserved Identifiers
+
+| Identifier | Value | Meaning |
+|---|---|---|
+| variant_id | 0x0F (15) | Mesh control packet |
+| ctrl_type | 0x0–0x6 | Defined mesh packet types |
+| ctrl_type | 0x7–0xF | Reserved for future use |
+| parent_id | 0xFFF | Orphaned (no parent) |
+| station_id | 0x000 | Reserved (do not assign to nodes) |
+| reason codes | 0x3–0xF | Reserved for future use |
+
+---
+
+### J. Future Considerations
+
+#### J.1 Cross-Gateway Duplicate Suppression
+
+In multi-gateway deployments, a sensor positioned between two gateways (or a relay node with paths to both) may deliver the same packet to multiple gateways. Each gateway performs local dedup correctly, but the upstream system (database, MQTT broker, dashboard) receives the same measurement data twice from different gateway sources.
+
+**Lightweight solution: UDP dedup broadcast.** Each gateway UDP-broadcasts a compact dedup notification on the local network whenever it processes a sensor packet. The notification contains only the dedup key — no measurement data:
+
+```
+[gateway_id]        2 bytes     (12-bit station_id of the broadcasting gateway)
+[num_entries]       1 byte      (number of dedup tuples in this batch, 1–32)
+[entries...]        4 bytes each:
+    [station_id]    2 bytes     (12-bit origin sensor, zero-padded to 16 bits)
+    [sequence]      2 bytes     (16-bit origin sequence)
+```
+
+Maximum batch: 32 entries × 4 bytes + 3 byte header = 131 bytes per UDP datagram.
+
+On receipt, other gateways add these tuples to their local dedup ring. If a subsequent FORWARD or direct sensor packet arrives with a station_id and sequence already in the ring (whether from local receive or cross-gateway notification), it is suppressed.
+
+**Timing:** On a LAN, UDP broadcast latency is under 1ms. LoRa packet transmission plus relay backoff is typically 200–1000ms. This means the cross-gateway notification almost always arrives before the second copy of the sensor data, achieving reliable suppression. In the rare case where two gateways receive the same packet within 1ms of each other (both heard the sensor directly), both may process it. This is acceptable — the upstream system can perform its own dedup on {station_id, sequence} as a final safety net.
+
+**Implementation:** This is entirely optional. A deployment with a single gateway has no need for it. A multi-gateway deployment works correctly without it — the upstream system simply sees occasional duplicates. The UDP broadcast layer can be added to gateways independently of the mesh protocol and requires no changes to relays or sensors.
+
+**Alternative approaches:**
+
+- **Shared MQTT topic** — gateways publish dedup tuples to a topic such as `iotdata/mesh/dedup/{gateway_id}`. Other gateways subscribe. Adds dependency on the MQTT broker being available but piggybacks on infrastructure that likely already exists for sensor data delivery.
+- **Upstream dedup only** — skip gateway-to-gateway coordination entirely. The database or ingestion layer deduplicates on {station_id, sequence, time_window}. Simplest to implement, slightly higher upstream load from duplicate records.
+- **Station-id range assignment** — the operator assigns non-overlapping station_id ranges to gateways. A gateway only processes packets from its assigned range. Simple but inflexible — a sensor that moves or a relay that reroutes to a different gateway may fall outside the assigned range. Not recommended for dynamic mesh deployments.
+
+#### J.2 Potential Additional Control Packet Types
+
+The ctrl_type field has 10 unused values (0x7–0xF, plus 0x5–0x6 reserved for PING/PONG v2). Future protocol revisions may define additional packet types. The following have been identified as candidates:
+
+**CONFIG_PUSH (candidate: 0x7)** — Gateway pushes configuration parameters to a specific relay. Routed downstream like PING. Enables remote adjustment of beacon intervals, transmit power, parent selection thresholds, and reporting frequency without physical access to the node.
+
+Possible payload: target_station(12), config_key(8), config_value(16). Config keys could include:
+
+| Key | Meaning | Value range |
+|-----|---------|-------------|
+| 0x01 | Beacon rebroadcast interval (seconds) | 10–600 |
+| 0x02 | Forward retry count | 0–15 |
+| 0x03 | Forward ACK timeout (ms / 100) | 1–50 (100ms–5000ms) |
+| 0x04 | Parent timeout (missed beacon rounds) | 1–15 |
+| 0x05 | Neighbour report interval (minutes) | 1–60 |
+| 0x06 | Transmit power level | Module-specific |
+| 0x07 | Force rejoin (clear routing state) | 1 = trigger |
+
+**CONFIG_ACK (candidate: 0x8)** — Target node acknowledges receipt of CONFIG_PUSH. Routes upstream. Confirms the configuration was applied.
+
+**PATH_TRACE (candidate: 0x9)** — Diagnostic packet that records the station_id of every relay it traverses, building a full path trace from sensor to gateway. A relay appends its own station_id (2 bytes) to the payload before forwarding. The gateway receives a complete ordered list of the relay chain.
+
+Possible payload: origin_station(12), ttl(8), relay_count(8), then relay_count × station_id(12) entries packed sequentially. Maximum path of 15 relays = 5 + 1 + 1 + 23 = 30 bytes. This would be triggered by the gateway wrapping a specific sensor's next FORWARD in a PATH_TRACE envelope, or by a relay when it detects a new sensor (first time seeing a station_id).
+
+**NETWORK_RESET (candidate: 0xA)** — Gateway broadcasts a command for all relays to flush routing state and re-discover the topology from scratch. Nuclear option for when the mesh becomes wedged in a suboptimal configuration. Payload: just a confirmation nonce to prevent accidental triggering.
+
+**TIME_SYNC (candidate: 0xB)** — If a future deployment requires coordinated sleep windows or TDMA-style channel access, a dedicated time synchronisation packet could carry a high-resolution timestamp from the gateway. Relays would estimate propagation delay from relay count and adjust their local clocks. However, for the current protocol's CSMA-based channel access, this is unnecessary.
+
+**GROUP_FORWARD (candidate: 0xC)** — Aggregation packet where a relay bundles multiple small sensor packets into a single transmission to reduce per-packet overhead and ACK traffic. Payload: num_packets(6), then concatenated inner packets with 1-byte length prefixes. Most useful in dense deployments where a single relay forwards for many sensors. Trade-off: increases single-packet airtime and failure blast radius (losing one aggregated transmission loses multiple sensor readings).
+
+#### J.3 Extended Neighbour Metrics
+
+The current NEIGHBOUR_REPORT carries cost, RSSI, and station_id per neighbour. Future revisions may extend neighbour entries with additional quality metrics:
+
+- **Packet delivery ratio (PDR)** — percentage of expected packets actually received from this neighbour over a window. 4 bits (16 levels, ~6% granularity) would suffice. Better parent selection metric than instantaneous RSSI.
+- **Asymmetric link detection** — a flag indicating whether the neighbour has acknowledged hearing this node. A neighbour with good inbound RSSI but no evidence of hearing this node's transmissions is a poor parent candidate (asymmetric link, common with differing antenna heights or transmit powers).
+- **Neighbour role** — 2 bits indicating whether the neighbour is a gateway, relay, or sensor. Currently inferred from behaviour (gateways originate beacons, relays rebroadcast, sensors don't participate), but an explicit role field simplifies topology visualisation.
+
+These extensions would increase neighbour entry size from 3 to 4 bytes. The num_neighbours field (6 bits, max 63) and LoRa payload limits (222 bytes at SF7) would support up to 53 extended entries — still more than sufficient.
+
+#### J.4 Security Considerations
+
+The v1 protocol includes no authentication or encryption. For agricultural and environmental monitoring deployments, the threat model is typically low — the data has no commercial sensitivity and the radio channel is shared ISM spectrum. However, for deployments where integrity matters:
+
+**Packet authentication** — a shared 4-byte key (pre-configured on all mesh nodes and gateways) could be used to compute a 2-byte truncated HMAC appended to every mesh control packet. This prevents rogue nodes from injecting false beacons or FORWARD packets. The key would be distributed during provisioning and is not expected to change frequently. 2 bytes provides 65536 possible values — sufficient to prevent casual injection, though not secure against a determined attacker with radio access.
+
+**Replay protection** — the existing sequence number provides partial replay protection. A replayed packet with a previously-seen sequence number is caught by dedup. However, a replayed BEACON with a valid-looking generation could disrupt routing. Binding the HMAC to the generation counter and gateway_id prevents this.
+
+**Encryption** — encrypting the inner packet within FORWARD would prevent eavesdropping on sensor data. AES-128 in CTR mode adds zero overhead to the packet size (ciphertext is same length as plaintext) and requires only a shared key and a nonce derivable from {station_id, sequence}. However, this adds computational cost at every relay (decrypt to verify, re-encrypt to forward) which is unnecessary if the relay treats the inner packet as opaque — the relay does not need to read the inner packet's contents, so the inner packet can remain encrypted end-to-end between sensor and gateway with no relay involvement. The sensor would encrypt before transmission, the gateway would decrypt after receipt, and relay nodes would forward the encrypted blob unchanged.
+
+#### J.5 Power Management for Relay Nodes
+
+Relays must listen continuously, which prevents the aggressive sleep modes used by transmit-only sensors. Typical listen-mode current for an SX1262 LoRa module is 5–8 mA; combined with an ESP32-C3 in active mode (~25–50 mA average with WiFi disabled), total system draw is 30–60 mA.
+
+**Solar viability:** At 12V with a 30mA average draw, daily consumption is ~8.6Wh. A 10W solar panel in temperate latitudes produces 20–40Wh/day (seasonal variation). A 10Ah 12V battery provides ~3–4 days of autonomy in complete cloud cover. This is viable for most deployments.
+
+**Duty-cycled listening (future optimisation):** If beacon intervals are synchronised, relays could sleep between expected beacon windows and wake only during scheduled listen slots. This requires the TIME_SYNC mechanism described in J.2 and adds complexity to the parent selection logic (must account for clock drift during sleep). Not recommended for v1 but noted as a path to lower power consumption if needed.
+
+**Low-power relay mode:** A relay with no downstream children (leaf relay — only forwarding for sensors it directly hears) could adopt a semi-synchronised schedule: listen for a window after each expected sensor transmission, forward any received packets, then sleep until the next expected window. This requires the relay to learn sensor transmission intervals through observation, which is feasible since sensors typically transmit at regular (if slightly randomised) intervals.
+
+#### J.6 Network Capacity Planning
+
+The mesh protocol's capacity is fundamentally limited by shared airtime on the LoRa channel. All nodes — sensors, relays, and gateways — share a single frequency and spreading factor (assuming no frequency planning).
+
+**Single-channel capacity at SF7/125kHz:**
+
+A 30-byte LoRa packet at SF7/125kHz takes approximately 50ms of airtime. At 1% duty cycle (EU 868MHz regulatory limit), one device can transmit 20 packets per 100 seconds, or 0.2 packets/second sustained.
+
+In a mesh deployment, the bottleneck is the gateway's immediate neighbourhood — all forwarded packets must pass through the last relay to the gateway. If 10 relay paths converge on a single relay-1 node, that node must forward 10× the traffic of any individual sensor. With 100 sensors at 10-second intervals producing 10 packets/second aggregate, the relay-1 node must forward all 10 plus transmit ACKs, consuming ~1 second of airtime per second — impossible under any duty cycle regulation.
+
+**Mitigation strategies:**
+
+- **Multiple relay-1 nodes** — deploy 2–4 relays within direct range of the gateway, each serving a different angular sector or downstream branch. Distributes the forwarding load.
+- **Multiple gateways** — each gateway serves a subset of the network. Cross-gateway dedup (J.1) prevents duplicate processing.
+- **Frequency planning** — assign different LoRa channels to different branches of the mesh. Requires relays to manage multiple frequencies, adding hardware or scheduling complexity.
+- **Adaptive transmission intervals** — sensors or the CONFIG_PUSH mechanism could adjust transmission rates based on network load. Sensors deeper in the mesh (more relay) could transmit less frequently.
+- **Aggregation** — the GROUP_FORWARD packet type (J.2) could reduce per-packet overhead and ACK count at the cost of increased single-transmission airtime.
+
+**Rule of thumb:** For a single LoRa channel at SF7 with 1% duty cycle, plan for no more than 30–50 sensors per gateway, with no more than 20 forwarded through any single relay-1 relay. Scale beyond this by adding gateways, not by deepening the mesh.
+
+#### J.7 Interoperability and Versioning
+
+The protocol currently has no version negotiation mechanism. All mesh nodes are expected to run the same protocol version. For future-proofing:
+
+- **Reserved ctrl_types (0x7–0xF)** should be silently discarded by nodes that do not recognise them. This allows new packet types to be deployed incrementally — gateways can be updated first, followed by relays, without causing errors on nodes still running older firmware.
+- **Reserved flag bits** in the BEACON packet provide a forward-compatible extension point. A new capability can be signalled by setting a flag bit. Older nodes ignore unknown flags but continue to process the beacon normally.
+- **The FORWARD packet is inherently version-agnostic** — relay nodes do not interpret the inner payload, so changes to iotdata sensor variants, field definitions, or encoding formats require no mesh firmware updates.
+
+If a formal version field becomes necessary, it could be encoded in the BEACON's reserved flag bits (e.g. flags bits 2–3 as a 2-bit protocol version, supporting 4 versions). Alternatively, a VERSION_ANNOUNCE packet type could be defined using one of the reserved ctrl_type slots.
 
 ---
 
