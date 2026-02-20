@@ -194,6 +194,9 @@ static void _init_sensor(iotsim_t *sim, iotsim_sensor_t *s) {
         s->rad_cpm = (uint16_t)_rng_range(sim, 10, 80);
         s->rad_dose = (uint16_t)_rng_range(sim, 3, 30);
         break;
+
+    default:
+        break;
     }
 }
 
@@ -289,6 +292,9 @@ static void _drift_sensor(iotsim_t *sim, iotsim_sensor_t *s) {
         s->rad_cpm = (uint16_t)_clamp(s->rad_cpm + _jitter(sim, 5), 0, 1000);
         s->rad_dose = (uint16_t)_clamp(s->rad_dose + _jitter(sim, 2), 0, 500);
         break;
+
+    default:
+        break;
     }
 }
 
@@ -382,6 +388,9 @@ static bool _encode_sensor(iotsim_t *sim, iotsim_sensor_t *s, iotsim_packet_t *o
         iotdata_encode_environment(&enc, _to_temp(s->temperature), s->pressure, s->humidity);
         if (extras)
             iotdata_encode_flags(&enc, s->flags);
+        break;
+
+    default:
         break;
     }
 
