@@ -214,7 +214,8 @@ The following principles guided the protocol design:
 
   5. **Extensibility via TLV.**  Diagnostic data, firmware metadata,
      and user-defined payloads use a trailing TLV (type-length-value)
-     section that does not affect the fixed field layout.
+     section that does not affect the fixed field layout. These are
+     typically designed to be system data, rather than sensor data.
 
   6. **Encode-only on the sensor.**  The encoder is small enough for
      resource-constrained MCUs.  JSON serialisation and other
@@ -1411,7 +1412,8 @@ but is not needed for rendering.
 The TLV (Type-Length-Value) section provides an extensible mechanism
 for diagnostic data, firmware metadata, user-defined payloads, and
 future sensor metadata.  It is present only when the TLV bit (bit 6
-of Presence Byte 0) is set.
+of Presence Byte 0) is set.  By preference, it should not be used for
+sensor data per se: such data should have a designated field type.
 
 The TLV section begins immediately after the last data field, at
 whatever bit offset that field ended.  There is no alignment padding.
