@@ -8,18 +8,24 @@
  * compile-time configuration.  A single source file compiled with
  * different defines to verify all build variants compile, link, and run.
  *
+ * Uses a custom all-fields variant map (not VARIANT_MAPS_DEFAULT) so
+ * that every field type — including IMAGE when available — is exercised
+ * under every compile-time configuration.
+ *
  * Variants built by `make test-versions`:
  *
  *   FULL            All features (encode + decode + print + dump + JSON)
  *   NO_PRINT        Exclude iotdata_print / iotdata_print_to_string
  *   NO_DUMP         Exclude iotdata_dump / iotdata_dump_to_string
  *   NO_JSON         Exclude JSON support (no cJSON dependency)
- *   NO_DECODE     Encoder only (no decode/print/dump/JSON)
- *   NO_ENCODE     Decoder only (no encoder)
+ *   NO_DECODE       Encoder only (no decode/print/dump/JSON)
+ *   NO_ENCODE       Decoder only (no encoder)
  *   NO_FLOATING     Integer-only mode (int32_t scaled values)
  *
  * Compile (example, full variant):
- *   cc -DIOTDATA_VARIANT_MAPS_DEFAULT test_version.c iotdata.c -lm -lcjson -o test_version_FULL
+ *   cc -DIOTDATA_VARIANT_MAPS=test_version_variants
+ *      -DIOTDATA_VARIANT_MAPS_COUNT=1
+ *      test_version.c iotdata.c -lm -lcjson -o test_version_FULL
  */
 
 #include "iotdata.h"
@@ -27,6 +33,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* -------------------------------------------------------------------------
+ * All-fields variant map
+ *
+ * No IOTDATA_ENABLE_SELECTIVE, so every field type is compiled in.
+ * This map references all of them so encode/decode/print/dump/JSON
+ * paths are fully exercised.
+ * -----------------------------------------------------------------------*/
+
+const iotdata_variant_def_t test_version_variants[] = {
+    [0] = {
+        .name = "test_all_fields",
+        .num_pres_bytes = 3,
+        .fields = {
+            /* --- pres0 (6 fields) --- */
+            { IOTDATA_FIELD_BATTERY,         "battery" },
+            { IOTDATA_FIELD_LINK,            "link" },
+            { IOTDATA_FIELD_ENVIRONMENT,     "environment" },
+            { IOTDATA_FIELD_WIND,            "wind" },
+            { IOTDATA_FIELD_RAIN,            "rain" },
+            { IOTDATA_FIELD_SOLAR,           "solar" },
+            /* --- pres1 (7 fields) --- */
+            { IOTDATA_FIELD_CLOUDS,          "clouds" },
+            { IOTDATA_FIELD_AIR_QUALITY,     "air_quality" },
+            { IOTDATA_FIELD_RADIATION,       "radiation" },
+            { IOTDATA_FIELD_DEPTH,           "depth" },
+            { IOTDATA_FIELD_POSITION,        "position" },
+            { IOTDATA_FIELD_DATETIME,        "datetime" },
+            { IOTDATA_FIELD_FLAGS,           "flags" },
+            /* --- pres2 (variable-length field) --- */
+            { IOTDATA_FIELD_IMAGE,           "image" },
+            { IOTDATA_FIELD_NONE,            NULL },
+            { IOTDATA_FIELD_NONE,            NULL },
+            { IOTDATA_FIELD_NONE,            NULL },
+            { IOTDATA_FIELD_NONE,            NULL },
+            { IOTDATA_FIELD_NONE,            NULL },
+            { IOTDATA_FIELD_NONE,            NULL }
+        },
+    },
+};
 
 /* -------------------------------------------------------------------------
  * Build label
@@ -70,9 +116,7 @@ static int errors;
  * Pre-built packet for NO_ENCODE
  *
  * We cannot encode when the encoder is excluded, so we embed a known-good
- * packet:  variant 0, station 1, sequence 1, pres0 = 0x21 (battery +
- * environment), battery 75% charging, temp 22.5°C, pressure 1013 hPa,
- * humidity 65%.
+ * packet:  variant 0, station 1, sequence 1, with all fields populated.
  *
  * This was captured from a normal build and verified against the decoder.
  * If the wire format changes this array must be regenerated.
@@ -127,14 +171,20 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
     rc = iotdata_encode_flags(&enc, 0x42);
     CHECK(rc == IOTDATA_OK, "encode_flags");
 
-    rc = iotdata_encode_air_quality_index(&enc, 75);
-    CHECK(rc == IOTDATA_OK, "encode_air_quality_index");
+    {
+        const uint16_t pm[IOTDATA_AIR_QUALITY_PM_COUNT] = { 35, 12, 50, 25 }, gas[IOTDATA_AIR_QUALITY_GAS_COUNT] = { 400, 50, 30, 10, 5, 200, 100, 80 };
+        rc = iotdata_encode_air_quality(&enc, 75, 0x0F, pm, 0xFF, gas);
+        CHECK(rc == IOTDATA_OK, "encode_air_quality");
+    }
 
     rc = iotdata_encode_clouds(&enc, 4);
     CHECK(rc == IOTDATA_OK, "encode_clouds");
 
     rc = iotdata_encode_radiation(&enc, 100, 50); /* 0.50 µSv/h */
     CHECK(rc == IOTDATA_OK, "encode_radiation");
+
+    rc = iotdata_encode_depth(&enc, 150); /* 150 cm */
+    CHECK(rc == IOTDATA_OK, "encode_depth");
 
     rc = iotdata_encode_position(&enc, 515072220, -1275000); /* × 1e7 */
     CHECK(rc == IOTDATA_OK, "encode_position");
@@ -166,8 +216,11 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
     rc = iotdata_encode_flags(&enc, 0x42);
     CHECK(rc == IOTDATA_OK, "encode_flags");
 
-    rc = iotdata_encode_air_quality_index(&enc, 75);
-    CHECK(rc == IOTDATA_OK, "encode_air_quality_index");
+    {
+        const uint16_t pm[IOTDATA_AIR_QUALITY_PM_COUNT] = { 35, 12, 50, 25 }, gas[IOTDATA_AIR_QUALITY_GAS_COUNT] = { 400, 50, 30, 10, 5, 200, 100, 80 };
+        rc = iotdata_encode_air_quality(&enc, 75, 0x0F, pm, 0xFF, gas);
+        CHECK(rc == IOTDATA_OK, "encode_air_quality");
+    }
 
     rc = iotdata_encode_clouds(&enc, 4);
     CHECK(rc == IOTDATA_OK, "encode_clouds");
@@ -175,12 +228,23 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
     rc = iotdata_encode_radiation(&enc, 100, 0.50f);
     CHECK(rc == IOTDATA_OK, "encode_radiation");
 
+    rc = iotdata_encode_depth(&enc, 150); /* 150 cm */
+    CHECK(rc == IOTDATA_OK, "encode_depth");
+
     rc = iotdata_encode_position(&enc, 51.5072220, -0.1275000);
     CHECK(rc == IOTDATA_OK, "encode_position");
 
     rc = iotdata_encode_datetime(&enc, 86400);
     CHECK(rc == IOTDATA_OK, "encode_datetime");
 #endif
+
+    {
+        /* 24×18 bilevel raw = 24*18/8 = 54 bytes, checkerboard pattern */
+        uint8_t test_img[54];
+        memset(test_img, 0xAA, sizeof(test_img));
+        rc = iotdata_encode_image(&enc, IOTDATA_IMAGE_FMT_BILEVEL, IOTDATA_IMAGE_SIZE_24x18, IOTDATA_IMAGE_COMP_RAW, 0, test_img, sizeof(test_img));
+        CHECK(rc == IOTDATA_OK, "encode_image");
+    }
 
     rc = iotdata_encode_end(&enc, out_len);
     CHECK(rc == IOTDATA_OK, "encode_end");
@@ -201,8 +265,6 @@ int main(void) {
     uint8_t buf[256];
     size_t len = 0;
 
-    /* ---- Encode (or load prebuilt) ---- */
-
 #if defined(IOTDATA_NO_ENCODE)
     memcpy(buf, prebuilt_pkt, prebuilt_len);
     len = prebuilt_len;
@@ -213,13 +275,10 @@ int main(void) {
     }
 #endif
 
-    /* ---- Decode ---- */
-
 #if !defined(IOTDATA_NO_DECODE)
     {
         iotdata_decoded_t decoded;
         iotdata_status_t rc;
-
         rc = iotdata_decode(buf, len, &decoded);
         CHECK(rc == IOTDATA_OK, "decode");
         CHECK(decoded.variant == 0, "variant == 0");
@@ -230,47 +289,36 @@ int main(void) {
     }
 #endif
 
-    /* ---- Print ---- */
-
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
     {
         char str[4096];
         iotdata_status_t rc;
-
         rc = iotdata_print_to_string(buf, len, str, sizeof(str));
         CHECK(rc == IOTDATA_OK, "print_to_string");
         CHECK(strlen(str) > 0, "print output non-empty");
     }
 #endif
 
-    /* ---- Dump ---- */
-
 #if !defined(IOTDATA_NO_DUMP) && !defined(IOTDATA_NO_DECODE)
     {
         char str[8192];
         iotdata_status_t rc;
-
         rc = iotdata_dump_to_string(buf, len, str, sizeof(str), true);
         CHECK(rc == IOTDATA_OK, "dump_to_string");
         CHECK(strlen(str) > 0, "dump output non-empty");
     }
 #endif
 
-    /* ---- JSON round-trip ---- */
-
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE) && !defined(IOTDATA_NO_ENCODE)
     {
         char *json = NULL;
         iotdata_status_t rc;
-
         rc = iotdata_decode_to_json(buf, len, &json);
         CHECK(rc == IOTDATA_OK, "decode_to_json");
         CHECK(json != NULL, "json non-null");
-
         if (json) {
             uint8_t buf2[256];
             size_t len2;
-
             memset(buf2, 0, sizeof(buf2));
             rc = iotdata_encode_from_json(json, buf2, sizeof(buf2), &len2);
             CHECK(rc == IOTDATA_OK, "encode_from_json");
@@ -281,8 +329,6 @@ int main(void) {
     }
 #endif
 
-    /* ---- Error strings ---- */
-
 #if !defined(IOTDATA_NO_ERROR_STRINGS)
     {
         const char *s = iotdata_strerror(IOTDATA_OK);
@@ -290,8 +336,6 @@ int main(void) {
         CHECK(strlen(s) > 0, "strerror non-empty");
     }
 #endif
-
-    /* ---- Result ---- */
 
     if (errors == 0)
         printf("PASS\n");

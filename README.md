@@ -1382,7 +1382,7 @@ definition):
 ```json
 {
   "image": {
-    "pixel_format": "bilevel",
+    "format": "bilevel",
     "size": "32x24",
     "compression": "rle",
     "fragment": false,
@@ -1396,10 +1396,9 @@ The gateway performs decompression before base64-encoding the
 `pixels` field, so downstream consumers receive uniform raw pixel
 data regardless of the compression method used on the wire.
 
-  - `pixel_format`: One of `"bilevel"`, `"grey4"`, `"grey16"`.
+  - `format`: One of `"bilevel"`, `"grey4"`, `"grey16"`.
   - `size`: One of `"24x18"`, `"32x24"`, `"48x36"`, `"64x48"`.
-  - `compression`: The wire compression method for diagnostics:
-    `"raw"`, `"rle"`, `"heatshrink"`.
+  - `compression`: One of `"raw"`, `"rle"`, `"heatshrink"`.
   - `fragment`: Boolean.
   - `invert`: Boolean.
   - `pixels`: Base64-encoded decompressed pixel data.
@@ -2048,7 +2047,7 @@ wire format bit:
 
 | Wire format | `"format"` | `"data"` contains            |
 |-------------|------------|------------------------------|
-| raw (0)     | `"raw"`    | Hex-encoded byte string      |
+| raw (0)     | `"raw"`    | Base64-encoded byte string   |
 | string (1)  | `"string"` | Decoded text string          |
 
 Examples:
@@ -2056,14 +2055,14 @@ Examples:
 ```json
 {
   "data": [
-    { "type": 32, "format": "raw", "data": "0a1b2c3d" },
+    { "type": 32, "format": "raw", "data": "A0b4901=" },
     { "type": 33, "format": "string", "data": "HELLO WORLD" }
   ]
 }
 ```
 
 This ensures that all TLV entries are representable in JSON even if
-the gateway has no knowledge of the type's semantics.  The raw hex
+the gateway has no knowledge of the type's semantics.  The raw Base64
 or decoded string is passed through for downstream consumers to
 interpret.
 
@@ -2072,14 +2071,14 @@ interpret.
 The `"format"` field serves as a discriminator for how to parse the
 `"data"` field.  The complete set of values:
 
-| Value        | `data` type   | Source                                   |
-|--------------|---------------|------------------------------------------|
-| `"raw"`      | string (hex)  | Fallback for unrecognised raw TLV types  |
-| `"string"`   | string (text) | String-format TLVs (wire or defined)     |
-| `"version"`  | object        | Version TLV (0x01)                       |
-| `"status"`   | object        | Status TLV (0x02)                        |
-| `"health"`   | object        | Health TLV (0x03)                        |
-| `"config"`   | object        | Config TLV (0x04)                        |
+| Value        | `data` type      | Source                                   |
+|--------------|------------------|------------------------------------------|
+| `"raw"`      | string (Base64)  | Fallback for unrecognised raw TLV types  |
+| `"string"`   | string (text)    | String-format TLVs (wire or defined)     |
+| `"version"`  | object           | Version TLV (0x01)                       |
+| `"status"`   | object           | Status TLV (0x02)                        |
+| `"health"`   | object           | Health TLV (0x03)                        |
+| `"config"`   | object           | Config TLV (0x04)                        |
 
 Note that `"string"` appears both as the defined format for
 Diagnostic (0x05) and Userdata (0x06), and as the fallback for

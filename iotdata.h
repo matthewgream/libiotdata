@@ -99,6 +99,7 @@ extern "C" {
 #define IOTDATA_ENABLE_POSITION
 #define IOTDATA_ENABLE_DATETIME
 #define IOTDATA_ENABLE_FLAGS
+#define IOTDATA_ENABLE_IMAGE
 #endif
 
 /* ---------------------------------------------------------------------------
@@ -426,6 +427,64 @@ extern "C" {
 #endif
 
 /* ---------------------------------------------------------------------------
+ * Field IMAGE
+ * -------------------------------------------------------------------------*/
+
+#if defined(IOTDATA_ENABLE_IMAGE)
+
+#define IOTDATA_IMAGE_DATA_MAX         254 /* max pixel data after control byte */
+
+/* Control byte: format(2) | size(2) | compression(2) | flags(2) */
+#define IOTDATA_IMAGE_FMT_BILEVEL      0 /* 1 bpp */
+#define IOTDATA_IMAGE_FMT_GREY4        1 /* 2 bpp */
+#define IOTDATA_IMAGE_FMT_GREY16       2 /* 4 bpp */
+
+#define IOTDATA_IMAGE_SIZE_24x18       0
+#define IOTDATA_IMAGE_SIZE_32x24       1
+#define IOTDATA_IMAGE_SIZE_48x36       2
+#define IOTDATA_IMAGE_SIZE_64x48       3
+
+#define IOTDATA_IMAGE_COMP_RAW         0
+#define IOTDATA_IMAGE_COMP_RLE         1
+#define IOTDATA_IMAGE_COMP_HEATSHRINK  2
+
+#define IOTDATA_IMAGE_FLAG_FRAGMENT    (1U << 1)
+#define IOTDATA_IMAGE_FLAG_INVERT      (1U << 0)
+
+/* Heatshrink fixed parameters */
+#define IOTDATA_IMAGE_HS_WINDOW_SZ2    8 /* 256-byte window */
+#define IOTDATA_IMAGE_HS_LOOKAHEAD_SZ2 4 /* 16-byte lookahead */
+
+#if !defined(IOTDATA_NO_ENCODE)
+#define IOTDATA_IMAGE_FIELDS_ENCODE \
+    uint8_t image_pixel_format; \
+    uint8_t image_size_tier; \
+    uint8_t image_compression; \
+    uint8_t image_flags; \
+    const uint8_t *image_data; \
+    uint8_t image_data_len;
+#else
+#define IOTDATA_IMAGE_FIELDS_ENCODE
+#endif
+
+#if !defined(IOTDATA_NO_DECODE)
+#define IOTDATA_IMAGE_FIELDS_DECODE \
+    uint8_t image_pixel_format; \
+    uint8_t image_size_tier; \
+    uint8_t image_compression; \
+    uint8_t image_flags; \
+    uint8_t image_data[IOTDATA_IMAGE_DATA_MAX]; \
+    uint8_t image_data_len;
+#else
+#define IOTDATA_IMAGE_FIELDS_DECODE
+#endif
+
+#else
+#define IOTDATA_IMAGE_FIELDS_ENCODE
+#define IOTDATA_IMAGE_FIELDS_DECODE
+#endif
+
+/* ---------------------------------------------------------------------------
  * Field TLV
  * -------------------------------------------------------------------------*/
 
@@ -628,6 +687,9 @@ typedef enum {
 #if defined(IOTDATA_ENABLE_DATETIME)
     IOTDATA_FIELD_DATETIME, /* 24 bits */
 #endif
+#if defined(IOTDATA_ENABLE_IMAGE)
+    IOTDATA_FIELD_IMAGE, /* variable */
+#endif
 #if defined(IOTDATA_ENABLE_FLAGS)
     IOTDATA_FIELD_FLAGS, /*  8 bits */
 #endif
@@ -813,6 +875,14 @@ typedef enum {
     IOTDATA_ERR_DATETIME_HIGH,
 #endif
 
+#if defined(IOTDATA_ENABLE_IMAGE)
+    IOTDATA_ERR_IMAGE_FORMAT_HIGH,
+    IOTDATA_ERR_IMAGE_SIZE_HIGH,
+    IOTDATA_ERR_IMAGE_COMPRESSION_HIGH,
+    IOTDATA_ERR_IMAGE_DATA_NULL,
+    IOTDATA_ERR_IMAGE_DATA_HIGH,
+#endif
+
 } iotdata_status_t;
 
 typedef enum {
@@ -853,6 +923,7 @@ typedef struct {
     IOTDATA_DEPTH_FIELDS
     IOTDATA_POSITION_FIELDS
     IOTDATA_DATETIME_FIELDS
+    IOTDATA_IMAGE_FIELDS_ENCODE
     IOTDATA_FLAGS_FIELDS
 
     IOTDATA_TLV_FIELDS_ENCODE
@@ -885,11 +956,27 @@ typedef struct {
     IOTDATA_DEPTH_FIELDS
     IOTDATA_POSITION_FIELDS
     IOTDATA_DATETIME_FIELDS
+    IOTDATA_IMAGE_FIELDS_DECODE
     IOTDATA_FLAGS_FIELDS
 
     IOTDATA_TLV_FIELDS_DECODE
 } iotdata_decoded_t;
 #endif /* !IOTDATA_NO_DECODE */
+
+/* ---------------------------------------------------------------------------
+ * Utilities
+ * -------------------------------------------------------------------------*/
+
+#if defined(IOTDATA_ENABLE_IMAGE)
+size_t iotdata_image_pixel_count(uint8_t size_tier);
+uint8_t iotdata_image_bpp(uint8_t pixel_format);
+/* RLE: returns output bytes written, 0 on error */
+size_t iotdata_image_rle_compress(const uint8_t *pixels, size_t pixel_count, uint8_t bpp, uint8_t *out, size_t out_max);
+size_t iotdata_image_rle_decompress(const uint8_t *compressed, size_t comp_len, uint8_t bpp, uint8_t *pixels, size_t pixel_buf_bytes);
+/* Heatshrink LZSS (w=8, l=4): returns output bytes written, 0 on error */
+size_t iotdata_image_hs_compress(const uint8_t *in, size_t in_len, uint8_t *out, size_t out_max);
+size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *out, size_t out_max);
+#endif
 
 /* ---------------------------------------------------------------------------
  * Encoder
@@ -976,6 +1063,9 @@ iotdata_status_t iotdata_encode_position(iotdata_encoder_t *enc, iotdata_double_
 #endif
 #if defined(IOTDATA_ENABLE_DATETIME)
 iotdata_status_t iotdata_encode_datetime(iotdata_encoder_t *enc, uint32_t seconds_from_year_start);
+#endif
+#if defined(IOTDATA_ENABLE_IMAGE)
+iotdata_status_t iotdata_encode_image(iotdata_encoder_t *enc, uint8_t pixel_format, uint8_t size_tier, uint8_t compression, uint8_t flags, const uint8_t *data, uint8_t data_len);
 #endif
 #if defined(IOTDATA_ENABLE_FLAGS)
 iotdata_status_t iotdata_encode_flags(iotdata_encoder_t *enc, uint8_t flags);
