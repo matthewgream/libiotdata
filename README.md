@@ -1426,30 +1426,45 @@ safest choice.
 
 ##### 9.5.6.6. JSON Representation
 
-In the canonical JSON output, the Image TLV is represented as:
+The Image TLV is destructured by the gateway into a structured JSON
+object, rather than passed through as raw hex.  It appears as an
+entry in the `"data"` array with `"format": "image"`:
 
 ```json
 {
-  "image": {
-    "format": "bilevel",
-    "size": "32x24",
-    "compression": "rle",
-    "fragment": false,
-    "invert": false,
-    "pixels": "base64-encoded-pixel-data"
-  }
+  "data": [
+    { "type": 1, "format": "raw", "data": "00015180" },
+    {
+      "type": 6,
+      "format": "image",
+      "data": {
+        "pixel_format": "bilevel",
+        "size": "32x24",
+        "compression": "rle",
+        "fragment": false,
+        "invert": false,
+        "pixels": "base64-encoded-pixel-data"
+      }
+    }
+  ]
 }
 ```
 
-The `pixels` field contains the raw (decompressed) pixel data encoded
-as a base64 string.  The gateway performs decompression before JSON
-encoding so that downstream consumers receive a uniform representation
-regardless of the compression method used on the wire.
+**Image object fields:**
 
-The `format` field is one of: `"bilevel"`, `"grey4"`, `"grey16"`.
-The `size` field is one of: `"24x18"`, `"32x24"`, `"48x36"`, `"64x48"`.
-The `compression` field records the wire compression for diagnostics:
-`"raw"`, `"rle"`, `"heatshrink"`.
+  - `pixel_format`: One of `"bilevel"`, `"grey4"`, `"grey16"`.
+  - `size`: One of `"24x18"`, `"32x24"`, `"48x36"`, `"64x48"`.
+  - `compression`: The wire compression method for diagnostics:
+    `"raw"`, `"rle"`, `"heatshrink"`.
+  - `fragment`: Boolean.  True if this is a fragment of a larger image.
+  - `invert`: Boolean.  True if display polarity should be inverted.
+  - `pixels`: Base64-encoded decompressed pixel data.
+
+The gateway performs decompression before base64-encoding the `pixels`
+field, so downstream consumers receive uniform raw pixel data
+regardless of the compression method used on the wire.  The
+`compression` field is retained so consumers can log or display the
+wire efficiency, but it is not needed for rendering.
 
 ## 10. Canonical JSON Representation
 
