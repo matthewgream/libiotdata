@@ -69,7 +69,7 @@ place on the project's GitHub repository.
   - [9.1. TLV Header](#91-tlv-header)
   - [9.2. Raw Format](#92-raw-format)
   - [9.3. Packed String Format](#93-packed-string-format)
-  - [9.4. TLV Type](#94-well-known-tlv-type)
+  - [9.4. TLV Type](#94-tlv-type)
   - [9.5. Global TLV Types (0x01-0x0F)](#95-global-tlv-types)
 - [10. Canonical JSON Representation](#10-canonical-json-representation)
 - [11. Receiver Considerations](#11-receiver-considerations)
