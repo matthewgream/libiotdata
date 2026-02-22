@@ -69,7 +69,8 @@ place on the project's GitHub repository.
   - [9.1. TLV Header](#91-tlv-header)
   - [9.2. Raw Format](#92-raw-format)
   - [9.3. Packed String Format](#93-packed-string-format)
-  - [9.4. Well-Known TLV Types](#94-well-known-tlv-types)
+  - [9.4. TLV Type](#94-well-known-tlv-type)
+  - [9.5. Global TLV Types (0x01-0x0F)](#95-global-tlv-types)
 - [10. Canonical JSON Representation](#10-canonical-json-representation)
 - [11. Receiver Considerations](#11-receiver-considerations)
   - [11.1. Datetime Year Resolution](#111-datetime-year-resolution)
@@ -1162,7 +1163,7 @@ Each TLV entry begins with a 16-bit header:
 
 **Type** (6 bits):
   Application-defined type identifier, range 0-63.
-  See Section 9.4 for well-known types.
+  See Section 9.4 for types.
 
 **More** (1 bit):
   1 = another TLV entry follows this one.
@@ -1190,7 +1191,7 @@ Total TLV entry size: 16 + (Length × 6) bits.
 Characters outside the 6-bit table MUST NOT be transmitted.  An
 encoder MUST reject strings containing unencodable characters.
 
-### 9.4. Well-Known TLV Types
+### 9.4. TLV Type
 
 | Type      | Name        | Format | Description                                    |
 |-----------|-------------|--------|------------------------------------------------|
@@ -1200,6 +1201,7 @@ encoder MUST reject strings containing unencodable characters.
 | 0x03      | LOGGER      | string | Last logger error/warning message              |
 | 0x04      | CONFIG      | raw    | Configuration snapshot                         |
 | 0x05      | USERDATA    | string | User interaction event (e.g. button press)     |
+| 0x06      | IMAGE       | raw    | Thumbnail image with control byte              |
 | 0x10-0x1F | (reserved)  | —      | Reserved for future quality/metadata TLVs      |
 | 0x20-     | (available) | —      | Available for propretiary TLVs                 |
 
@@ -1207,6 +1209,247 @@ Types 0x01-0x0F are reserved for globally designated types, as specified
 in, and extended by, this document.  Types 0x10-0x1F are reserved for
 sensor metadata (see Section 11.3 and Section 15).  Types 0x20 onwards are
 available for application use.
+
+### 9.5. Global TLV Types (0x01-0x0F)
+
+#### 9.5.1. Uptime (0x01)
+
+#### 9.5.2. Resets (0x02)
+
+#### 9.5.3. Logger (0x03)
+
+#### 9.5.4. Config (0x04)
+
+#### 9.5.5. Userdata (0x05)
+
+#### 9.5.6. Image (0x06)
+
+The Image TLV provides a mechanism for transmitting low-resolution
+thumbnail images over bandwidth-constrained links.  It is designed
+for use cases such as motion-triggered camera snapshots, where a
+compact visual summary is transmitted immediately while full-resolution
+images are stored locally for later retrieval.
+
+The Image TLV uses raw format (Format = 0) and type identifier 0x06.
+The TLV length field specifies the total number of bytes including the
+1-byte control header and all subsequent pixel data.
+
+**Design philosophy:**  The Image TLV defines a container for a
+rectangular pixel grid.  It does not specify what the pixels represent.
+The sensor implementation decides what is most informative — a
+full-frame downscale, a cropped region-of-interest around detected
+motion, a background-subtracted difference mask, a depth map, or any
+other rectangular image.  The thumbnail field carries the result; the
+semantics are a property of the sensor, not the encoding.
+
+##### 9.5.6.1. Control Byte
+
+The first byte of the TLV value section is a control byte describing
+the pixel format, image dimensions, compression method, and flags.
+The decoder reads this byte to determine how to interpret all
+subsequent bytes.
+
+```
+ 0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| Format| Size  | Comp  | Flags |
+| (2)   | (2)   | (2)   | (2)   |
++---+---+---+---+---+---+---+---+
+```
+
+**Format** (bits 7-6): Pixel depth.
+
+| Value | Name    | Bits/pixel | Description                         |
+|-------|---------|------------|-------------------------------------|
+| 0     | BILEVEL | 1          | Black and white (1-bit per pixel)   |
+| 1     | GREY4   | 2          | 4-level greyscale                   |
+| 2     | GREY16  | 4          | 16-level greyscale                  |
+| 3     |         | —          | Reserved                            |
+
+For BILEVEL, each pixel is a single bit: 0 = black, 1 = white.
+Pixels are packed MSB-first within each byte, left-to-right across
+each row, rows top-to-bottom.
+
+For GREY4, each pixel is 2 bits: 0 = black, 1 = dark grey,
+2 = light grey, 3 = white.  Pixels are packed MSB-first, four
+pixels per byte.
+
+For GREY16, each pixel is 4 bits (one nibble): 0 = black, 15 = white.
+Pixels are packed high-nibble-first, two pixels per byte.
+
+**Size** (bits 5-4): Image dimensions (width × height).
+
+| Value | Dimensions | Pixels | Raw bytes (1bpp) | Raw bytes (4bpp) |
+|-------|------------|--------|------------------|------------------|
+| 0     | 24 × 18    |    432 |               54 |              216 |
+| 1     | 32 × 24    |    768 |               96 |              384 |
+| 2     | 48 × 36    |  1,728 |              216 |              864 |
+| 3     | 64 × 48    |  3,072 |              384 |            1,536 |
+
+All sizes use a 4:3 aspect ratio.  The size tier determines both
+width and height; non-standard dimensions are not supported.
+
+**Compression** (bits 3-2): Compression method applied to pixel data.
+
+| Value | Name       | Description                                   |
+|-------|------------|-----------------------------------------------|
+| 0     | RAW        | Uncompressed pixel data                       |
+| 1     | RLE        | Run-length encoding (Section 9.5.6.2)         |
+| 2     | HEATSHRINK | Heatshrink LZSS (Section 9.5.6.3)             |
+| 3     |            | Reserved                                      |
+
+**Flags** (bits 1-0):
+
+| Bit | Name     | Description                                      |
+|-----|----------|--------------------------------------------------|
+| 1   | FRAGMENT | This image is a fragment; more fragments follow   |
+| 0   | INVERT   | Display with inverted polarity (0=white, 1=black) |
+
+The FRAGMENT flag enables multi-packet image transmission for cases
+where the pixel data exceeds the available payload.  Fragments share
+the same TLV type and control byte; the receiver reassembles using
+the packet sequence number and station_id.  For v1, single-frame
+images (FRAGMENT = 0) are the expected case.
+
+The INVERT flag indicates that the pixel sense is reversed.  This
+is useful for difference-frame images where motion pixels are
+naturally encoded as 1 (white on black background).  The flag
+allows the display layer to render with the correct visual polarity
+without the encoder needing to invert the pixel data.
+
+##### 9.5.6.2. RLE Compression
+
+When Compression = RLE, the pixel data is encoded as a sequence of
+run-length pairs.  Each pair is a single byte:
+
+```
+ 0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+|Val|       Run Length (7)      |
++---+---+---+---+---+---+---+---+
+```
+
+For BILEVEL format, **Val** (bit 7) is the pixel value (0 or 1)
+and **Run Length** (bits 6-0) is the number of consecutive pixels
+with that value, minus 1 (range 1-128 pixels per run).
+
+For GREY4 and GREY16 formats, the encoding switches to a byte-pair
+scheme: the first byte is a raw pixel value (2 or 4 bits, zero-padded
+to 8 bits) and the second byte is the run count minus 1.  This
+produces 2 bytes per run but handles the wider pixel values cleanly.
+
+Runs that exceed 128 pixels (BILEVEL) or 256 pixels (greyscale) are
+split into consecutive run entries with the same value.
+
+The decoder reconstructs the pixel grid left-to-right, top-to-bottom,
+consuming runs until width × height pixels have been produced.
+
+RLE is particularly effective for BILEVEL images with large uniform
+regions, such as background-subtracted motion frames, where
+compression ratios of 2:1 to 6:1 are typical.
+
+##### 9.5.6.3. Heatshrink Compression
+
+When Compression = HEATSHRINK, the pixel data (in its raw packed
+form) has been compressed using the heatshrink LZSS algorithm.
+
+The heatshrink parameters are fixed by this protocol and MUST NOT
+be varied per-packet:
+
+  - Window size: 8 (256-byte window)
+  - Lookahead size: 4 (16-byte lookahead)
+
+These parameters are chosen for minimal RAM usage at the decoder
+(approximately 256 bytes for decompression state) while still
+providing useful compression.  The decoder does not need to be
+told the parameters; they are implicit in the TLV type.
+
+Heatshrink is most useful for GREY4 and GREY16 formats where pixel
+data has more entropy than BILEVEL and simple RLE is less effective.
+
+##### 9.5.6.4. Payload Budget
+
+The TLV length field (8 bits) limits the total Image TLV value to
+255 bytes.  Subtracting the 1-byte control header, a maximum of
+254 bytes are available for pixel data.
+
+The following table shows which format/size combinations fit within
+254 bytes without compression:
+
+| Size     | BILEVEL (1bpp) | GREY4 (2bpp) | GREY16 (4bpp) |
+|----------|:--------------:|:------------:|:-------------:|
+| 24 × 18  |   54 B  ✓     |   108 B  ✓   |   216 B  ✓    |
+| 32 × 24  |   96 B  ✓     |   192 B  ✓   |   384 B  ✗    |
+| 48 × 36  |  216 B  ✓     |   432 B  ✗   |   864 B  ✗    |
+| 64 × 48  |  384 B  ✗     |   768 B  ✗   | 1,536 B  ✗    |
+
+Combinations marked ✗ require compression to fit.  In practice,
+BILEVEL at 32 × 24 (96 bytes raw, typically 40-60 bytes with RLE)
+is the recommended default for single-frame LoRa transmission.  It
+provides sufficient resolution to distinguish human silhouettes,
+vehicles, and animals while leaving substantial room for other
+iotdata fields in the same packet.
+
+The LoRa payload limit (222 bytes at SF7/125kHz, 115 bytes at SF9,
+51 bytes at SF10) further constrains the practical combinations.
+For higher spreading factors, 24 × 18 BILEVEL with RLE is the
+safest choice.
+
+##### 9.5.6.5. Recommended Practices
+
+  - **Default choice:**  BILEVEL format, 32 × 24 size, RLE
+    compression.  This produces 40-60 byte thumbnails for typical
+    motion frames, fits comfortably in a single LoRa packet at any
+    spreading factor, and requires trivial encode/decode logic.
+
+  - **ROI cropping:**  If the sensor detects motion in a small region
+    of the camera frame, cropping to that region before downscaling
+    preserves more detail than downscaling the entire frame.  The
+    Image TLV does not carry crop coordinates; these are a property
+    of the sensor's processing pipeline, not the transport encoding.
+
+  - **Difference frames:**  For background-subtracted motion images,
+    set the INVERT flag if the natural encoding is white-on-black
+    (motion pixels = 1).  The resulting BILEVEL image compresses
+    exceptionally well with RLE due to large background regions.
+
+  - **Greyscale use:**  GREY16 at 24 × 18 with heatshrink (216 bytes
+    raw, typically 100-150 bytes compressed) provides a richer visual
+    at the cost of decode complexity.  Use when the MCU has sufficient
+    resources and the additional visual detail is valuable.
+
+  - **Multi-frame spanning:**  The FRAGMENT flag enables splitting a
+    large thumbnail across multiple packets.  The gateway reassembles
+    fragments using {station_id, sequence} ordering.  This adds
+    complexity and fragility (any lost fragment invalidates the image)
+    and is not recommended for v1 deployments.
+
+##### 9.5.6.6. JSON Representation
+
+In the canonical JSON output, the Image TLV is represented as:
+
+```json
+{
+  "image": {
+    "format": "bilevel",
+    "size": "32x24",
+    "compression": "rle",
+    "fragment": false,
+    "invert": false,
+    "pixels": "base64-encoded-pixel-data"
+  }
+}
+```
+
+The `pixels` field contains the raw (decompressed) pixel data encoded
+as a base64 string.  The gateway performs decompression before JSON
+encoding so that downstream consumers receive a uniform representation
+regardless of the compression method used on the wire.
+
+The `format` field is one of: `"bilevel"`, `"grey4"`, `"grey16"`.
+The `size` field is one of: `"24x18"`, `"32x24"`, `"48x36"`, `"64x48"`.
+The `compression` field records the wire compression for diagnostics:
+`"raw"`, `"rle"`, `"heatshrink"`.
 
 ## 10. Canonical JSON Representation
 
