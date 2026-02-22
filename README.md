@@ -1193,17 +1193,19 @@ encoder MUST reject strings containing unencodable characters.
 
 ### 9.4. TLV Types
 
-| Type      | Name        | Format | Description                                      |
-|-----------|-------------|--------|--------------------------------------------------|
-| 0x01-0x0F | (reserved)  | —      | Reserved for globally designated TLVs            |
-| 0x01      | STATUS      | raw    | Uptime, restart count, and restart reason        |
-| 0x02      | DIAGNOSTIC  | string | Free-form diagnostic message                     |
-| 0x03      | CONFIG      | string | Configuration key-value pairs                    |
-| 0x04      | USERDATA    | string | User interaction event                           |
-| 0x05      | IMAGE       | image  | Thumbnail image with control byte (Section 9.6)  |
-| 0x06-0x0F | (reserved)  | —      | Reserved for future globally designated TLVs     |
-| 0x10-0x1F | (reserved)  | —      | Reserved for future quality/metadata TLVs        |
-| 0x20-     | (available) | —      | Available for proprietary TLVs                   |
+| Type       | Name        | Format  | Description                                       |
+|------------|-------------|---------|---------------------------------------------------|
+| 0x01-0x0F  | (reserved)  | —       | Reserved for globally designated TLVs             |
+| 0x01       | VERSION     | string  | Firmware and hardware version identification      |
+| 0x02       | STATUS      | raw     | Uptime, lifetime uptime, restart count and reason |
+| 0x03       | HEALTH      | raw     | CPU temperature, supply voltage, heap, active time|
+| 0x04       | CONFIG      | string  | Configuration key-value pairs                     |
+| 0x05       | DIAGNOSTIC  | string  | Free-form diagnostic message                      |
+| 0x06       | USERDATA    | string  | User interaction event                            |
+| 0x07       | IMAGE       | image   | Image data                                        |
+| 0x08-0x0F  | (reserved)  | —       | Reserved for future globally designated TLVs      |
+| 0x10-0x1F  | (reserved)  | —       | Reserved for future quality/metadata TLVs         |
+| 0x20-      | (available) | —       | Available for proprietary TLVs                    |
 
 Types 0x01-0x0F are reserved for globally designated types, as specified
 in, and extended by, this document.  Types 0x10-0x1F are reserved for
@@ -1218,26 +1220,107 @@ SHOULD use these types for their intended purpose to ensure
 interoperability between sensors, gateways, and downstream consumers.
 
 All global TLV types are optional.  A sensor includes them when the
-information is available and the payload budget permits.
+information is available and the payload budget permits.  The
+recommended transmission strategy varies by type:
 
-#### 9.5.1. Status (0x01)
+  - **VERSION**: Once at boot (first packet after restart).
+  - **STATUS**: Every Nth packet (e.g. every 10th), or periodically.
+  - **HEALTH**: Less frequently (e.g. every 50th), or when signficantly changed.
+  - **CONFIG**: Once at boot, or after configuration changes.
+  - **DIAGNOSTIC**: When a notable condition occurs.
+  - **USERDATA**: When a user interaction event occurs.
+  - **IMAGE**: When motion or another trigger is detected.
 
-6 bytes, raw format.
+#### 9.5.1. Version (0x01)
 
-Reports device health as a combined uptime, restart count, and
-restart reason.
+Variable length, string format.
+
+Identifies the firmware and hardware versions running on the device.
+This is essential for fleet management: knowing which devices are
+running which firmware version after an OTA campaign, or identifying
+hardware revisions with known issues.
+
+The content uses the same space-delimited key-value convention as
+Config (Section 9.5.4), encoded with the 6-bit packed character set
+(Appendix A):
+
+```
+KEY1 VALUE1 KEY2 VALUE2 ...
+```
+
+Recommended keys:
+
+| Key | Description                                         |
+|-----|-----------------------------------------------------|
+| FW  | Firmware version (build number or encoded version)  |
+| HW  | Hardware revision                                   |
+| BL  | Bootloader version                                  |
+| ID  | Device model or type identifier                     |
+| SN  | Serial number or unique identifier                  |
+
+Examples:
+
+  - `FW 142 HW 3` — firmware build 142, hardware revision 3
+  - `FW 20401 HW 2 BL 5` — firmware 2.4.1 (encoded as 20401),
+    hardware rev 2, bootloader 5
+  - `ID SNOWV2 FW 38 HW 1` — device model SNOWV2, firmware 38
+  - `FW 12 HW 1 SN A04F` — with serial number
+
+The key namespace is the same as Config: application-defined, short
+uppercase identifiers.  The keys listed above are recommendations,
+not requirements.  A minimal implementation may send only `FW` and
+`HW`.
+
+Since version information is static within a boot cycle, this TLV
+is typically sent only in the first packet after a restart.  The
+gateway or upstream system can cache it per station_id.
+
+Since the 6-bit character set does not include dots or hyphens,
+semantic version strings such as `2.4.1` cannot be encoded directly.
+Recommended alternatives:
+
+  - Concatenated digits: `20401` for 2.4.1 (convention: MMPPP where
+    MM=major×100+minor, PPP=patch).
+  - Plain build number: `142` (monotonically increasing).
+  - Separate keys: `FWMAJ 2 FWMIN 4 FWPAT 1` (verbose but explicit).
+
+The build number approach is simplest and sufficient for most
+deployments.
+
+**JSON representation:**
+
+```json
+{ "type": 1, "format": "version", "data": {
+    "FW": "142",
+    "HW": "3"
+  }
+}
+```
+
+The gateway parses the space-delimited tokens into key-value pairs,
+identical to the Config JSON representation.
+
+#### 9.5.2. Status (0x02)
+
+9 bytes, raw format.
+
+Reports device boot lifecycle: how long since last restart, how long
+the device has been alive in total across all boots, how many times
+it has restarted, and why the most recent restart occurred.
 
 ```
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|              Uptime Ticks (24 bits)           |
+|          Session Uptime (24 bits)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|          Lifetime Uptime (24 bits)            |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |         Restarts (16 bits)    | Reason (8)    |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-**Uptime** (3 bytes, uint24, big-endian):
+**Session Uptime** (3 bytes, uint24, big-endian):
   Time since the most recent boot, measured in 5-second ticks.
   This matches the resolution and encoding of the Datetime field
   (Section 8.8).
@@ -1248,6 +1331,20 @@ restart reason.
 
   Maximum: 16,777,215 ticks = 83,886,075 seconds ≈ 970.9 days.
 
+**Lifetime Uptime** (3 bytes, uint24, big-endian):
+  Total accumulated uptime across all boots since first
+  commissioning, measured in 5-second ticks.  Same encoding as
+  session uptime.
+
+  This value requires non-volatile storage (NVS, EEPROM, or flash).
+  The device persists the accumulated total periodically (e.g. every
+  hour or at shutdown) and adds the current session uptime when
+  encoding the TLV.
+
+  Devices that do not track lifetime uptime MUST transmit 0x000000.
+  The receiver interprets this as "not tracked" rather than "zero
+  uptime".
+
 **Restarts** (2 bytes, uint16, big-endian):
   Total number of device starts since first commissioning, including
   the current boot.  Wraps at 65535.  A value of 1 indicates the
@@ -1257,29 +1354,29 @@ restart reason.
   Reason for the most recent restart.  Bit 7 determines the
   interpretation:
 
-  - **Bit 7 clear (0x00-0x7F):**  Globally defined reason codes,
+  - **Bit 7 clear (0x00-0x7F):** Globally defined reason codes,
     specified by this protocol.  All implementations MUST use these
     values for the corresponding conditions.
 
-  - **Bit 7 set (0x80-0xFF):**  Vendor-specific or device-specific
+  - **Bit 7 set (0x80-0xFF):** Vendor-specific or device-specific
     reason codes.  The interpretation depends on the device type and
     firmware.  Receivers that do not recognise a vendor-specific code
     SHOULD display it as a numeric value.
 
   Globally defined reason codes:
 
-| Value | Name          | Description                                |
-|-------|---------------|--------------------------------------------|
-| 0x00  | UNKNOWN       | Reason not available or not determined      |
-| 0x01  | POWER_ON      | Cold boot (initial power application)      |
-| 0x02  | SOFTWARE      | Intentional software-initiated reset       |
-| 0x03  | WATCHDOG      | Watchdog timer expiry                      |
-| 0x04  | BROWNOUT      | Supply voltage dropped below threshold     |
-| 0x05  | PANIC         | Unrecoverable software fault or exception  |
-| 0x06  | DEEPSLEEP     | Wake from deep sleep (normal operation)    |
-| 0x07  | EXTERNAL      | External reset pin or button               |
-| 0x08  | OTA           | Reset following over-the-air firmware update |
-| 0x09-0x7F | (reserved) | Reserved for future globally defined reasons |
+| Value      | Name       | Description                                  |
+|------------|------------|----------------------------------------------|
+| 0x00       | UNKNOWN    | Reason not available or not determined        |
+| 0x01       | POWER_ON   | Cold boot (initial power application)        |
+| 0x02       | SOFTWARE   | Intentional software-initiated reset         |
+| 0x03       | WATCHDOG   | Watchdog timer expiry                        |
+| 0x04       | BROWNOUT   | Supply voltage dropped below threshold       |
+| 0x05       | PANIC      | Unrecoverable software fault or exception    |
+| 0x06       | DEEPSLEEP  | Wake from deep sleep (normal operation)      |
+| 0x07       | EXTERNAL   | External reset pin or button                 |
+| 0x08       | OTA        | Reset following over-the-air firmware update |
+| 0x09-0x7F  | (reserved) | Reserved for future globally defined reasons |
 
   Most microcontrollers expose the reset reason register at boot.
   For example, ESP32 provides `esp_reset_reason()` and STM32 provides
@@ -1296,21 +1393,181 @@ restart reason.
 **JSON representation:**
 
 ```json
-{ "type": 1, "format": "raw", "data": {
-    "uptime": 86400,
+{ "type": 2, "format": "status", "data": {
+    "session_uptime": 86400,
+    "lifetime_uptime": 1209600,
     "restarts": 12,
     "reason": "watchdog"
   }
 }
 ```
 
-The gateway destructures the 6-byte raw data into named fields.
-The `uptime` value is converted to seconds (ticks × 5) for the JSON
-output.  The `reason` field is a lowercase string using the name
-column from the reason table for globally defined codes (0x00-0x7F),
-or the numeric value for vendor-specific codes (e.g. `"reason": 131`).
+The gateway destructures the 9-byte raw data into named fields.
+Uptime values are converted to seconds (ticks × 5) for the JSON
+output.  A lifetime_uptime of 0 is omitted from the JSON or
+represented as `null` to indicate "not tracked".  The `reason`
+field is a lowercase string using the name column from the reason
+table for globally defined codes (0x00-0x7F), or the numeric value
+for vendor-specific codes (e.g. `"reason": 131`).
 
-#### 9.5.2. Diagnostic (0x02)
+#### 9.5.3. Health (0x03)
+
+7 bytes, raw format.
+
+Reports runtime hardware state: thermal, electrical, memory, and
+duty cycle metrics.  These change during operation and are useful
+for detecting overheating, power supply issues, memory leaks, and
+validating power budgets.
+
+```
+ 0               1               2
+ 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| CPU Temp (8)  |      Supply Voltage (16)      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Free Heap (16)        | Active (16)   :
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+:  Active cont. |
++-+-+-+-+-+-+-+-+
+```
+
+**CPU Temperature** (1 byte, int8, signed):
+  Internal die temperature in degrees Celsius.  Range: -40 to +85°C.
+  Resolution: 1°C.
+
+  Most MCUs have an internal temperature sensor: ESP32 provides
+  `temperatureRead()`, STM32 provides an internal ADC channel.  The
+  reading reflects die temperature, which is typically 5-15°C above
+  ambient depending on workload and packaging.
+
+  Devices without an internal temperature sensor MUST transmit 0x7F
+  (127).  This value is outside the normal operating range and the
+  receiver interprets it as "not available".
+
+**Supply Voltage** (2 bytes, uint16, big-endian):
+  Raw supply rail voltage in millivolts.  Range: 0-65535 mV.
+
+  This is distinct from the Battery field (Section 8.1) which
+  reports a percentage level.  Supply voltage provides absolute
+  electrical data: solar panel output voltage, regulator headroom,
+  voltage sag under transmit load, or direct battery voltage before
+  any regulation.
+
+  For devices powered via a regulated 3.3V rail, this may be a
+  fixed value and is less informative.  For solar-powered devices
+  with a wide input range, this is a key diagnostic.
+
+**Free Heap** (2 bytes, uint16, big-endian):
+  Remaining free heap memory in bytes.  Range: 0-65535.
+
+  ESP32 provides `esp_get_free_heap_size()`.  For devices with more
+  than 65535 bytes free, report 65535 (capped).  A steadily
+  decreasing free heap over time indicates a memory leak.
+
+  Devices without dynamic memory allocation or without a mechanism
+  to query free heap MUST transmit 0xFFFF (65535).  Since this is
+  also the cap value, the receiver treats it as "healthy or not
+  tracked".
+
+**Session Active** (2 bytes, uint16, big-endian):
+  Accumulated time spent in active state (not in deep sleep) since
+  the most recent boot, measured in 5-second ticks.
+
+  Maximum: 65535 ticks = 327675 seconds ≈ 91.0 hours.
+
+  The firmware increments this counter each time it wakes from sleep,
+  accumulating the duration of each active period.  Comparing session
+  active to session uptime (from Status, Section 9.5.2) yields the
+  duty cycle:
+
+    `duty_cycle = session_active / session_uptime`
+
+  A sensor with 86400s session uptime but 200 active ticks (1000s)
+  has a duty cycle of ~1.2%, confirming that power budgets are being
+  met.
+
+  For devices that do not sleep (always-on gateways, relay nodes),
+  session active equals session uptime and this field provides no
+  additional information.  Such devices may omit the Health TLV or
+  set session active to 0x0000 to indicate "not tracked".
+
+**JSON representation:**
+
+```json
+{ "type": 3, "format": "health", "data": {
+    "cpu_temp": 34,
+    "supply_mv": 3842,
+    "free_heap": 42816,
+    "session_active": 1050
+  }
+}
+```
+
+The gateway destructures the 7-byte raw data into named fields.
+The `cpu_temp` is signed degrees Celsius.  The `supply_mv` is
+millivolts.  The `free_heap` is bytes.  The `session_active` is
+converted to seconds (ticks × 5).
+
+A `cpu_temp` of 127 is omitted from the JSON or represented as
+`null` to indicate "not available".
+
+#### 9.5.4. Config (0x04)
+
+Variable length, string format.
+
+Reports current device configuration as space-delimited key-value
+pairs, encoded using the 6-bit packed character set (Appendix A).
+
+The content is a sequence of alternating tokens separated by single
+spaces:
+
+```
+KEY1 VALUE1 KEY2 VALUE2 ...
+```
+
+Odd-position tokens (1st, 3rd, 5th, ...) are keys.  Even-position
+tokens (2nd, 4th, 6th, ...) are values.  The total token count
+MUST be even (every key has a corresponding value).
+
+Keys and values MUST NOT contain spaces.  Keys and values may use
+any length and any mix of characters available in the 6-bit
+character set.  Short uppercase identifiers are recommended for keys
+to minimise wire size, but this is a convention, not a requirement.
+
+Examples:
+
+  - `TX 30 SF 7 PW 14 CH 23` — radio configuration
+  - `INT 10 BAT LOW` — 10-second interval, battery threshold LOW
+  - `MODE NORMAL THRESH 50` — operating mode and threshold
+  - `FW 142 HW 3` — firmware version 142, hardware revision 3
+
+The key namespace is application-defined and not standardised by
+this protocol.  Different sensor types may use different keys.
+The receiver presents the pairs as-is; it does not need to
+understand the key semantics.
+
+In the rare case where configuration values contain characters
+outside the 6-bit set, raw format (Format = 0) MAY be used with
+8-bit ASCII bytes following the same space-delimited convention.
+This should be avoided where possible.
+
+**JSON representation:**
+
+```json
+{ "type": 4, "format": "config", "data": {
+    "TX": "30",
+    "SF": "7",
+    "PW": "14",
+    "CH": "23"
+  }
+}
+```
+
+The gateway parses the space-delimited tokens into alternating
+key-value pairs and presents them as a JSON object.  Both keys
+and values are strings.
+
+#### 9.5.5. Diagnostic (0x05)
 
 Variable length, string format.
 
@@ -1346,70 +1603,14 @@ using the More bit.  Each entry carries one message.
 **JSON representation:**
 
 ```json
-{ "type": 2, "format": "string", "data": "SENSOR FAULT I2C" }
+{ "type": 5, "format": "string", "data": "SENSOR FAULT I2C" }
 ```
 
 The `format` field reflects the wire encoding (`"string"` or
 `"raw"` in the exceptional case).  The `data` field is always a
 decoded text string regardless of wire format.
 
-#### 9.5.3. Config (0x03)
-
-Variable length, string format.
-
-Reports current device configuration as space-delimited key-value
-pairs, encoded using the 6-bit packed character set (Appendix A).
-
-The content is a sequence of alternating tokens separated by single
-spaces:
-
-```
-KEY1 VALUE1 KEY2 VALUE2 KEY3 VALUE3 ...
-```
-
-Odd-position tokens (1st, 3rd, 5th, ...) are keys.  Even-position
-tokens (2nd, 4th, 6th, ...) are values.  The total token count
-MUST be even (every key has a corresponding value).
-
-Keys and values MUST NOT contain spaces.  Keys and values may use
-any length and any mix of characters available in the 6-bit
-character set.  Short uppercase identifiers are recommended for keys
-to minimise wire size, but this is a convention, not a requirement.
-
-Examples:
-
-  - `TX 30 SF 7 PW 14 CH 23` — radio configuration
-  - `INT 10 BAT LOW` — 10-second interval, battery threshold LOW
-  - `MODE NORMAL THRESH 50` — operating mode and threshold
-  - `FW 142 HW 3` — firmware version 142, hardware revision 3
-
-The key namespace is application-defined and not standardised by
-this protocol.  Different sensor types may use different keys.
-The receiver presents the pairs as-is; it does not need to
-understand the key semantics.
-
-In the rare case where configuration values contain characters
-outside the 6-bit set, raw format (Format = 0) MAY be used with
-8-bit ASCII bytes following the same space-delimited convention.
-This should be avoided where possible.
-
-**JSON representation:**
-
-```json
-{ "type": 3, "format": "string", "data": {
-    "TX": "30",
-    "SF": "7",
-    "PW": "14",
-    "CH": "23"
-  }
-}
-```
-
-The gateway parses the space-delimited tokens into alternating
-key-value pairs and presents them as a JSON object.  Both keys
-and values are strings.
-
-#### 9.5.4. Userdata (0x04)
+#### 9.5.6. Userdata (0x06)
 
 Variable length, string format.
 
@@ -1442,14 +1643,13 @@ outside the 6-bit set, raw format (Format = 0) MAY be used with
 **JSON representation:**
 
 ```json
-{ "type": 4, "format": "string", "data": "BTN A" }
+{ "type": 6, "format": "string", "data": "BTN A" }
 ```
 
 The `format` field reflects the wire encoding.  The `data` field is
 a decoded text string.
 
-
-#### 9.5.5. Image (0x05)
+#### 9.5.7. Image (0x07)
 
 The Image TLV provides a mechanism for transmitting low-resolution
 thumbnail images over bandwidth-constrained links.  It is designed
@@ -1661,7 +1861,7 @@ entry in the `"data"` array with `"format": "image"`:
 {
   "data": [
     {
-      "type": 5,
+      "type": 7,
       "format": "image",
       "data": {
         "pixel_format": "bilevel",
@@ -1757,38 +1957,53 @@ field indicates how the `"data"` field should be interpreted.
 #### Globally Defined Types
 
 TLV types that have a defined JSON representation (Section 9.5)
-are destructured by the gateway into structured objects.  The
-`"format"` field reflects the structured type rather than the wire
-encoding:
+are destructured by the gateway into structured objects or decoded
+strings.  The `"format"` field reflects the structured type rather
+than the wire encoding:
 
-| Type | Format     | `data` contains                                 |
-|------|------------|-------------------------------------------------|
-| 0x01 | `"status"` | Structured object: uptime, restarts, reason     |
-| 0x02 | `"string"` | Decoded diagnostic text string                  |
-| 0x03 | `"config"` | Structured object: key-value pairs              |
-| 0x04 | `"string"` | Decoded userdata text string                    |
-| 0x05 | `"image"`  | Structured object: pixel format, size, pixels   |
+| Type | Format       | `data` contains                                |
+|------|--------------|------------------------------------------------|
+| 0x01 | `"version"`  | Structured object: firmware/hardware key-values|
+| 0x02 | `"status"`   | Structured object: uptimes, restarts, reason   |
+| 0x03 | `"health"`   | Structured object: temp, voltage, heap, active |
+| 0x04 | `"config"`   | Structured object: key-value pairs             |
+| 0x05 | `"string"`   | Decoded diagnostic text string                 |
+| 0x06 | `"string"`   | Decoded userdata text string                   |
+| 0x07 | `"image"`    | Structured object: pixel format, size, pixels  |
 
-Examples:
+Example with all global types:
 
 ```json
 {
   "data": [
-    { "type": 1, "format": "status", "data": {
-        "uptime": 86400,
+    { "type": 1, "format": "version", "data": {
+        "FW": "142",
+        "HW": "3"
+      }
+    },
+    { "type": 2, "format": "status", "data": {
+        "session_uptime": 86400,
+        "lifetime_uptime": 1209600,
         "restarts": 12,
         "reason": "watchdog"
       }
     },
-    { "type": 2, "format": "string", "data": "SENSOR FAULT I2C" },
-    { "type": 3, "format": "config", "data": {
+    { "type": 3, "format": "health", "data": {
+        "cpu_temp": 34,
+        "supply_mv": 3842,
+        "free_heap": 42816,
+        "session_active": 1050
+      }
+    },
+    { "type": 4, "format": "config", "data": {
         "TX": "30",
         "SF": "7",
         "PW": "14"
       }
     },
-    { "type": 4, "format": "string", "data": "BTN A" },
-    { "type": 5, "format": "image", "data": {
+    { "type": 5, "format": "string", "data": "LOW SIGNAL" },
+    { "type": 6, "format": "string", "data": "BTN A" },
+    { "type": 7, "format": "image", "data": {
         "pixel_format": "bilevel",
         "size": "32x24",
         "compression": "rle",
@@ -1801,9 +2016,11 @@ Examples:
 }
 ```
 
-The full JSON schema for each globally defined type is specified in
-its respective section: Status (9.5.1), Diagnostic (9.5.2),
-Config (9.5.3), Userdata (9.5.4), and Image (9.6).
+Note that a single packet would not typically contain all of these.
+A normal transmission might include only sensor data fields with no
+TLV entries at all, or one or two TLV entries such as Status and
+a Diagnostic message. Packets may also contain repeated entries,
+for example, multiple Diagnostic or Userdata TLVs.
 
 #### Unrecognised and Proprietary Types
 
@@ -1838,19 +2055,21 @@ interpret.
 The `"format"` field serves as a discriminator for how to parse the
 `"data"` field.  The complete set of values:
 
-| Value      | `data` type   | Source                                    |
-|------------|---------------|-------------------------------------------|
-| `"raw"`    | string (hex)  | Fallback for unrecognised raw TLV types   |
-| `"string"` | string (text) | String-format TLVs (wire or defined)      |
-| `"status"` | object        | Status TLV (0x01)                         |
-| `"config"` | object        | Config TLV (0x03)                         |
-| `"image"`  | object        | Image TLV (0x05)                          |
+| Value        | `data` type   | Source                                   |
+|--------------|---------------|------------------------------------------|
+| `"raw"`      | string (hex)  | Fallback for unrecognised raw TLV types  |
+| `"string"`   | string (text) | String-format TLVs (wire or defined)     |
+| `"version"`  | object        | Version TLV (0x01)                       |
+| `"status"`   | object        | Status TLV (0x02)                        |
+| `"health"`   | object        | Health TLV (0x03)                        |
+| `"config"`   | object        | Config TLV (0x04)                        |
+| `"image"`    | object        | Image TLV (0x07)                         |
 
-Note that `"string"` appears both as a defined format for Diagnostic
-(0x02) and Userdata (0x04), and as the fallback for unrecognised
-string-format TLVs.  This is intentional — the representation is
-identical in both cases (a plain text string), so no distinction is
-needed.
+Note that `"string"` appears both as the defined format for
+Diagnostic (0x05) and Userdata (0x06), and as the fallback for
+unrecognised string-format TLVs.  This is intentional — the
+representation is identical in both cases (a plain text string),
+so no distinction is needed.
 
 ### Round-Trip Guarantee
 
