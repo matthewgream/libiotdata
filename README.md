@@ -1191,19 +1191,19 @@ Total TLV entry size: 16 + (Length × 6) bits.
 Characters outside the 6-bit table MUST NOT be transmitted.  An
 encoder MUST reject strings containing unencodable characters.
 
-### 9.4. TLV Type
+### 9.4. TLV Types
 
-| Type      | Name        | Format | Description                                    |
-|-----------|-------------|--------|------------------------------------------------|
-| 0x01-0x0F | (reserved)  | —      | Reserved for globally designated TLVs          |
-| 0x01      | UPTIME      | raw    | Device uptime in seconds (4 bytes, big-endian) |
-| 0x02      | RESETS      | raw    | Reboot counter (2 bytes, big-endian)           |
-| 0x03      | LOGGER      | string | Last logger error/warning message              |
-| 0x04      | CONFIG      | raw    | Configuration snapshot                         |
-| 0x05      | USERDATA    | string | User interaction event (e.g. button press)     |
-| 0x06      | IMAGE       | raw    | Thumbnail image with control byte              |
-| 0x10-0x1F | (reserved)  | —      | Reserved for future quality/metadata TLVs      |
-| 0x20-     | (available) | —      | Available for propretiary TLVs                 |
+| Type      | Name        | Format | Description                                      |
+|-----------|-------------|--------|--------------------------------------------------|
+| 0x01-0x0F | (reserved)  | —      | Reserved for globally designated TLVs            |
+| 0x01      | STATUS      | raw    | Uptime, restart count, and restart reason        |
+| 0x02      | DIAGNOSTIC  | string | Free-form diagnostic message                     |
+| 0x03      | CONFIG      | string | Configuration key-value pairs                    |
+| 0x04      | USERDATA    | string | User interaction event                           |
+| 0x05      | IMAGE       | image  | Thumbnail image with control byte (Section 9.6)  |
+| 0x06-0x0F | (reserved)  | —      | Reserved for future globally designated TLVs     |
+| 0x10-0x1F | (reserved)  | —      | Reserved for future quality/metadata TLVs        |
+| 0x20-     | (available) | —      | Available for proprietary TLVs                   |
 
 Types 0x01-0x0F are reserved for globally designated types, as specified
 in, and extended by, this document.  Types 0x10-0x1F are reserved for
@@ -1212,17 +1212,244 @@ available for application use.
 
 ### 9.5. Global TLV Types (0x01-0x0F)
 
-#### 9.5.1. Uptime (0x01)
+The following TLV types are globally designated and have fixed
+semantics across all variants and deployments.  Implementations
+SHOULD use these types for their intended purpose to ensure
+interoperability between sensors, gateways, and downstream consumers.
 
-#### 9.5.2. Resets (0x02)
+All global TLV types are optional.  A sensor includes them when the
+information is available and the payload budget permits.
 
-#### 9.5.3. Logger (0x03)
+#### 9.5.1. Status (0x01)
 
-#### 9.5.4. Config (0x04)
+6 bytes, raw format.
 
-#### 9.5.5. Userdata (0x05)
+Reports device health as a combined uptime, restart count, and
+restart reason.
 
-#### 9.5.6. Image (0x06)
+```
+ 0                   1                   2
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|              Uptime Ticks (24 bits)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Restarts (16 bits)    | Reason (8)    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+**Uptime** (3 bytes, uint24, big-endian):
+  Time since the most recent boot, measured in 5-second ticks.
+  This matches the resolution and encoding of the Datetime field
+  (Section 8.8).
+
+  Encode: `ticks = uptime_seconds / 5`
+
+  Decode: `seconds = ticks * 5`
+
+  Maximum: 16,777,215 ticks = 83,886,075 seconds ≈ 970.9 days.
+
+**Restarts** (2 bytes, uint16, big-endian):
+  Total number of device starts since first commissioning, including
+  the current boot.  Wraps at 65535.  A value of 1 indicates the
+  device has never restarted since first power-on.
+
+**Reason** (1 byte, uint8):
+  Reason for the most recent restart.  Bit 7 determines the
+  interpretation:
+
+  - **Bit 7 clear (0x00-0x7F):**  Globally defined reason codes,
+    specified by this protocol.  All implementations MUST use these
+    values for the corresponding conditions.
+
+  - **Bit 7 set (0x80-0xFF):**  Vendor-specific or device-specific
+    reason codes.  The interpretation depends on the device type and
+    firmware.  Receivers that do not recognise a vendor-specific code
+    SHOULD display it as a numeric value.
+
+  Globally defined reason codes:
+
+| Value | Name          | Description                                |
+|-------|---------------|--------------------------------------------|
+| 0x00  | UNKNOWN       | Reason not available or not determined      |
+| 0x01  | POWER_ON      | Cold boot (initial power application)      |
+| 0x02  | SOFTWARE      | Intentional software-initiated reset       |
+| 0x03  | WATCHDOG      | Watchdog timer expiry                      |
+| 0x04  | BROWNOUT      | Supply voltage dropped below threshold     |
+| 0x05  | PANIC         | Unrecoverable software fault or exception  |
+| 0x06  | DEEPSLEEP     | Wake from deep sleep (normal operation)    |
+| 0x07  | EXTERNAL      | External reset pin or button               |
+| 0x08  | OTA           | Reset following over-the-air firmware update |
+| 0x09-0x7F | (reserved) | Reserved for future globally defined reasons |
+
+  Most microcontrollers expose the reset reason register at boot.
+  For example, ESP32 provides `esp_reset_reason()` and STM32 provides
+  `__HAL_RCC_GET_FLAG()`.  The encoder maps the platform-specific
+  value to the nearest globally defined code where possible, or to a
+  vendor-specific code (0x80+) for platform-specific conditions that
+  have no global equivalent.
+
+  The DEEPSLEEP reason (0x06) is expected in normal operation for
+  battery-powered sensors that sleep between transmission cycles.
+  A high restart count with DEEPSLEEP reason is healthy; a high
+  restart count with WATCHDOG or PANIC reason indicates a fault.
+
+**JSON representation:**
+
+```json
+{ "type": 1, "format": "raw", "data": {
+    "uptime": 86400,
+    "restarts": 12,
+    "reason": "watchdog"
+  }
+}
+```
+
+The gateway destructures the 6-byte raw data into named fields.
+The `uptime` value is converted to seconds (ticks × 5) for the JSON
+output.  The `reason` field is a lowercase string using the name
+column from the reason table for globally defined codes (0x00-0x7F),
+or the numeric value for vendor-specific codes (e.g. `"reason": 131`).
+
+#### 9.5.2. Diagnostic (0x02)
+
+Variable length, string format.
+
+A free-form diagnostic message from the device.  This is the
+device's mechanism for reporting conditions that do not map to any
+structured field: error messages, warning strings, state transitions,
+or any other human-readable diagnostic information.
+
+The message is encoded using the 6-bit packed character set
+(Appendix A).  This covers uppercase alphanumeric characters, digits,
+and space — sufficient for diagnostic messages.
+
+Examples:
+  - `SENSOR FAULT I2C`
+  - `LOW SIGNAL`
+  - `SD FULL`
+  - `LORA TX FAIL 3`
+  - `BME280 CRC ERR`
+
+There is no structure imposed on the message content.  The protocol
+does not define severity levels, error codes, or categories.
+Conventions such as prefixing with a subsystem name (`I2C `, `LORA `,
+`SD `) are recommended but not required.
+
+In the rare case where a diagnostic message contains characters
+outside the 6-bit set, raw format (Format = 0) MAY be used with
+8-bit ASCII bytes.  This should be avoided where possible as it
+increases the wire size by 33%.
+
+Multiple diagnostic messages may be sent by chaining TLV entries
+using the More bit.  Each entry carries one message.
+
+**JSON representation:**
+
+```json
+{ "type": 2, "format": "string", "data": "SENSOR FAULT I2C" }
+```
+
+The `format` field reflects the wire encoding (`"string"` or
+`"raw"` in the exceptional case).  The `data` field is always a
+decoded text string regardless of wire format.
+
+#### 9.5.3. Config (0x03)
+
+Variable length, string format.
+
+Reports current device configuration as space-delimited key-value
+pairs, encoded using the 6-bit packed character set (Appendix A).
+
+The content is a sequence of alternating tokens separated by single
+spaces:
+
+```
+KEY1 VALUE1 KEY2 VALUE2 KEY3 VALUE3 ...
+```
+
+Odd-position tokens (1st, 3rd, 5th, ...) are keys.  Even-position
+tokens (2nd, 4th, 6th, ...) are values.  The total token count
+MUST be even (every key has a corresponding value).
+
+Keys and values MUST NOT contain spaces.  Keys and values may use
+any length and any mix of characters available in the 6-bit
+character set.  Short uppercase identifiers are recommended for keys
+to minimise wire size, but this is a convention, not a requirement.
+
+Examples:
+
+  - `TX 30 SF 7 PW 14 CH 23` — radio configuration
+  - `INT 10 BAT LOW` — 10-second interval, battery threshold LOW
+  - `MODE NORMAL THRESH 50` — operating mode and threshold
+  - `FW 142 HW 3` — firmware version 142, hardware revision 3
+
+The key namespace is application-defined and not standardised by
+this protocol.  Different sensor types may use different keys.
+The receiver presents the pairs as-is; it does not need to
+understand the key semantics.
+
+In the rare case where configuration values contain characters
+outside the 6-bit set, raw format (Format = 0) MAY be used with
+8-bit ASCII bytes following the same space-delimited convention.
+This should be avoided where possible.
+
+**JSON representation:**
+
+```json
+{ "type": 3, "format": "string", "data": {
+    "TX": "30",
+    "SF": "7",
+    "PW": "14",
+    "CH": "23"
+  }
+}
+```
+
+The gateway parses the space-delimited tokens into alternating
+key-value pairs and presents them as a JSON object.  Both keys
+and values are strings.
+
+#### 9.5.4. Userdata (0x04)
+
+Variable length, string format.
+
+Reports a user-initiated event or interaction, encoded using the
+6-bit packed character set (Appendix A).
+
+This covers any event that originates from physical user interaction
+with the device rather than from automated sensor readings: button
+presses, switch changes, mode selections, tamper detection, or
+manual triggers.
+
+The content is a free-form string describing the event.  Examples:
+
+  - `BTN A` — button A pressed
+  - `BTN B LONG` — button B long-press
+  - `MODE 2` — user selected operating mode 2
+  - `TAMPER` — enclosure tamper switch triggered
+  - `ARM` — user armed the device
+  - `CAL START` — user initiated calibration
+  - `DOOR OPEN` — door sensor triggered
+
+No structure is imposed on the message content.  The sensor firmware
+defines the event vocabulary appropriate to its hardware and
+application.
+
+In the rare case where an event description contains characters
+outside the 6-bit set, raw format (Format = 0) MAY be used with
+8-bit ASCII bytes.  This should be avoided where possible.
+
+**JSON representation:**
+
+```json
+{ "type": 4, "format": "string", "data": "BTN A" }
+```
+
+The `format` field reflects the wire encoding.  The `data` field is
+a decoded text string.
+
+
+#### 9.5.5. Image (0x05)
 
 The Image TLV provides a mechanism for transmitting low-resolution
 thumbnail images over bandwidth-constrained links.  It is designed
@@ -1433,9 +1660,8 @@ entry in the `"data"` array with `"format": "image"`:
 ```json
 {
   "data": [
-    { "type": 1, "format": "raw", "data": "00015180" },
     {
-      "type": 6,
+      "type": 5,
       "format": "image",
       "data": {
         "pixel_format": "bilevel",
@@ -1522,20 +1748,109 @@ label depending on the variant definition.
 
 ### TLV in JSON
 
-TLV entries are represented as an array under `"data"`:
+TLV entries are represented as an array under `"data"`.  Each entry
+contains `"type"`, `"format"`, and `"data"` fields.
+
+The `"type"` field is the numeric TLV type identifier.  The `"format"`
+field indicates how the `"data"` field should be interpreted.
+
+#### Globally Defined Types
+
+TLV types that have a defined JSON representation (Section 9.5)
+are destructured by the gateway into structured objects.  The
+`"format"` field reflects the structured type rather than the wire
+encoding:
+
+| Type | Format     | `data` contains                                 |
+|------|------------|-------------------------------------------------|
+| 0x01 | `"status"` | Structured object: uptime, restarts, reason     |
+| 0x02 | `"string"` | Decoded diagnostic text string                  |
+| 0x03 | `"config"` | Structured object: key-value pairs              |
+| 0x04 | `"string"` | Decoded userdata text string                    |
+| 0x05 | `"image"`  | Structured object: pixel format, size, pixels   |
+
+Examples:
 
 ```json
 {
   "data": [
-    { "type": 1, "format": "raw", "data": "00015180" },
-    { "type": 5, "format": "string", "data": "Button A pressed" }
+    { "type": 1, "format": "status", "data": {
+        "uptime": 86400,
+        "restarts": 12,
+        "reason": "watchdog"
+      }
+    },
+    { "type": 2, "format": "string", "data": "SENSOR FAULT I2C" },
+    { "type": 3, "format": "config", "data": {
+        "TX": "30",
+        "SF": "7",
+        "PW": "14"
+      }
+    },
+    { "type": 4, "format": "string", "data": "BTN A" },
+    { "type": 5, "format": "image", "data": {
+        "pixel_format": "bilevel",
+        "size": "32x24",
+        "compression": "rle",
+        "fragment": false,
+        "invert": false,
+        "pixels": "base64-encoded-pixel-data"
+      }
+    }
   ]
 }
 ```
 
-Raw TLV data is hex-encoded.  String TLV data is stored as a plain
-JSON string.  The `"format"` field indicates which encoding was used
-on the wire.
+The full JSON schema for each globally defined type is specified in
+its respective section: Status (9.5.1), Diagnostic (9.5.2),
+Config (9.5.3), Userdata (9.5.4), and Image (9.6).
+
+#### Unrecognised and Proprietary Types
+
+TLV types that do not have a defined JSON representation — including
+proprietary types (0x20+), reserved types, and any type the gateway
+does not recognise — fall back to a generic encoding based on the
+wire format bit:
+
+| Wire format | `"format"` | `"data"` contains            |
+|-------------|------------|------------------------------|
+| raw (0)     | `"raw"`    | Hex-encoded byte string      |
+| string (1)  | `"string"` | Decoded text string          |
+
+Examples:
+
+```json
+{
+  "data": [
+    { "type": 32, "format": "raw", "data": "0a1b2c3d" },
+    { "type": 33, "format": "string", "data": "HELLO WORLD" }
+  ]
+}
+```
+
+This ensures that all TLV entries are representable in JSON even if
+the gateway has no knowledge of the type's semantics.  The raw hex
+or decoded string is passed through for downstream consumers to
+interpret.
+
+#### Format Field Summary
+
+The `"format"` field serves as a discriminator for how to parse the
+`"data"` field.  The complete set of values:
+
+| Value      | `data` type   | Source                                    |
+|------------|---------------|-------------------------------------------|
+| `"raw"`    | string (hex)  | Fallback for unrecognised raw TLV types   |
+| `"string"` | string (text) | String-format TLVs (wire or defined)      |
+| `"status"` | object        | Status TLV (0x01)                         |
+| `"config"` | object        | Config TLV (0x03)                         |
+| `"image"`  | object        | Image TLV (0x05)                          |
+
+Note that `"string"` appears both as a defined format for Diagnostic
+(0x02) and Userdata (0x04), and as the fallback for unrecognised
+string-format TLVs.  This is intentional — the representation is
+identical in both cases (a plain text string), so no distinction is
+needed.
 
 ### Round-Trip Guarantee
 
