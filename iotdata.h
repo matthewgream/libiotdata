@@ -533,12 +533,6 @@ extern "C" {
 #define IOTDATA_TLV_FMT_RAW     0
 #define IOTDATA_TLV_FMT_STRING  1
 #define IOTDATA_TLV_CHAR_BITS   6
-
-#define IOTDATA_TLV_UPTIME      0x01
-#define IOTDATA_TLV_RESETS      0x02
-#define IOTDATA_TLV_LOGGER      0x03
-#define IOTDATA_TLV_CONFIG      0x04
-#define IOTDATA_TLV_USERDATA    0x05
 #else
 #define IOTDATA_TLV_FIELDS_ENCODE
 #define IOTDATA_TLV_FIELDS_DECODE
@@ -976,6 +970,43 @@ size_t iotdata_image_rle_decompress(const uint8_t *compressed, size_t comp_len, 
 /* Heatshrink LZSS (w=8, l=4): returns output bytes written, 0 on error */
 size_t iotdata_image_hs_compress(const uint8_t *in, size_t in_len, uint8_t *out, size_t out_max);
 size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *out, size_t out_max);
+#endif
+
+#if defined(IOTDATA_ENABLE_TLV)
+#if !defined(IOTDATA_NO_ENCODE)
+#define IOTDATA_TLV_VERSION          0x01
+#define IOTDATA_TLV_STATUS           0x02
+#define IOTDATA_TLV_HEALTH           0x03
+#define IOTDATA_TLV_CONFIG           0x04
+#define IOTDATA_TLV_DIAGNOSTIC       0x05
+#define IOTDATA_TLV_USERDATA         0x06
+
+#define IOTDATA_TLV_REASON_UNKNOWN   0x00
+#define IOTDATA_TLV_REASON_POWER_ON  0x01
+#define IOTDATA_TLV_REASON_SOFTWARE  0x02
+#define IOTDATA_TLV_REASON_WATCHDOG  0x03
+#define IOTDATA_TLV_REASON_BROWNOUT  0x04
+#define IOTDATA_TLV_REASON_PANIC     0x05
+#define IOTDATA_TLV_REASON_DEEPSLEEP 0x06
+#define IOTDATA_TLV_REASON_EXTERNAL  0x07
+#define IOTDATA_TLV_REASON_OTA       0x08
+
+#define IOTDATA_TLV_HEALTH_TEMP_NA   127
+#define IOTDATA_TLV_HEALTH_HEAP_NA   0xFFFF
+
+/* 0x01 VERSION — key-value pairs, space-delimited on wire: kv[0]="FW", kv[1]="142", kv[2]="HW", kv[3]="3", ... count must be even (every key has a value). */
+iotdata_status_t iotdata_encode_tlv_type_version(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size);
+/* 0x02 STATUS — 9 bytes raw format: uptimes in seconds (converted to 5-second ticks internally), pass lifetime_uptime_secs=0 for "not tracked". */
+iotdata_status_t iotdata_encode_tlv_type_status(iotdata_encoder_t *enc, uint32_t session_uptime_secs, uint32_t lifetime_uptime_secs, uint16_t restarts, uint8_t reason, uint8_t buf[9]);
+/* 0x03 HEALTH — 7 bytes raw format: session_active_secs converted to 5-second ticks internally, pass cpu_temp=127 for "not available", free_heap=0xFFFF for "not tracked". */
+iotdata_status_t iotdata_encode_tlv_type_health(iotdata_encoder_t *enc, int8_t cpu_temp, uint16_t supply_mv, uint16_t free_heap, uint32_t session_active_secs, uint8_t buf[7]);
+/* 0x04 CONFIG — string format, space-delimited key-value pairs */
+iotdata_status_t iotdata_encode_tlv_type_config(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size);
+/* 0x05 DIAGNOSTIC — string format, free-form message */
+iotdata_status_t iotdata_encode_tlv_type_diagnostic(iotdata_encoder_t *enc, const char *str, bool raw);
+/* 0x06 USERDATA — string format, free-form event */
+iotdata_status_t iotdata_encode_tlv_type_userdata(iotdata_encoder_t *enc, const char *str, bool raw);
+#endif
 #endif
 
 /* ---------------------------------------------------------------------------

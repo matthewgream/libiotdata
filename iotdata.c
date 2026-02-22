@@ -28,28 +28,6 @@
 #endif
 
 /* =========================================================================
- * Dependencies
- * ========================================================================= */
-
-#if defined(IOTDATA_ENABLE_IMAGE) || defined(IOTDATA_ENABLE_TLV)
-#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
-#define _IOTDATA_NEED_BASE64_DECODE
-#endif
-#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-#define _IOTDATA_NEED_BASE64_ENCODE
-#endif
-#endif
-
-#if defined(IOTDATA_ENABLE_TLV)
-#if !defined(IOTDATA_NO_ENCODE)
-#define _IOTDATA_NEED_SIXBIT_ENCODE
-#endif
-#if !defined(IOTDATA_NO_DECODE)
-#define _IOTDATA_NEED_SIXBIT_DECODE
-#endif
-#endif
-
-/* =========================================================================
  * External Variant maps
  * ========================================================================= */
 
@@ -101,7 +79,29 @@ const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
 #endif /* IOTDATA_VARIANT_MAPS */
 
 /* =========================================================================
- * Internal dump structures
+ * Internal dependencies
+ * ========================================================================= */
+
+#if defined(IOTDATA_ENABLE_IMAGE) || defined(IOTDATA_ENABLE_TLV)
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
+#define _IOTDATA_NEED_BASE64_DECODE
+#endif
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+#define _IOTDATA_NEED_BASE64_ENCODE
+#endif
+#endif
+
+#if defined(IOTDATA_ENABLE_TLV)
+#if !defined(IOTDATA_NO_ENCODE)
+#define _IOTDATA_NEED_SIXBIT_ENCODE
+#endif
+#if !defined(IOTDATA_NO_DECODE)
+#define _IOTDATA_NEED_SIXBIT_DECODE
+#endif
+#endif
+
+/* =========================================================================
+ * Internal structures (dump)
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_DUMP)
@@ -207,24 +207,24 @@ typedef struct {
  * Internal bit-packing (MSB-first / big-endian order)
  * ========================================================================= */
 
+#if !defined(IOTDATA_NO_ENCODE) || !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
 static inline size_t bits_to_bytes(size_t bits) {
     return (bits + 7) / 8;
 }
+#endif
 
+#if !defined(IOTDATA_NO_ENCODE)
 static inline void bits_write(uint8_t *buf, size_t *bp, uint32_t value, uint8_t nbits) {
     for (int i = nbits - 1; i >= 0; i--, (*bp)++)
-        if (value & (1U << i))
-            buf[*bp / 8] |= (1U << (7 - (*bp % 8)));
-        else
-            buf[*bp / 8] &= (uint8_t)~(1U << (7 - (*bp % 8)));
+        buf[*bp / 8] = (value & (1U << i)) ? buf[*bp / 8] | (1U << (7 - (*bp % 8))) : buf[*bp / 8] & (uint8_t)~(1U << (7 - (*bp % 8)));
 }
+#endif
 
 #if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
 static inline uint32_t bits_read(const uint8_t *buf, size_t buf_bits, size_t *bp, uint8_t nbits) {
     uint32_t value = 0;
     for (int i = nbits - 1; i >= 0 && *bp < buf_bits; i--, (*bp)++)
-        if (buf[*bp / 8] & (1U << (7 - (*bp % 8))))
-            value |= (1U << i);
+        value |= ((uint32_t)((buf[*bp / 8] >> (7 - (*bp % 8))) & 1U) << i);
     return value;
 }
 #endif
@@ -238,17 +238,13 @@ static inline void _b64_encode(const uint8_t *in, size_t in_len, char *out) {
     static const char t[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     size_t i = 0, j = 0;
     while (i < in_len) {
-        const uint32_t a = in[i++], b = (i < in_len) ? in[i++] : 0, c = (i < in_len) ? in[i++] : 0;
-        const uint32_t trip = (a << 16) | (b << 8) | c;
-        out[j++] = t[(trip >> 18) & 0x3F];
-        out[j++] = t[(trip >> 12) & 0x3F];
-        out[j++] = t[(trip >> 6) & 0x3F];
-        out[j++] = t[(trip >> 0) & 0x3F];
+        const uint32_t a = in[i++], b = (i < in_len) ? in[i++] : ~0U, c = (i < in_len) ? in[i++] : ~0U;
+        const uint32_t x = (a << 16) | ((b & 0xFF) << 8) | (c & 0xFF);
+        out[j++] = t[(x >> 18) & 0x3F];
+        out[j++] = t[(x >> 12) & 0x3F];
+        out[j++] = (b >> 8) ? '=' : t[(x >> 6) & 0x3F];
+        out[j++] = (c >> 8) ? '=' : t[(x >> 0) & 0x3F];
     }
-    if (in_len % 3 == 1)
-        out[j - 2] = '=';
-    if (in_len % 3 == 1 || in_len % 3 == 2)
-        out[j - 1] = '=';
     out[j] = '\0';
 }
 #endif
@@ -3403,6 +3399,77 @@ iotdata_status_t iotdata_encode_tlv_string(iotdata_encoder_t *enc, uint8_t type,
     IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_TLV);
     return IOTDATA_OK;
 }
+static iotdata_status_t _encode_tlv_type_kv(iotdata_encoder_t *enc, uint8_t type, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size) {
+    if (!kv || count == 0 || !buf)
+        return IOTDATA_ERR_TLV_DATA_NULL;
+    if (count & 1)
+        return IOTDATA_ERR_TLV_LEN_HIGH;
+    size_t pos = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (!kv[i])
+            return IOTDATA_ERR_TLV_DATA_NULL;
+        if (i > 0) {
+            if (pos >= buf_size)
+                return IOTDATA_ERR_TLV_LEN_HIGH;
+            buf[pos++] = ' ';
+        }
+        const size_t len = strlen(kv[i]);
+        if (pos + len >= buf_size)
+            return IOTDATA_ERR_TLV_LEN_HIGH;
+        memcpy(&buf[pos], kv[i], len);
+        pos += len;
+    }
+    buf[pos] = '\0';
+    return raw ? iotdata_encode_tlv(enc, type, (const uint8_t *)buf, (uint8_t)pos) : iotdata_encode_tlv_string(enc, type, buf);
+}
+iotdata_status_t iotdata_encode_tlv_type_version(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size) {
+    return _encode_tlv_type_kv(enc, IOTDATA_TLV_VERSION, kv, count, raw, buf, buf_size);
+}
+iotdata_status_t iotdata_encode_tlv_type_status(iotdata_encoder_t *enc, uint32_t session_uptime_secs, uint32_t lifetime_uptime_secs, uint16_t restarts, uint8_t reason, uint8_t buf[9]) {
+    if (!buf)
+        return IOTDATA_ERR_TLV_DATA_NULL;
+    const uint32_t sess = session_uptime_secs / 5, life = lifetime_uptime_secs / 5;
+    if (sess > 0xFFFFFF || life > 0xFFFFFF)
+        return IOTDATA_ERR_TLV_LEN_HIGH;
+    buf[0] = (uint8_t)(sess >> 16);
+    buf[1] = (uint8_t)(sess >> 8);
+    buf[2] = (uint8_t)sess;
+    buf[3] = (uint8_t)(life >> 16);
+    buf[4] = (uint8_t)(life >> 8);
+    buf[5] = (uint8_t)life;
+    buf[6] = (uint8_t)(restarts >> 8);
+    buf[7] = (uint8_t)restarts;
+    buf[8] = reason;
+    return iotdata_encode_tlv(enc, IOTDATA_TLV_STATUS, buf, 9);
+}
+iotdata_status_t iotdata_encode_tlv_type_health(iotdata_encoder_t *enc, int8_t cpu_temp, uint16_t supply_mv, uint16_t free_heap, uint32_t session_active_secs, uint8_t buf[7]) {
+    if (!buf)
+        return IOTDATA_ERR_TLV_DATA_NULL;
+    const uint32_t active = session_active_secs / 5;
+    if (active > 0xFFFF)
+        return IOTDATA_ERR_TLV_LEN_HIGH;
+    buf[0] = (uint8_t)cpu_temp;
+    buf[1] = (uint8_t)(supply_mv >> 8);
+    buf[2] = (uint8_t)supply_mv;
+    buf[3] = (uint8_t)(free_heap >> 8);
+    buf[4] = (uint8_t)free_heap;
+    buf[5] = (uint8_t)(active >> 8);
+    buf[6] = (uint8_t)active;
+    return iotdata_encode_tlv(enc, IOTDATA_TLV_HEALTH, buf, 7);
+}
+iotdata_status_t iotdata_encode_tlv_type_config(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size) {
+    return _encode_tlv_type_kv(enc, IOTDATA_TLV_CONFIG, kv, count, raw, buf, buf_size);
+}
+iotdata_status_t iotdata_encode_tlv_type_diagnostic(iotdata_encoder_t *enc, const char *str, bool raw) {
+    if (!str)
+        return IOTDATA_ERR_TLV_DATA_NULL;
+    return raw ? iotdata_encode_tlv(enc, IOTDATA_TLV_DIAGNOSTIC, (const uint8_t *)str, (uint8_t)strlen(str)) : iotdata_encode_tlv_string(enc, IOTDATA_TLV_DIAGNOSTIC, str);
+}
+iotdata_status_t iotdata_encode_tlv_type_userdata(iotdata_encoder_t *enc, const char *str, bool raw) {
+    if (!str)
+        return IOTDATA_ERR_TLV_DATA_NULL;
+    return raw ? iotdata_encode_tlv(enc, IOTDATA_TLV_USERDATA, (const uint8_t *)str, (uint8_t)strlen(str)) : iotdata_encode_tlv_string(enc, IOTDATA_TLV_USERDATA, str);
+}
 static inline void pack_tlv(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc) {
     for (int i = 0; i < enc->tlv_count; i++) {
         bits_write(buf, bp, enc->tlv[i].format, IOTDATA_TLV_FMT_BITS);
@@ -3646,7 +3713,7 @@ iotdata_status_t iotdata_encode_begin(iotdata_encoder_t *enc, uint8_t *buf, size
         return IOTDATA_ERR_CTX_NULL;
     if (!buf)
         return IOTDATA_ERR_BUF_NULL;
-    if (buf_size < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
+    if (buf_size < IOTDATA_HEADER_BITS / 8 + 1)
         return IOTDATA_ERR_BUF_TOO_SMALL;
 #endif
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
@@ -3766,7 +3833,7 @@ iotdata_status_t iotdata_peek(const uint8_t *buf, size_t len, uint8_t *variant, 
         return IOTDATA_ERR_CTX_NULL;
 #endif
 
-    if (len < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
+    if (len < IOTDATA_HEADER_BITS / 8 + 1)
         return IOTDATA_ERR_DECODE_SHORT;
 
     size_t bb = len * 8, bp = 0;
@@ -3790,7 +3857,7 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
         return IOTDATA_ERR_CTX_NULL;
 #endif
 
-    if (len < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
+    if (len < IOTDATA_HEADER_BITS / 8 + 1)
         return IOTDATA_ERR_DECODE_SHORT;
 
     size_t bb = len * 8, bp = 0;
@@ -4006,7 +4073,7 @@ static iotdata_status_t _iotdata_dump_build(const uint8_t *buf, size_t len, iotd
         return IOTDATA_ERR_CTX_NULL;
 #endif
 
-    if (len < bits_to_bytes(IOTDATA_HEADER_BITS + 8))
+    if (len < IOTDATA_HEADER_BITS / 8 + 1)
         return IOTDATA_ERR_DECODE_SHORT;
 
     size_t bb = len * 8, bp = 0;
