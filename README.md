@@ -2403,9 +2403,9 @@ It will also turn off null checks for buffers passed into the
 on calls to `encode_` functions, for example that temperatures passed
 are between quantisable minimum and maximum values. This is less safe,
 but results only in bad data (and badly quantised data) passed over
-the wire: this may fail to interped bad data obtained from sensors.
+the wire: this may fail to interpret bad data obtained from sensors.
 This option will turn off length checking in TLV encoded strings (and
-worst case, truncate them) as we as TLV encoded string validity (and
+worst case, truncate them) as well as TLV encoded string validity (and
 worst case, transmit these as spaces).
 
 Unless there are considerable space constraints, such as on Class 1
