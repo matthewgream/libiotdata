@@ -29,6 +29,7 @@
 #   IOTDATA_NO_PRINT               Exclude Print output support
 #   IOTDATA_NO_DUMP                Exclude Dump output support
 #   IOTDATA_NO_JSON                Exclude JSON support
+#   IOTDATA_NO_TLV_SPECIFIC        Exclude TLV specific type handling
 #   IOTDATA_NO_CHECKS_STATE        Remove runtime state checks
 #   IOTDATA_NO_CHECKS_TYPES        Remove runtime type checks (e.g. temp limits)
 #   IOTDATA_NO_ERROR_STRINGS       Exclude error strings (iotdata_strerror)

@@ -3399,6 +3399,7 @@ iotdata_status_t iotdata_encode_tlv_string(iotdata_encoder_t *enc, uint8_t type,
     IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_TLV);
     return IOTDATA_OK;
 }
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
 static iotdata_status_t _encode_tlv_type_kv(iotdata_encoder_t *enc, uint8_t type, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size) {
     if (!kv || count == 0 || !buf)
         return IOTDATA_ERR_TLV_DATA_NULL;
@@ -3470,6 +3471,7 @@ iotdata_status_t iotdata_encode_tlv_type_userdata(iotdata_encoder_t *enc, const 
         return IOTDATA_ERR_TLV_DATA_NULL;
     return raw ? iotdata_encode_tlv(enc, IOTDATA_TLV_USERDATA, (const uint8_t *)str, (uint8_t)strlen(str)) : iotdata_encode_tlv_string(enc, IOTDATA_TLV_USERDATA, str);
 }
+#endif
 static inline void pack_tlv(uint8_t *buf, size_t *bp, const iotdata_encoder_t *enc) {
     for (int i = 0; i < enc->tlv_count; i++) {
         bits_write(buf, bp, enc->tlv[i].format, IOTDATA_TLV_FMT_BITS);
@@ -3508,54 +3510,376 @@ static inline void unpack_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata
     }
 }
 #endif
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+#if (!defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)) || (!defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)) || (!defined(IOTDATA_NO_DUMP))
+static const char *const _tlv_reason_names[] = { "unknown", "power_on", "software", "watchdog", "brownout", "panic", "deepsleep", "external", "ota" };
+#define _TLV_REASON_COUNT (sizeof(_tlv_reason_names) / sizeof(_tlv_reason_names[0]))
+#endif
+#endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+static inline void _json_set_tlv_data(cJSON *obj, const iotdata_decoded_tlv_t *t) {
+    cJSON_AddStringToObject(obj, "format", t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw");
+    if (t->format == IOTDATA_TLV_FMT_STRING)
+        cJSON_AddStringToObject(obj, "data", t->str);
+    else {
+        char b64[(IOTDATA_TLV_DATA_MAX * 2) + 1];
+        _b64_encode(t->raw, t->length, b64);
+        cJSON_AddStringToObject(obj, "data", b64);
+    }
+}
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+static inline void _json_set_tlv_kv(cJSON *obj, const char *str) {
+    /* Parse space-delimited "KEY1 VALUE1 KEY2 VALUE2" into JSON object */
+    cJSON *data = cJSON_AddObjectToObject(obj, "data");
+    const char *p = str;
+    while (*p) {
+        /* extract key */
+        const char *ks = p;
+        while (*p && *p != ' ')
+            p++;
+        size_t klen = (size_t)(p - ks);
+        if (*p)
+            p++; /* skip space */
+        /* extract value */
+        const char *vs = p;
+        while (*p && *p != ' ')
+            p++;
+        size_t vlen = (size_t)(p - vs);
+        if (*p)
+            p++; /* skip space */
+        if (klen > 0 && vlen > 0) {
+            char key[64], val[64];
+            if (klen >= sizeof(key))
+                klen = sizeof(key) - 1;
+            if (vlen >= sizeof(val))
+                vlen = sizeof(val) - 1;
+            memcpy(key, ks, klen);
+            key[klen] = '\0';
+            memcpy(val, vs, vlen);
+            val[vlen] = '\0';
+            cJSON_AddStringToObject(data, key, val);
+        }
+    }
+}
+static inline void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t *t) {
+    cJSON *obj = cJSON_CreateObject();
+    cJSON_AddNumberToObject(obj, "type", t->type);
+    switch (t->type) {
+    case IOTDATA_TLV_VERSION:
+        cJSON_AddStringToObject(obj, "format", "version");
+        if (t->format == IOTDATA_TLV_FMT_STRING)
+            _json_set_tlv_kv(obj, t->str);
+        else
+            cJSON_AddStringToObject(obj, "data", t->str);
+        break;
+    case IOTDATA_TLV_STATUS:
+        cJSON_AddStringToObject(obj, "format", "status");
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 9) {
+            const uint8_t *b = t->raw;
+            const uint32_t sess = ((uint32_t)b[0] << 16) | ((uint32_t)b[1] << 8) | b[2];
+            const uint32_t life = ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5];
+            const uint16_t restarts = (uint16_t)((b[6] << 8) | b[7]);
+            const uint8_t reason = b[8];
+            cJSON *data = cJSON_AddObjectToObject(obj, "data");
+            cJSON_AddNumberToObject(data, "session_uptime", (double)(sess * 5));
+            if (life > 0)
+                cJSON_AddNumberToObject(data, "lifetime_uptime", (double)(life * 5));
+            cJSON_AddNumberToObject(data, "restarts", restarts);
+            if (reason < _TLV_REASON_COUNT)
+                cJSON_AddStringToObject(data, "reason", _tlv_reason_names[reason]);
+            else if (reason != IOTDATA_TLV_REASON_NA)
+                cJSON_AddNumberToObject(data, "reason", reason);
+        }
+        break;
+    case IOTDATA_TLV_HEALTH:
+        cJSON_AddStringToObject(obj, "format", "health");
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 7) {
+            const uint8_t *b = t->raw;
+            const int8_t cpu_temp = (int8_t)b[0];
+            const uint16_t supply_mv = (uint16_t)((b[1] << 8) | b[2]);
+            const uint16_t free_heap = (uint16_t)((b[3] << 8) | b[4]);
+            const uint16_t active = (uint16_t)((b[5] << 8) | b[6]);
+            cJSON *data = cJSON_AddObjectToObject(obj, "data");
+            if (cpu_temp != IOTDATA_TLV_HEALTH_TEMP_NA)
+                cJSON_AddNumberToObject(data, "cpu_temp", cpu_temp);
+            cJSON_AddNumberToObject(data, "supply_mv", supply_mv);
+            cJSON_AddNumberToObject(data, "free_heap", free_heap);
+            cJSON_AddNumberToObject(data, "session_active", (double)(active * 5));
+        }
+        break;
+    case IOTDATA_TLV_CONFIG:
+        cJSON_AddStringToObject(obj, "format", "config");
+        if (t->format == IOTDATA_TLV_FMT_STRING)
+            _json_set_tlv_kv(obj, t->str);
+        else
+            cJSON_AddStringToObject(obj, "data", t->str);
+        break;
+    case IOTDATA_TLV_DIAGNOSTIC:
+    case IOTDATA_TLV_USERDATA:
+        cJSON_AddStringToObject(obj, "format", "string");
+        cJSON_AddStringToObject(obj, "data", t->format == IOTDATA_TLV_FMT_STRING ? t->str : (const char *)t->raw);
+        break;
+    default:
+        /* Unknown global type — fall through to generic encoding */
+        _json_set_tlv_data(obj, t);
+        break;
+    }
+    cJSON_AddItemToArray(arr, obj);
+}
+static inline void _json_set_tlv_quality(cJSON *arr, const iotdata_decoded_tlv_t *t) {
+    /* Reserved for future quality/metadata TLVs (0x10-0x1F) — generic encoding */
+    cJSON *obj = cJSON_CreateObject();
+    cJSON_AddNumberToObject(obj, "type", t->type);
+    _json_set_tlv_data(obj, t);
+    cJSON_AddItemToArray(arr, obj);
+}
+static inline void _json_set_tlv_user(cJSON *arr, const iotdata_decoded_tlv_t *t) {
+    /* Application-defined TLVs (0x20+) — generic encoding */
+    cJSON *obj = cJSON_CreateObject();
+    cJSON_AddNumberToObject(obj, "type", t->type);
+    _json_set_tlv_data(obj, t);
+    cJSON_AddItemToArray(arr, obj);
+}
+#endif
 static inline void json_set_tlv(cJSON *root, const iotdata_decoded_t *d, const char *label) {
     cJSON *arr = cJSON_AddArrayToObject(root, label);
     for (int i = 0; i < d->tlv_count; i++) {
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+        if (d->tlv[i].type <= 0x0F)
+            _json_set_tlv_global(arr, &d->tlv[i]);
+        else if (d->tlv[i].type <= 0x1F)
+            _json_set_tlv_quality(arr, &d->tlv[i]);
+        else
+            _json_set_tlv_user(arr, &d->tlv[i]);
+#else
         cJSON *obj = cJSON_CreateObject();
         cJSON_AddNumberToObject(obj, "type", d->tlv[i].type);
-        cJSON_AddStringToObject(obj, "format", d->tlv[i].format == IOTDATA_TLV_FMT_STRING ? "string" : "raw");
-        if (d->tlv[i].format == IOTDATA_TLV_FMT_STRING) {
-            cJSON_AddStringToObject(obj, "data", d->tlv[i].str);
-        } else {
-            char b64[(IOTDATA_TLV_DATA_MAX * 2) + 1];
-            _b64_encode(d->tlv[i].raw, d->tlv[i].length, b64);
-            cJSON_AddStringToObject(obj, "data", b64);
-        }
+        _json_set_tlv_data(obj, &d->tlv[i]);
         cJSON_AddItemToArray(arr, obj);
+#endif
     }
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
-static inline iotdata_status_t json_get_tlv(cJSON *root, iotdata_encoder_t *enc, const char *label) {
-    iotdata_status_t rc;
-    cJSON *j = cJSON_GetObjectItem(root, label);
-    if (j && cJSON_IsArray(j)) {
-        static uint8_t tlv_raw_scratch[IOTDATA_TLV_MAX][IOTDATA_TLV_DATA_MAX];
-        static char tlv_str_scratch[IOTDATA_TLV_MAX][IOTDATA_TLV_STR_LEN_MAX + 1];
-        cJSON *item;
-        int tidx = 0;
-        cJSON_ArrayForEach(item, j) {
-            if (tidx >= IOTDATA_TLV_MAX)
-                break;
-            const uint8_t type = (uint8_t)cJSON_GetObjectItem(item, "type")->valueint;
-            cJSON *format = cJSON_GetObjectItem(item, "format");
-            const char *data = cJSON_GetObjectItem(item, "data")->valuestring;
-            if (strcmp(format ? format->valuestring : "raw", "string") == 0) {
-                snprintf(tlv_str_scratch[tidx], sizeof(tlv_str_scratch[tidx]), "%s", data);
-                rc = iotdata_encode_tlv_string(enc, type, tlv_str_scratch[tidx]);
-            } else {
-                rc = iotdata_encode_tlv(enc, type, tlv_raw_scratch[tidx], (uint8_t)_b64_decode(data, tlv_raw_scratch[tidx], IOTDATA_TLV_DATA_MAX));
-            }
-            if (rc != IOTDATA_OK)
-                return rc;
-            tidx++;
+static inline iotdata_status_t _json_get_tlv_generic(cJSON *item, iotdata_encoder_t *enc, int tidx, uint8_t type, uint8_t raw_scratch[][IOTDATA_TLV_DATA_MAX], char str_scratch[][IOTDATA_TLV_STR_LEN_MAX + 1]) {
+    cJSON *format = cJSON_GetObjectItem(item, "format");
+    cJSON *data = cJSON_GetObjectItem(item, "data");
+    if (!data || !cJSON_IsString(data))
+        return IOTDATA_OK; /* skip malformed */
+    if (strcmp(format ? format->valuestring : "raw", "string") == 0) {
+        snprintf(str_scratch[tidx], IOTDATA_TLV_STR_LEN_MAX + 1, "%s", data->valuestring);
+        return iotdata_encode_tlv_string(enc, type, str_scratch[tidx]);
+    } else
+        return iotdata_encode_tlv(enc, type, raw_scratch[tidx], (uint8_t)_b64_decode(data->valuestring, raw_scratch[tidx], IOTDATA_TLV_DATA_MAX));
+}
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+static inline iotdata_status_t _json_get_tlv_kv(cJSON *data_obj, iotdata_encoder_t *enc, uint8_t type, char *scratch, size_t scratch_size) {
+    /* Reconstruct "KEY1 VALUE1 KEY2 VALUE2" from JSON object */
+    size_t pos = 0;
+    cJSON *pair;
+    cJSON_ArrayForEach(pair, data_obj) {
+        if (!pair->string || !cJSON_IsString(pair))
+            continue;
+        const size_t klen = strlen(pair->string), vlen = strlen(pair->valuestring);
+        if (pos + ((pos > 0 ? 1 : 0) + klen + 1 + vlen) >= scratch_size)
+            return IOTDATA_ERR_TLV_LEN_HIGH;
+        if (pos > 0)
+            scratch[pos++] = ' ';
+        memcpy(&scratch[pos], pair->string, klen);
+        pos += klen;
+        scratch[pos++] = ' ';
+        memcpy(&scratch[pos], pair->valuestring, vlen);
+        pos += vlen;
+    }
+    scratch[pos] = '\0';
+    return iotdata_encode_tlv_string(enc, type, scratch);
+}
+static inline iotdata_status_t _json_get_tlv_global(cJSON *item, iotdata_encoder_t *enc, int tidx, uint8_t type, uint8_t raw_scratch[][IOTDATA_TLV_DATA_MAX], char str_scratch[][IOTDATA_TLV_STR_LEN_MAX + 1]) {
+    (void)raw_scratch;
+    cJSON *data = cJSON_GetObjectItem(item, "data");
+    switch (type) {
+    case IOTDATA_TLV_VERSION:
+        /* Sensor-originated: JSON→encode for config/management round-trip */
+        if (data && cJSON_IsObject(data))
+            return _json_get_tlv_kv(data, enc, type, str_scratch[tidx], IOTDATA_TLV_STR_LEN_MAX + 1);
+        break;
+    case IOTDATA_TLV_STATUS:
+        /* Sensor-originated: re-encoding not typically needed.
+         * TODO: implement if gateway-to-device config responses require it */
+        break;
+    case IOTDATA_TLV_HEALTH:
+        /* Sensor-originated: re-encoding not typically needed.
+         * TODO: implement if gateway-to-device config responses require it */
+        break;
+    case IOTDATA_TLV_CONFIG:
+        if (data && cJSON_IsObject(data))
+            return _json_get_tlv_kv(data, enc, type, str_scratch[tidx], IOTDATA_TLV_STR_LEN_MAX + 1);
+        break;
+    case IOTDATA_TLV_DIAGNOSTIC:
+        /* Sensor-originated: re-encoding not typically needed.
+         * TODO: implement if gateway-to-device config responses require it */
+        break;
+    case IOTDATA_TLV_USERDATA:
+        if (data && cJSON_IsString(data)) {
+            snprintf(str_scratch[tidx], IOTDATA_TLV_STR_LEN_MAX + 1, "%s", data->valuestring);
+            return iotdata_encode_tlv_string(enc, type, str_scratch[tidx]);
         }
+        break;
+    default:
+        /* Unknown global type — fall through to generic */
+        return (iotdata_status_t)-1;
+    }
+    return IOTDATA_OK;
+}
+static inline iotdata_status_t _json_get_tlv_quality(cJSON *item, iotdata_encoder_t *enc, int tidx, uint8_t type, uint8_t raw_scratch[][IOTDATA_TLV_DATA_MAX], char str_scratch[][IOTDATA_TLV_STR_LEN_MAX + 1]) {
+    /* Reserved for future quality/metadata TLVs (0x10-0x1F) — generic */
+    (void)item;
+    (void)enc;
+    (void)tidx;
+    (void)type;
+    (void)raw_scratch;
+    (void)str_scratch;
+    return (iotdata_status_t)-1; /* fall through to generic */
+}
+static inline iotdata_status_t _json_get_tlv_user(cJSON *item, iotdata_encoder_t *enc, int tidx, uint8_t type, uint8_t raw_scratch[][IOTDATA_TLV_DATA_MAX], char str_scratch[][IOTDATA_TLV_STR_LEN_MAX + 1]) {
+    /* Application-defined TLVs (0x20+) — generic */
+    (void)item;
+    (void)enc;
+    (void)tidx;
+    (void)type;
+    (void)raw_scratch;
+    (void)str_scratch;
+    return (iotdata_status_t)-1; /* fall through to generic */
+}
+#endif
+static inline iotdata_status_t json_get_tlv(cJSON *root, iotdata_encoder_t *enc, const char *label) {
+    cJSON *j = cJSON_GetObjectItem(root, label);
+    if (!j || !cJSON_IsArray(j))
+        return IOTDATA_OK;
+    static uint8_t tlv_raw_scratch[IOTDATA_TLV_MAX][IOTDATA_TLV_DATA_MAX];
+    static char tlv_str_scratch[IOTDATA_TLV_MAX][IOTDATA_TLV_STR_LEN_MAX + 1];
+    cJSON *item;
+    int tidx = 0;
+    cJSON_ArrayForEach(item, j) {
+        if (tidx >= IOTDATA_TLV_MAX)
+            break;
+        const uint8_t type = (uint8_t)cJSON_GetObjectItem(item, "type")->valueint;
+        iotdata_status_t rc;
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+        if (type <= 0x0F)
+            rc = _json_get_tlv_global(item, enc, tidx, type, tlv_raw_scratch, tlv_str_scratch);
+        else if (type <= 0x1F)
+            rc = _json_get_tlv_quality(item, enc, tidx, type, tlv_raw_scratch, tlv_str_scratch);
+        else
+            rc = _json_get_tlv_user(item, enc, tidx, type, tlv_raw_scratch, tlv_str_scratch);
+        /* -1 sentinel = band handler deferred to generic */
+        if ((int)rc == -1)
+            rc = _json_get_tlv_generic(item, enc, tidx, type, tlv_raw_scratch, tlv_str_scratch);
+#else
+        rc = _json_get_tlv_generic(item, enc, tidx, type, tlv_raw_scratch, tlv_str_scratch);
+#endif
+        if (rc != IOTDATA_OK)
+            return rc;
+        tidx++;
     }
     return IOTDATA_OK;
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
+static inline int _dump_tlv_data(size_t *bp, iotdata_dump_t *dump, int n, uint8_t format, uint8_t length, int tlv_idx, const char *name) {
+    char name_buf[IOTDATA_DUMP_FIELD_NAME_MAX];
+    const size_t data_bits = (format == IOTDATA_TLV_FMT_STRING) ? (size_t)length * IOTDATA_TLV_CHAR_BITS : (size_t)length * 8;
+    snprintf(name_buf, sizeof(name_buf), "tlv[%d].%s", tlv_idx, name);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%zu bits)", data_bits);
+    n = dump_add(dump, n, *bp, data_bits, 0, dump->_dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", name_buf);
+    *bp += data_bits;
+    return n;
+}
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+static inline int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, uint8_t type, uint8_t format, uint8_t length, int tlv_idx) {
+    switch (type) {
+    case IOTDATA_TLV_STATUS:
+        if (format == IOTDATA_TLV_FMT_RAW && length == 9) {
+            char name_buf[IOTDATA_DUMP_FIELD_NAME_MAX];
+            size_t p = *bp;
+            const uint32_t sess = bits_read(buf, bb, &p, 24);
+            const uint32_t life = bits_read(buf, bb, &p, 24);
+            const uint16_t restarts = (uint16_t)bits_read(buf, bb, &p, 16);
+            const uint8_t reason = (uint8_t)bits_read(buf, bb, &p, 8);
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].session_uptime", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(sess * 5));
+            n = dump_add(dump, n, *bp, 24, sess, dump->_dec_buf, "ticks×5", name_buf);
+            *bp += 24;
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].lifetime_uptime", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(life * 5));
+            n = dump_add(dump, n, *bp, 24, life, dump->_dec_buf, "ticks×5", name_buf);
+            *bp += 24;
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].restarts", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", restarts);
+            n = dump_add(dump, n, *bp, 16, restarts, dump->_dec_buf, "0..65535", name_buf);
+            *bp += 16;
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].reason", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s", reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
+            n = dump_add(dump, n, *bp, 8, reason, dump->_dec_buf, "0..255", name_buf);
+            *bp += 8;
+            return n;
+        }
+        break;
+    case IOTDATA_TLV_HEALTH:
+        if (format == IOTDATA_TLV_FMT_RAW && length == 7) {
+            char name_buf[IOTDATA_DUMP_FIELD_NAME_MAX];
+            size_t p = *bp;
+            const int8_t cpu_temp = (int8_t)(uint8_t)bits_read(buf, bb, &p, 8);
+            const uint16_t supply_mv = (uint16_t)bits_read(buf, bb, &p, 16);
+            const uint16_t free_heap = (uint16_t)bits_read(buf, bb, &p, 16);
+            const uint16_t active = (uint16_t)bits_read(buf, bb, &p, 16);
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].cpu_temp", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%d°C", cpu_temp);
+            n = dump_add(dump, n, *bp, 8, (uint32_t)(uint8_t)cpu_temp, dump->_dec_buf, "-40..85", name_buf);
+            *bp += 8;
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].supply_mv", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%umV", supply_mv);
+            n = dump_add(dump, n, *bp, 16, supply_mv, dump->_dec_buf, "0..65535", name_buf);
+            *bp += 16;
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].free_heap", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", free_heap);
+            n = dump_add(dump, n, *bp, 16, free_heap, dump->_dec_buf, "0..65535", name_buf);
+            *bp += 16;
+            snprintf(name_buf, sizeof(name_buf), "tlv[%d].session_active", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(active * 5));
+            n = dump_add(dump, n, *bp, 16, active, dump->_dec_buf, "ticks×5", name_buf);
+            *bp += 16;
+            return n;
+        }
+        break;
+    case IOTDATA_TLV_VERSION:
+    case IOTDATA_TLV_CONFIG:
+    case IOTDATA_TLV_DIAGNOSTIC:
+    case IOTDATA_TLV_USERDATA: {
+        static const char *const global_names[] = {
+            [IOTDATA_TLV_VERSION] = "version", [IOTDATA_TLV_STATUS] = "status", [IOTDATA_TLV_HEALTH] = "health", [IOTDATA_TLV_CONFIG] = "config", [IOTDATA_TLV_DIAGNOSTIC] = "diagnostic", [IOTDATA_TLV_USERDATA] = "userdata",
+        };
+        const char *tname = (type < sizeof(global_names) / sizeof(global_names[0]) && global_names[type]) ? global_names[type] : "global";
+        n = _dump_tlv_data(bp, dump, n, format, length, tlv_idx, tname);
+    } break;
+    default:
+        break;
+    }
+    return n;
+}
+static inline int _dump_tlv_quality(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, uint8_t format, uint8_t length, int tlv_idx) {
+    /* Reserved for future quality/metadata TLVs (0x10-0x1F) — generic span */
+    (void)buf;
+    (void)bb;
+    return _dump_tlv_data(bp, dump, n, format, length, tlv_idx, "data");
+}
+static inline int _dump_tlv_user(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, uint8_t format, uint8_t length, int tlv_idx) {
+    /* Application-defined TLVs (0x20+) — generic span */
+    (void)buf;
+    (void)bb;
+    return _dump_tlv_data(bp, dump, n, format, length, tlv_idx, "data");
+}
+#endif
 static inline int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     bool more = true;
@@ -3565,7 +3889,7 @@ static inline int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_du
         const uint8_t format = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_FMT_BITS);
         const uint8_t type = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_TYPE_BITS);
         more = bits_read(buf, bb, bp, IOTDATA_TLV_MORE_BITS) != 0;
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=%u more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=0x%02x more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
         char name_buf[IOTDATA_DUMP_FIELD_NAME_MAX];
         snprintf(name_buf, sizeof(name_buf), "tlv[%d].hdr", tlv_idx);
         n = dump_add(dump, n, s, IOTDATA_TLV_FMT_BITS + IOTDATA_TLV_TYPE_BITS + IOTDATA_TLV_MORE_BITS, 0, dump->_dec_buf, "format+type+more", name_buf);
@@ -3575,12 +3899,16 @@ static inline int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_du
         snprintf(name_buf, sizeof(name_buf), "tlv[%d].len", tlv_idx);
         n = dump_add(dump, n, s, IOTDATA_TLV_LENGTH_BITS, length, dump->_dec_buf, "0..255", name_buf);
         if (length > 0) {
-            s = *bp;
-            const size_t data_bits = (format == IOTDATA_TLV_FMT_STRING) ? (size_t)length * IOTDATA_TLV_CHAR_BITS : (size_t)length * 8;
-            snprintf(name_buf, sizeof(name_buf), "tlv[%d].data", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%zu bits)", data_bits);
-            n = dump_add(dump, n, s, data_bits, 0, dump->_dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", name_buf);
-            bp += data_bits;
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+            if (type <= 0x0F)
+                n = _dump_tlv_global(buf, bb, bp, dump, n, type, format, length, tlv_idx);
+            else if (type <= 0x1F)
+                n = _dump_tlv_quality(buf, bb, bp, dump, n, format, length, tlv_idx);
+            else
+                n = _dump_tlv_user(buf, bb, bp, dump, n, format, length, tlv_idx);
+#else
+            n = _dump_tlv_data(bp, dump, n, format, length, tlv_idx, "data");
+#endif
         }
         tlv_idx++;
     }
@@ -3588,20 +3916,118 @@ static inline int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_du
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+static inline void _print_tlv_kv(FILE *fp, const char *str, int i, const char *label) {
+    bool is_key = true;
+    fprintf(fp, "    [%d] %s: ", i, label);
+    for (const char *p = str; *p != '\0'; p++)
+        if (*p == ' ') {
+            fprintf(fp, "%s", is_key ? "=" : " ");
+            is_key = !is_key;
+        } else
+            fputc(*p, fp);
+    fprintf(fp, "\n");
+}
+static inline void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
+    switch (t->type) {
+    case IOTDATA_TLV_VERSION:
+        if (t->format == IOTDATA_TLV_FMT_STRING)
+            _print_tlv_kv(fp, t->str, i, "version");
+        else
+            fprintf(fp, "    [%d] version: raw(%u)\n", i, t->length);
+        break;
+    case IOTDATA_TLV_STATUS:
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 9) {
+            const uint8_t *b = t->raw;
+            const uint32_t sess = ((uint32_t)b[0] << 16) | ((uint32_t)b[1] << 8) | b[2];
+            const uint32_t life = ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5];
+            const uint16_t restarts = (uint16_t)((b[6] << 8) | b[7]);
+            const uint8_t reason = b[8];
+            fprintf(fp, "    [%d] status: session=%lus lifetime=%lus restarts=%u reason=%s", i, (unsigned long)(sess * 5), (unsigned long)(life * 5), restarts, reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
+            if (reason >= 0x80)
+                fprintf(fp, "(0x%02x)", reason);
+            fprintf(fp, "\n");
+        } else {
+            fprintf(fp, "    [%d] status: malformed(%u bytes)\n", i, t->length);
+        }
+        break;
+    case IOTDATA_TLV_HEALTH:
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 7) {
+            const uint8_t *b = t->raw;
+            const int8_t cpu_temp = (int8_t)b[0];
+            const uint16_t supply_mv = (uint16_t)((b[1] << 8) | b[2]);
+            const uint16_t free_heap = (uint16_t)((b[3] << 8) | b[4]);
+            const uint16_t active = (uint16_t)((b[5] << 8) | b[6]);
+            fprintf(fp, "    [%d] health:", i);
+            if (cpu_temp != IOTDATA_TLV_HEALTH_TEMP_NA)
+                fprintf(fp, " cpu=%d°C", cpu_temp);
+            fprintf(fp, " supply=%umV heap=%u active=%lus\n", supply_mv, free_heap, (unsigned long)(active * 5));
+        } else {
+            fprintf(fp, "    [%d] health: malformed(%u bytes)\n", i, t->length);
+        }
+        break;
+    case IOTDATA_TLV_CONFIG:
+        if (t->format == IOTDATA_TLV_FMT_STRING)
+            _print_tlv_kv(fp, t->str, i, "config");
+        else
+            fprintf(fp, "    [%d] config: raw(%u)\n", i, t->length);
+        break;
+    case IOTDATA_TLV_DIAGNOSTIC:
+        fprintf(fp, "    [%d] diagnostic: \"%s\"\n", i, t->format == IOTDATA_TLV_FMT_STRING ? t->str : "(raw)");
+        break;
+    case IOTDATA_TLV_USERDATA:
+        fprintf(fp, "    [%d] userdata: \"%s\"\n", i, t->format == IOTDATA_TLV_FMT_STRING ? t->str : "(raw)");
+        break;
+    default:
+        fprintf(fp, "    [%d] global(0x%02x): %s(%u)\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
+        break;
+    }
+}
+static inline void _print_tlv_quality(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
+    /* Reserved for future quality/metadata TLVs (0x10-0x1F) */
+    fprintf(fp, "    [%d] quality(0x%02x): %s(%u)\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
+}
+static inline void _print_tlv_user(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
+    /* Application-defined TLVs (0x20+) */
+    if (t->format == IOTDATA_TLV_FMT_STRING) {
+        fprintf(fp, "    [%d] type=%u str(%u)=\"%s\"\n", i, t->type, t->length, t->str);
+    } else {
+        fprintf(fp, "    [%d] type=%u raw(%u)=", i, t->type, t->length);
+        for (int j = 0; j < t->length && j < 16; j++)
+            fprintf(fp, "%02x", t->raw[j]);
+        if (t->length > 16)
+            fprintf(fp, "...");
+        fprintf(fp, "\n");
+    }
+}
+#else
+static inline void _print_tlv_data(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
+    /* Application-defined TLVs (0x20+) */
+    if (t->format == IOTDATA_TLV_FMT_STRING) {
+        fprintf(fp, "    [%d] type=%u str(%u)=\"%s\"\n", i, t->type, t->length, t->str);
+    } else {
+        fprintf(fp, "    [%d] type=%u raw(%u)=", i, t->type, t->length);
+        for (int j = 0; j < t->length && j < 16; j++)
+            fprintf(fp, "%02x", t->raw[j]);
+        if (t->length > 16)
+            fprintf(fp, "...");
+        fprintf(fp, "\n");
+    }
+}
+#endif
 static inline void print_tlv(const iotdata_decoded_t *d, FILE *fp, const char *l) {
     fprintf(fp, "  %s: %u TLV entries\n", l, d->tlv_count);
-    for (int i = 0; i < d->tlv_count; i++) {
-        if (d->tlv[i].format == IOTDATA_TLV_FMT_STRING) {
-            fprintf(fp, "    [%d] type=%u str(%u)=\"%s\"\n", i, d->tlv[i].type, d->tlv[i].length, d->tlv[i].str);
-        } else {
-            fprintf(fp, "    [%d] type=%u raw(%u)=", i, d->tlv[i].type, d->tlv[i].length);
-            for (int j = 0; j < d->tlv[i].length && j < 16; j++)
-                fprintf(fp, "%02x", d->tlv[i].raw[j]);
-            if (d->tlv[i].length > 16)
-                fprintf(fp, "...");
-            fprintf(fp, "\n");
-        }
-    }
+    for (int i = 0; i < d->tlv_count; i++)
+#if !defined(IOTDATA_NO_TLV_SPECIFIC)
+        if (d->tlv[i].type <= 0x0F)
+            _print_tlv_global(&d->tlv[i], fp, i);
+        else if (d->tlv[i].type <= 0x1F)
+            _print_tlv_quality(&d->tlv[i], fp, i);
+        else
+            _print_tlv_user(&d->tlv[i], fp, i);
+#else
+        _print_tlv_data(&d->tlv[i], fp, i);
+#endif
 }
 #endif
 #define _IOTDATA_ERR_TLV \

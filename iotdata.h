@@ -29,6 +29,7 @@
  *   IOTDATA_NO_PRINT               Exclude Print output support
  *   IOTDATA_NO_DUMP                Exclude Dump output support
  *   IOTDATA_NO_JSON                Exclude JSON support
+ *   IOTDATA_NO_TLV_SPECIFIC        Exclude TLV specific type handling
  *   IOTDATA_NO_CHECKS_STATE        Remove runtime state checks
  *   IOTDATA_NO_CHECKS_TYPES        Remove runtime type checks (e.g. temp limits)
  *   IOTDATA_NO_ERROR_STRINGS       Exclude error strings (iotdata_strerror)
@@ -496,30 +497,32 @@ extern "C" {
 #define IOTDATA_TLV_STR_LEN_MAX 255
 
 #if !defined(IOTDATA_NO_ENCODE)
+typedef struct {
+    uint8_t format;
+    uint8_t type;
+    uint8_t length;
+    const uint8_t *data;
+    const char *str;
+} iotdata_encoder_tlv_t;
 #define IOTDATA_TLV_FIELDS_ENCODE \
     uint8_t tlv_count; \
-    struct { \
-        uint8_t format; \
-        uint8_t type; \
-        uint8_t length; \
-        const uint8_t *data; \
-        const char *str; \
-    } tlv[IOTDATA_TLV_MAX];
+    iotdata_encoder_tlv_t tlv[IOTDATA_TLV_MAX];
 #else
 #define IOTDATA_TLV_FIELDS_ENCODE
 #endif
 #if !defined(IOTDATA_NO_DECODE)
+typedef struct {
+    uint8_t format;
+    uint8_t type;
+    uint8_t length;
+    union {
+        uint8_t raw[IOTDATA_TLV_DATA_MAX];
+        char str[IOTDATA_TLV_STR_LEN_MAX + 1];
+    };
+} iotdata_decoded_tlv_t;
 #define IOTDATA_TLV_FIELDS_DECODE \
     uint8_t tlv_count; \
-    struct { \
-        uint8_t format; \
-        uint8_t type; \
-        uint8_t length; \
-        union { \
-            uint8_t raw[IOTDATA_TLV_DATA_MAX]; \
-            char str[IOTDATA_TLV_STR_LEN_MAX + 1]; \
-        }; \
-    } tlv[IOTDATA_TLV_MAX];
+    iotdata_decoded_tlv_t tlv[IOTDATA_TLV_MAX];
 #else
 #define IOTDATA_TLV_FIELDS_DECODE
 #endif
@@ -972,8 +975,7 @@ size_t iotdata_image_hs_compress(const uint8_t *in, size_t in_len, uint8_t *out,
 size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *out, size_t out_max);
 #endif
 
-#if defined(IOTDATA_ENABLE_TLV)
-#if !defined(IOTDATA_NO_ENCODE)
+#if defined(IOTDATA_ENABLE_TLV) && !defined(IOTDATA_NO_TLV_SPECIFIC)
 #define IOTDATA_TLV_VERSION          0x01
 #define IOTDATA_TLV_STATUS           0x02
 #define IOTDATA_TLV_HEALTH           0x03
@@ -991,9 +993,11 @@ size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *ou
 #define IOTDATA_TLV_REASON_EXTERNAL  0x07
 #define IOTDATA_TLV_REASON_OTA       0x08
 
+#define IOTDATA_TLV_REASON_NA        0xFF
 #define IOTDATA_TLV_HEALTH_TEMP_NA   127
 #define IOTDATA_TLV_HEALTH_HEAP_NA   0xFFFF
 
+#if !defined(IOTDATA_NO_ENCODE)
 /* 0x01 VERSION — key-value pairs, space-delimited on wire: kv[0]="FW", kv[1]="142", kv[2]="HW", kv[3]="3", ... count must be even (every key has a value). */
 iotdata_status_t iotdata_encode_tlv_type_version(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size);
 /* 0x02 STATUS — 9 bytes raw format: uptimes in seconds (converted to 5-second ticks internally), pass lifetime_uptime_secs=0 for "not tracked". */

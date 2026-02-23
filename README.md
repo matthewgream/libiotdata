@@ -20,7 +20,8 @@
 
 This document specifies a bit-packed telemetry protocol for
 battery- and transmission- constrained IoT sensor systems, with
-particular emphasis on LoRa-based remote environmental monitoring.
+particular emphasis on LoRa-based remote environmental monitoring,
+seamlessly operable in point-to-point and mesh-relay deployments.
 The protocol has a reference implementation in C (`libiotdata`)
 which is the normative source for any ambiguity in this specification.
 In the tradition of RFC 1, the specification is informed by running
@@ -92,26 +93,7 @@ place on the project's GitHub repository.
 - [Appendix B. Quantisation Worked Examples](#appendix-b-quantisation-worked-examples)
 - [Appendix C. Complete Encoder Example](#appendix-c-complete-encoder-example)
 - [Appendix D. Transmission Medium Considerations](#appendix-d-transmission-medium-considerations)
-  - [D.1. Design Principle: One Frame, One Transmission](#d1-design-principle-one-frame-one-transmission)
-  - [D.2. LoRa (Raw PHY)](#d2-lora-raw-phy)
-  - [D.3. LoRaWAN](#d3-lorawan)
-  - [D.4. Sigfox](#d4-sigfox)
-  - [D.5. IEEE 802.11ah (Wi-Fi HaLow)](#d5-ieee-80211ah-wi-fi-halow)
-  - [D.6. Cellular IoT (NB-IoT, LTE-M)](#d6-cellular-iot-nb-iot-lte-m)
-  - [D.7. Medium Selection Summary](#d7-medium-selection-summary)
 - [Appendix E. System Implementation Considerations](#appendix-e-system-implementation-considerations)
-  - [E.1. Microcontoller Class Taxonomy](#e1-microcontroller-class-taxonomy)
-  - [E.2. Memory Footprint](#e2-memory-footprint)
-  - [E.3. Encoder Architecture: Store-Then-Pack](#e3-encoder-architecture-store-then-pack)
-  - [E.4. Encoder Alternative: Pack-As-You-Go](#e4-alternative-pack-as-you-go)
-  - [E.5. Compile-Time Field Stripping (#ifdef)](#e5-compile-time-field-stripping-ifdef)
-  - [E.6. Floating Point Considerations](#e6-floating-point-considerations)
-  - [E.7. Dependencies and Portability](#e7-dependencies-and-portability)
-  - [E.8. Stack vs Heap Allocation](#e8-stack-vs-heap-allocation)
-  - [E.9. Endianness](#e9-endianness)
-  - [E.10. Real-Time Considerations](#e10-real-time-considerations)
-  - [E.11. Platform-Specific Notes](#e11-platform-specific-notes)
-  - [E.12. Class 1 Hand-Rolled Encoder Example](#e12-class-1-hand-rolled-encoder-example)
 - [Appendix F. Example Weather Station Output](#appendix-f-example-weather-station-output)
 - [Appendix G. Mesh Relay Protocol](#appendix-g-mesh-relay-protocol)
 
@@ -459,10 +441,9 @@ frequently updated fields (position, datetime, radiation) are placed
 in Presence Byte 1 and only add to the packet when present.
 
 Note that the weather station variant uses the ENVIRONMENT, WIND,
-RAIN, AIR_QUALITY, RADIATION bundle types (see Sections 8.3, 8.12, 
-8.16, 8.19, 8.23) rather than their individual component types.
-See Section 8 for a discussion of when to use bundled vs individual
-field types.
+RAIN, and RADIATION bundle types (see Sections 8.3, 8.12, 8.16, 8.23)
+rather than their individual component types.  See Section 8 for a
+discussion of when to use bundled vs individual field types.
 
 ### Custom Variant Maps
 
@@ -494,10 +475,10 @@ Compile with:
 cc -DIOTDATA_VARIANT_MAPS=my_variants -DIOTDATA_VARIANT_MAPS_COUNT=1 ...
 ```
 
-Custom variants may use any combination of the 21 field types and
-may place them in any field position.  Up to 15 variants can be
-registered (variant IDs 0-14; variant 15 is reserved for future
-extended header format).
+Custom variants may use any combination of the available field types and
+may place them in any field position.  Up to 15 variants can be registered
+as variant IDs 0-14; with variant 15 reserved for the mesh protocol (see
+Appendix G).
 
 ### Registered Variants
 
@@ -505,7 +486,7 @@ extended header format).
 |---------|------------------|------------|--------|------------------------------|
 | 0       | weather_station  | 2          | 12     | Default (built-in)           |
 | 1-14    | (application)    | —          | —      | User-defined via custom maps |
-| 15      | RESERVED         | —          | —      | Extended header format       |
+| 15      | RESERVED         | —          | —      | Mesh protocol (Appendix G)   |
 
 A receiver encountering an unknown variant SHOULD fall back to
 variant 0's field mapping and flag the packet as using an unknown
@@ -513,12 +494,13 @@ variant (see Section 11.4).
 
 ## 8. Field Encodings
 
-Each field type has a fixed bit layout that is independent of which
+Each field type has a specified bit layout that is independent of which
 presence field it occupies.  Fields are always packed MSB-first.
 
-The protocol provides 21 field types.  Some of these exist in both
-bundled and individual forms, for cases where they are typically
-originating from a sensor that generates all bundled items concurrently.
+The protocol provides over 20 built-in field types.  Some of these
+exist in both individual and bundled forms, to aid efficiency for cases
+where like data (e.g. temperature, pressure and humidity) are always
+concurrently measured and transmitted.
 
   - **Environment** (Section 8.3) is a convenience bundle that packs
     temperature, pressure, and humidity into a single 24-bit field.
@@ -552,16 +534,17 @@ originating from a sensor that generates all bundled items concurrently.
     encodings and quantisation are identical.
 
 A variant definition chooses which form to use.  The default weather
-station variant uses the bundled forms as the sensors generate the
-entire bundle of values concurrently.  A custom variant might use the
-individual forms to include only the specific measurements it needs,
-or to place them in different priority positions, or where they are
-sourced from different sensors at different times. For example, the
-commonly used BME280/680 sensor can generate temperature, pressure
+station variant uses many of the bundled forms as the sensors generate
+the entire bundle of values concurrently.  A custom variant might use
+the individual forms to include only the specific measurements it
+needs, or to place them in different priority positions, or where they
+are sourced from different sensors at different times. For example,
+the commonly used BME280/680 sensor can generate temperature, pressure
 and humidity readings concurrently.
 
 Note that at this point, some bundles have no standalone forms, such
-as the Solar bundle with Irradiance and Ultraviolet measurements.
+as the Solar bundle with Irradiance and Ultraviolet measurements. This
+may be addressed in future versions of this protocol.
 
 ### 8.1. Battery
 
@@ -1376,7 +1359,7 @@ safest choice.
 
 In the canonical JSON output, the Image field is represented as
 a structured object under its variant label (e.g. `"image"`,
-`"thumbnail"`, `"motion_image"`, depending on the variant
+`"thumbnail"`, `"motion_image"`, depending on the variant map
 definition):
 
 ```json
@@ -1478,15 +1461,17 @@ encoder MUST reject strings containing unencodable characters.
 | 0x20-      | (available) | —       | Available for proprietary TLVs                    |
 
 Types 0x01-0x0F are reserved for globally designated types, as specified
-in, and extended by, this document.  Types 0x10-0x1F are reserved for
-sensor metadata (see Section 11.3 and Section 15).  Types 0x20 onwards are
-available for application use.
+in, and extended by, this document. They have encoding functions provided
+in the reference implementation.  Types 0x10-0x1F are reserved for sensor
+metadata (see Section 11.3 and Section 15) and may have future reference
+implementation support.  Types 0x20 onwards are available for application
+use.
 
 ### 9.5. Global TLV Types (0x01-0x0F)
 
 The following TLV types are globally designated and have fixed
 semantics across all variants and deployments.  Implementations
-SHOULD use these types for their intended purpose to ensure
+SHOULD use these types for their intended purpose to aid
 interoperability between sensors, gateways, and downstream consumers.
 
 All global TLV types are optional.  A sensor includes them when the
@@ -2391,6 +2376,7 @@ footprint.
 | `IOTDATA_NO_PRINT`              | Exclude print functions |
 | `IOTDATA_NO_DUMP`               | Exclude dump functions |
 | `IOTDATA_NO_JSON`               | Exclude JSON functions |
+| `IOTDATA_NO_TLV_SPECIFIC`       | Exclude TLV specific type handling |
 | `IOTDATA_NO_CHECKS_STATE`       | Exclude state checking logic |
 | `IOTDATA_NO_CHECKS_TYPES`       | Exclude type checking logic |
 | `IOTDATA_NO_ERROR_STRINGS`      | Exclude error strings (and iotdata_strerror) |
