@@ -496,7 +496,10 @@ const iotsim_sensor_t *iotsim_sensor(const iotsim_t *sim, int index) {
 #ifdef TEST_MAIN
 
 #define IOTDATA_NO_JSON
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wredundant-decls"
 #include "iotdata.c"
+#pragma GCC diagnostic pop
 
 static void _print_decoded(const iotdata_decoded_t *d, uint8_t variant) {
     /* Common fields */
