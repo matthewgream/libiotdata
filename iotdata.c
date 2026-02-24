@@ -16,7 +16,6 @@
 
 #include "iotdata.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #if !defined(IOTDATA_NO_FLOATING)
@@ -2404,6 +2403,10 @@ static const iotdata_field_ops_t _iotdata_field_def_air_quality = {
 iotdata_status_t iotdata_encode_radiation_cpm(iotdata_encoder_t *enc, uint16_t cpm) {
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_RADIATION_CPM);
+#if !defined(IOTDATA_NO_CHECKS_TYPES)
+    if (cpm > IOTDATA_RADIATION_CPM_MAX)
+        return IOTDATA_ERR_RADIATION_CPM_HIGH;
+#endif
     enc->radiation_cpm = cpm;
     IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_RADIATION_CPM);
     return IOTDATA_OK;
@@ -3075,7 +3078,7 @@ static inline void _pixel_set(uint8_t *buf, size_t idx, uint8_t val, uint8_t bpp
     if (bpp == 1)
         buf[idx / 8] = (uint8_t)((buf[idx / 8] & ~(1U << (7 - (idx % 8)))) | ((val & 1) << (7 - (idx % 8))));
     else if (bpp == 2)
-        buf[idx / 4] = (uint8_t)((buf[idx / 4] & ~(3U << ((idx % 4) * 2))) | ((val & 3) << ((idx % 4) * 2)));
+        buf[idx / 4] = (uint8_t)((buf[idx / 4] & ~(3U << (6 - (idx % 4) * 2))) | ((val & 3) << (6 - (idx % 4) * 2)));
     else if (bpp == 4)
         buf[idx / 2] = (uint8_t)(idx & 1 ? (buf[idx / 2] & 0xF0) | (val & 0x0F) : (buf[idx / 2] & 0x0F) | ((val & 0x0F) << 4));
 }
@@ -3804,6 +3807,8 @@ static inline void _json_set_tlv_kv(cJSON *obj, const char *str, iotdata_decode_
         if (*p)
             p++; /* skip space */
         if (klen > 0 && vlen > 0) {
+            if (klen + 3 > sizeof(scratch->tlv.str))
+                continue;
             if (klen + vlen > sizeof(scratch->tlv.str))
                 vlen = sizeof(scratch->tlv.str) - klen - 3;
             memcpy(&scratch->tlv.str[0], ks, klen);
@@ -4915,7 +4920,7 @@ static inline void _iotdata_print_field(const iotdata_decoded_t *dec, FILE *fp, 
         ops->print(dec, fp, label);
 }
 
-iotdata_status_t print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp) {
+iotdata_status_t iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp) {
     const iotdata_variant_def_t *vdef = iotdata_get_variant(dec->variant);
     if (vdef == NULL)
         return IOTDATA_ERR_HDR_VARIANT_UNKNOWN;
@@ -4939,7 +4944,7 @@ iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, c
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_PRINT_ALLOC;
-    rc = print_decoded_to_file(dec, fp);
+    rc = iotdata_print_decoded_to_file(dec, fp);
     fclose(fp);
     return rc;
 }
@@ -4952,7 +4957,7 @@ iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp,
     iotdata_status_t rc;
     if ((rc = iotdata_decode(buf, len, &scratch->dec)) != IOTDATA_OK)
         return rc;
-    return print_decoded_to_file(&scratch->dec, fp);
+    return iotdata_print_decoded_to_file(&scratch->dec, fp);
 }
 
 iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, iotdata_print_scratch_t *scratch) {
@@ -4966,7 +4971,7 @@ iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *o
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_PRINT_ALLOC;
-    rc = print_decoded_to_file(&scratch->dec, fp);
+    rc = iotdata_print_decoded_to_file(&scratch->dec, fp);
     fclose(fp);
     return rc;
 }

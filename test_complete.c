@@ -15,13 +15,7 @@
  * error paths, encode buffer overflow, and image compression.
  */
 
-#include "iotdata.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <assert.h>
+#include "test_common.h"
 
 /* ---------------------------------------------------------------------------
  * Custom variant definitions
@@ -89,96 +83,6 @@ const iotdata_variant_def_t complete_variants[2] = {
         },
     },
 };
-
-/* ---------------------------------------------------------------------------
- * Test framework
- * -------------------------------------------------------------------------*/
-
-static int tests_run = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
-
-#define TEST(name) \
-    do { \
-        tests_run++; \
-        printf("  %-58s ", name); \
-        fflush(stdout); \
-    } while (0)
-
-#define PASS() \
-    do { \
-        tests_passed++; \
-        printf("PASS\n"); \
-    } while (0)
-
-#define FAIL(msg) \
-    do { \
-        tests_failed++; \
-        printf("FAIL: %s\n", msg); \
-    } while (0)
-
-#define ASSERT_EQ(a, b, msg) \
-    do { \
-        if ((a) != (b)) { \
-            printf("FAIL: %s (got %d, expected %d)\n", msg, (int)(a), (int)(b)); \
-            tests_failed++; \
-            return; \
-        } \
-    } while (0)
-
-#define ASSERT_EQ_U(a, b, msg) \
-    do { \
-        if ((a) != (b)) { \
-            printf("FAIL: %s (got %u, expected %u)\n", msg, (unsigned)(a), (unsigned)(b)); \
-            tests_failed++; \
-            return; \
-        } \
-    } while (0)
-
-#define ASSERT_NEAR(a, b, tol, msg) \
-    do { \
-        if (fabs((double)(a) - (double)(b)) > (tol)) { \
-            printf("FAIL: %s (got %.4f, expected %.4f, tol %.4f)\n", msg, (double)(a), (double)(b), (double)(tol)); \
-            tests_failed++; \
-            return; \
-        } \
-    } while (0)
-
-#define ASSERT_OK(rc, msg) \
-    do { \
-        if ((rc) != IOTDATA_OK) { \
-            printf("FAIL: %s (%s)\n", msg, iotdata_strerror(rc)); \
-            tests_failed++; \
-            return; \
-        } \
-    } while (0)
-
-#define ASSERT_ERR(rc, expected, msg) \
-    do { \
-        if ((rc) != (expected)) { \
-            printf("FAIL: %s (got %s, expected %s)\n", msg, iotdata_strerror(rc), iotdata_strerror(expected)); \
-            tests_failed++; \
-            return; \
-        } \
-    } while (0)
-
-/* Helpers */
-static iotdata_encoder_t enc;
-static uint8_t pkt[256];
-static size_t pkt_len;
-static iotdata_decoded_t dec;
-
-static void begin(uint8_t variant, uint16_t station, uint16_t seq) {
-    assert(iotdata_encode_begin(&enc, pkt, sizeof(pkt), variant, station, seq) == IOTDATA_OK);
-}
-
-static void finish(void) {
-    assert(iotdata_encode_end(&enc, &pkt_len) == IOTDATA_OK);
-}
-
-static void decode_pkt(void) {
-    assert(iotdata_decode(pkt, pkt_len, &dec) == IOTDATA_OK);
-}
 
 /* =========================================================================
  * Section 1: Field round-trips for types not in the default variant

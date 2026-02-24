@@ -10,6 +10,7 @@
 #   test-default  - Build and run default variant tests
 #   test-custom   - Build and run custom variant tests
 #   test-complete - Build and run comprehensive all-field-type tests
+#   test-failures - Build and run failure oriented tests
 #   test-example  - Build and run example default variant test
 #   test-versions - Build and run all compile-time variant smoke tests
 #   minimal       - Build and show full versus minimal build sizes (native)
@@ -105,6 +106,8 @@ TEST_COMPLETE_SRC = test_complete.c
 TEST_COMPLETE_BIN = test_complete
 TEST_EXAMPLE_SRC = test_example.c
 TEST_EXAMPLE_BIN = test_example
+TEST_FAILURES_SRC = test_failures.c
+TEST_FAILURES_BIN = test_failures
 TEST_VERSION_SRC = test_version.c
 
 MINIMAL_OBJ=iotdata_full.o iotdata_minimal.o
@@ -123,9 +126,9 @@ VERSION_BINS = \
     test_version_SELECTIVE \
     test_version_NO_CHECKS
 
-.PHONY: all test test-default test-custom test-complete test-example test-versions lib format clean minimal
+.PHONY: all test test-default test-custom test-complete test-failures test-example test-versions lib format clean minimal
 
-all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_EXAMPLE_BIN)
+all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN)
 
 lib: $(LIB_STATIC)
 
@@ -140,6 +143,8 @@ $(TEST_CUSTOM_BIN): $(TEST_CUSTOM_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=custom_variants -DIOTDATA_VARIANT_MAPS_COUNT=3 $(TEST_CUSTOM_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_CUSTOM_BIN)
 $(TEST_COMPLETE_BIN): $(TEST_COMPLETE_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=complete_variants -DIOTDATA_VARIANT_MAPS_COUNT=2 $(TEST_COMPLETE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_COMPLETE_BIN)
+$(TEST_FAILURES_BIN): $(TEST_FAILURES_SRC) $(LIB_HDR) $(LIB_SRC)
+	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=failure_variants -DIOTDATA_VARIANT_MAPS_COUNT=2 $(TEST_FAILURES_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_FAILURES_BIN)
 $(TEST_EXAMPLE_BIN): $(TEST_EXAMPLE_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_STACK_USAGE) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
 
@@ -149,13 +154,16 @@ test-custom: $(TEST_CUSTOM_BIN)
 	./$(TEST_CUSTOM_BIN)
 test-complete: $(TEST_COMPLETE_BIN)
 	./$(TEST_COMPLETE_BIN)
+test-failures: $(TEST_FAILURES_BIN)
+	./$(TEST_FAILURES_BIN)
 test-example: $(TEST_EXAMPLE_BIN)
 	./$(TEST_EXAMPLE_BIN)
 
-test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN)
+test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN)
 	./$(TEST_DEFAULT_BIN)
 	./$(TEST_CUSTOM_BIN)
 	./$(TEST_COMPLETE_BIN)
+	./$(TEST_FAILURES_BIN)
 
 test_version_FULL: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_VERSIONS) \
@@ -206,7 +214,7 @@ format:
 	clang-format -i *.[ch]
 
 clean:
-	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
+	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
 
 ################################################################################
 

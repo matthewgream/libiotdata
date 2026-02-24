@@ -1,7 +1,8 @@
 *.o
 *.a
-test_complete
 test_default
+test_complete
+test_failures
 test_custom
 test_example
 test_version_*
