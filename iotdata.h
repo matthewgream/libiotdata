@@ -455,8 +455,13 @@ extern "C" {
     uint8_t image_size_tier; \
     uint8_t image_compression; \
     uint8_t image_flags; \
-    uint8_t image_data[IOTDATA_IMAGE_DATA_MAX]; \
+    const uint8_t *image_data; \
     uint8_t image_data_len;
+typedef struct {
+    union {
+        uint8_t data[IOTDATA_IMAGE_DATA_MAX];
+    };
+} iotdata_encode_to_json_scratch_image_t;
 #else
 #define IOTDATA_IMAGE_FIELDS_ENCODE
 #endif
@@ -468,14 +473,14 @@ extern "C" {
     uint8_t image_flags; \
     uint8_t image_data[IOTDATA_IMAGE_DATA_MAX]; \
     uint8_t image_data_len;
-#else
-#define IOTDATA_IMAGE_FIELDS_DECODE
-#endif
 typedef struct {
     union {
         char b64[((IOTDATA_IMAGE_DATA_MAX + 2) / 3) * 4 + 1];
     };
 } iotdata_decode_to_json_scratch_image_t;
+#else
+#define IOTDATA_IMAGE_FIELDS_DECODE
+#endif
 #else
 #define IOTDATA_IMAGE_FIELDS_ENCODE
 #define IOTDATA_IMAGE_FIELDS_DECODE
@@ -1190,6 +1195,9 @@ typedef struct {
     iotdata_encoder_t enc;
     union {
         bool _dummy;
+#if defined(IOTDATA_ENABLE_IMAGE)
+        iotdata_encode_to_json_scratch_image_t image;
+#endif
 #if defined(IOTDATA_ENABLE_TLV)
         iotdata_encode_from_json_scratch_tlv_t tlv;
 #endif
