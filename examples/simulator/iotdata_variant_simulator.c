@@ -13,8 +13,9 @@
 
 #include "iotdata_variant_simulator.h"
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 /* =========================================================================
  * RNG — xorshift32 (fast, deterministic, good enough for simulation)
