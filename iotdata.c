@@ -3177,7 +3177,8 @@ iotdata_status_t iotdata_encode_image(iotdata_encoder_t *enc, uint8_t pixel_form
     enc->image_size_tier = size_tier;
     enc->image_compression = compression;
     enc->image_flags = flags & 0x03;
-    enc->image_data = data;
+    if (data_len > 0)
+        memcpy(enc->image_data, data, data_len);
     enc->image_data_len = data_len;
     IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_IMAGE);
     return IOTDATA_OK;

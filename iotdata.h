@@ -455,7 +455,7 @@ extern "C" {
     uint8_t image_size_tier; \
     uint8_t image_compression; \
     uint8_t image_flags; \
-    const uint8_t *image_data; \
+    uint8_t image_data[IOTDATA_IMAGE_DATA_MAX]; \
     uint8_t image_data_len;
 #else
 #define IOTDATA_IMAGE_FIELDS_ENCODE
