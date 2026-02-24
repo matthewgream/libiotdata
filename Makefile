@@ -6,7 +6,7 @@
 #
 # Targets:
 #   all           - Build library and both test suites
-#   test          - Build and run all tests
+#   tests         - Build and run all tests
 #   test-default  - Build and run default variant tests
 #   test-custom   - Build and run custom variant tests
 #   test-complete - Build and run comprehensive all-field-type tests
@@ -127,9 +127,7 @@ VERSION_BINS = \
     tests/test_version_SELECTIVE \
     tests/test_version_NO_CHECKS
 
-.PHONY: all test test-default test-custom test-complete test-failures test-example test-versions lib format clean minimal
-
-all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN)
+################################################################################
 
 lib: $(LIB_STATIC)
 
@@ -137,6 +135,8 @@ $(LIB_OBJ): $(LIB_SRC) $(LIB_HDR)
 	$(CC) $(CFLAGS) $(EXTRA) -c $(LIB_SRC) -o $(LIB_OBJ)
 $(LIB_STATIC): $(LIB_OBJ)
 	$(AR) rcs $(LIB_STATIC) $(LIB_OBJ)
+
+################################################################################
 
 $(TEST_DEFAULT_BIN): $(TEST_DEFAULT_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_DEFAULT_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_DEFAULT_BIN)
@@ -146,8 +146,6 @@ $(TEST_COMPLETE_BIN): $(TEST_COMPLETE_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -DIOTDATA_VARIANT_MAPS=complete_variants -DIOTDATA_VARIANT_MAPS_COUNT=2 $(TEST_COMPLETE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_COMPLETE_BIN)
 $(TEST_FAILURES_BIN): $(TEST_FAILURES_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -DIOTDATA_VARIANT_MAPS=failure_variants -DIOTDATA_VARIANT_MAPS_COUNT=2 $(TEST_FAILURES_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_FAILURES_BIN)
-$(TEST_EXAMPLE_BIN): $(TEST_EXAMPLE_SRC) $(LIB_HDR) $(LIB_SRC)
-	$(CC) $(CFLAGS) $(CFLAGS_TEST) $(CFLAGS_STACK_USAGE) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
 
 test-default: $(TEST_DEFAULT_BIN)
 	./$(TEST_DEFAULT_BIN)
@@ -157,14 +155,14 @@ test-complete: $(TEST_COMPLETE_BIN)
 	./$(TEST_COMPLETE_BIN)
 test-failures: $(TEST_FAILURES_BIN)
 	./$(TEST_FAILURES_BIN)
-test-example: $(TEST_EXAMPLE_BIN)
-	./$(TEST_EXAMPLE_BIN)
 
-test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN)
+test-suites: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN)
 	./$(TEST_DEFAULT_BIN)
 	./$(TEST_CUSTOM_BIN)
 	./$(TEST_COMPLETE_BIN)
 	./$(TEST_FAILURES_BIN)
+
+################################################################################
 
 tests/test_version_FULL: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) $(CFLAGS_VERSIONS) \
@@ -202,20 +200,33 @@ tests/test_version_SELECTIVE: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 tests/test_version_NO_CHECKS: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) $(CFLAGS_VERSIONS) -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
 		$(TEST_VERSION_SRC) $(LIB_SRC) $(LIBS) -o $@
-test-versions: $(VERSION_BINS)
-	@echo ""
-	@echo "=== iotdata — build variant smoke tests ==="
-	@echo ""
-	@for t in $(VERSION_BINS); do ./$$t; done
-	@echo ""
 
-test-all: test test-versions test-complete test-example
+test-versions: $(VERSION_BINS)
+	@for t in $(VERSION_BINS); do ./$$t; done
+
+################################################################################
+
+$(TEST_EXAMPLE_BIN): $(TEST_EXAMPLE_SRC) $(LIB_HDR) $(LIB_SRC)
+	$(CC) $(CFLAGS) $(CFLAGS_TEST) $(CFLAGS_STACK_USAGE) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
+
+test-example: $(TEST_EXAMPLE_BIN)
+	./$(TEST_EXAMPLE_BIN)
+
+################################################################################
+
+tests: test-suites test-versions test-example
+
+################################################################################
+
+all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN)
 
 format:
 	clang-format -i *.[ch] tests/*.[ch]
 
 clean:
 	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
+
+.PHONY: all test-default test-custom test-complete test-failures test-suites test-example test-versions tests lib format clean minimal
 
 ################################################################################
 
@@ -225,20 +236,20 @@ stack-usage:
 ################################################################################
 
 minimal:
-	@echo "--- Full library ---"
-	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_full.o
-	@size iotdata_full.o
-	@echo "--- Minimal encoder (battery + environment, integer-only) ---"
+	@echo "--- Complete library (platform) ---"
+	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_platform_full.o
+	@size iotdata_platform_full.o
+	@echo "--- Minimal encoder (platform) (battery + environment, integer-only) ---"
 	$(CC) $(CFLAGS) $(CFLAGS_NO_FLOATING_POINT) \
 		-DIOTDATA_NO_DECODE \
 		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
 		-DIOTDATA_NO_JSON -DIOTDATA_NO_DUMP -DIOTDATA_NO_PRINT \
 		-DIOTDATA_NO_FLOATING -DIOTDATA_NO_ERROR_STRINGS -DIOTDATA_NO_CHECKS_STATE -DIOTDATA_NO_CHECKS_TYPES \
-		-c $(LIB_SRC) -o iotdata_minimal.o
+		-c $(LIB_SRC) -o iotdata_platform_minimal.o
 	@echo "Minimal object size:"
-	@size iotdata_minimal.o
-	@objdump -t iotdata_minimal.o | grep ' \.data\| \.rodata' | sort -k5 -rn
-	@rm -f iotdata_full.o iotdata_minimal.o
+	@size iotdata_platform_minimal.o
+	@objdump -t iotdata_platform_minimal.o | grep ' \.data\| \.rodata' | sort -k5 -rn
+	@rm -f iotdata_platform_full.o iotdata_platform_minimal.o
 
 ################################################################################
 
@@ -246,10 +257,10 @@ ESP_CC = riscv32-esp-elf-gcc
 ESP_CFLAGS_BASE = -march=rv32imc -mabi=ilp32 -Os
 
 minimal-esp32:
-	@echo "--- ESP32-C3 full library (no JSON) ---"
+	@echo "--- Complete library (esp32c3) (no JSON) ---"
 	$(ESP_CC) $(ESP_CFLAGS_BASE) -DIOTDATA_NO_JSON -c $(LIB_SRC) -o iotdata_esp32c3_full.o
 	@riscv32-esp-elf-size iotdata_esp32c3_full.o
-	@echo "--- ESP32-C3 minimal encoder (battery + environment, integer-only) ---"
+	@echo "--- Minimal encoder (esp32c3) (battery + environment, integer-only) ---"
 	$(ESP_CC) $(ESP_CFLAGS_BASE) \
 		-DIOTDATA_NO_DECODE \
 		-DIOTDATA_ENABLE_SELECTIVE -DIOTDATA_ENABLE_BATTERY -DIOTDATA_ENABLE_ENVIRONMENT \
