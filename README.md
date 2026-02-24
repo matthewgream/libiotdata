@@ -69,8 +69,8 @@ project's GitHub repository.
   - [9.1. TLV Header](#91-tlv-header)
   - [9.2. Raw Format](#92-raw-format)
   - [9.3. Packed String Format](#93-packed-string-format)
-  - [9.4. TLV Type](#94-tlv-type)
-  - [9.5. Global TLV Types (0x01-0x0F)](#95-global-tlv-types)
+  - [9.4. TLV Types](#94-tlv-types)
+  - [9.5. Global TLV Types](#95-global-tlv-types)
 - [10. Canonical JSON Representation](#10-canonical-json-representation)
 - [11. Receiver Considerations](#11-receiver-considerations)
   - [11.1. Datetime Year Resolution](#111-datetime-year-resolution)
@@ -212,7 +212,7 @@ The following principles guided the protocol design:
 
 An iotdata packet consists of the following sections, in order:
 
-```
+```text
 +--------+------------+-------------+------------+
 | Header | Presence   | Data Fields | TLV Fields |
 | 32 bits| 8 to 32 b. | variable    | optional   |
@@ -244,7 +244,7 @@ battery = 46 bits).
 
 The header is always the first 32 bits of a packet.
 
-```
+```text
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -280,7 +280,7 @@ follows.
 
 ### Presence Byte 0 (always present)
 
-```
+```text
  7   6   5   4   3   2   1   0
 +---+---+---+---+---+---+---+---+
 |Ext|TLV| S5| S4| S3| S2| S1| S0|
@@ -303,7 +303,7 @@ follows.
 
 Present only when the Ext bit in the preceding presence byte is set.
 
-```
+```text
  7   6   5   4   3   2   1   0
 +---+---+---+---+---+---+---+---+
 |Ext| S6| S5| S4| S3| S2| S1| S0|
@@ -523,7 +523,7 @@ in future versions of this protocol.
 
 6 bits total.
 
-```
+```text
  0   1   2   3   4   5
 +---+---+---+---+---+---+
 |   Level           |Chg|
@@ -545,7 +545,7 @@ Resolution: ~3.2 percentage points.
 
 6 bits total.
 
-```
+```text
  0   1   2   3   4   5
 +---+---+---+---+---+---+
 |   RSSI        | SNR   |
@@ -574,7 +574,7 @@ RSSI and SNR ranges.
 
 24 bits total.
 
-```
+```text
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -605,7 +605,7 @@ Encode/Decode: direct (no quantisation needed).
 
 14 bits total.
 
-```
+```text
  0                   1
  0 1 2 3 4 5 6 7 8 9 0 1 2 3
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -633,7 +633,7 @@ regardless of label.
 
 8 bits total.
 
-```
+```text
  0   1   2   3   4   5   6   7
 +---+---+---+---+---+---+---+---+
 |       Flags (8 bits)          |
@@ -648,7 +648,7 @@ fault indicators, tamper detection, or configuration acknowledgement flags.
 
 48 bits total.
 
-```
+```text
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -684,7 +684,7 @@ for discussion.
 
 24 bits total.
 
-```
+```text
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -753,7 +753,7 @@ This is the same encoding as the humidity component of the Environment bundle
 
 22 bits total.
 
-```
+```text
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -823,7 +823,7 @@ Same encoding as the gust component of the Wind bundle (8.12).
 
 12 bits total.
 
-```
+```text
  0                   1
  0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+
@@ -873,7 +873,7 @@ and gas readings into a single field. The component encodings are identical to
 the standalone Air Quality Index (8.19), Air Quality PM (8.20), and Air Quality
 Gas (8.21) types.
 
-```
+```text
 +-----------+-----------+-----------+
 | AQ Index  | AQ PM     | AQ Gas    |
 | (9 bits)  | (4+ bits) | (8+ bits) |
@@ -898,7 +898,7 @@ bits = 512 values, 0-500 used).
 
 4 to 36 bits total (variable).
 
-```
+```text
  0
  0 1 2 3 4 5 6 7
 +-+-+-+-+-+-+-+-+- - - - -+
@@ -921,9 +921,9 @@ bits = 512 values, 0-500 used).
 
 Range: 0 to 1275 µg/m³. Resolution: 5 µg/m³ (255 steps).
 
-    Encode: `q = value_ugm3 / 5`
+Encode: `q = value_ugm3 / 5`
 
-    Decode: `value_ugm3 = q * 5`
+Decode: `value_ugm3 = q * 5`
 
 The 5 µg/m³ resolution matches the ±5 µg/m³ precision of typical
 laser-scattering PM sensors (e.g. Sensirion SEN55, Plantower PMS5003).
@@ -936,7 +936,7 @@ total.
 
 8 to 84 bits total (variable).
 
-```
+```text
  0
  0 1 2 3 4 5 6 7 8 9 ...
 +-+-+-+-+-+-+-+-+- - - - - - -+
@@ -973,9 +973,9 @@ fixed bit width and resolution determined by its position in the mask.
 | 6    | Rsvd | 10   | —           | —        | —    |
 | 7    | Rsvd | 10   | —           | —        | —    |
 
-    Encode: `q = value / resolution`
+Encode: `q = value / resolution`
 
-    Decode: `value = q * resolution`
+Decode: `value = q * resolution`
 
 VOC and NOx index slots carry Sensirion SGP4x-style algorithm indices (1-500
 typical). The 2-point resolution is well within the ±15/±50 index point
@@ -994,7 +994,7 @@ station (VOC + NOx + CO₂) sends 8 + 8 + 8 + 10 = 34 bits.
 
 28 bits total.
 
-```
+```text
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1018,9 +1018,9 @@ radiation detector.
 
 Range: 0 to 163.83 µSv/h. Resolution: 0.01 µSv/h (16,383 steps).
 
-    Encode: `q = round(dose_usvh / 0.01)`
+Encode: `q = round(dose_usvh / 0.01)`
 
-    Decode: `dose_usvh = q * 0.01`
+Decode: `dose_usvh = q * 0.01`
 
 This field carries the computed dose rate. The relationship between CPM and dose
 rate is detector-specific and is not defined by this protocol.
@@ -1062,7 +1062,7 @@ standard meteorological convention where 0 = clear sky and 8 = fully overcast.
 Variable length. Minimum 2 bytes (length + control), maximum 256 bytes (length +
 control + 254 bytes of pixel data).
 
-```
+```text
  0               1
  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-  ...  -+
@@ -1087,7 +1087,7 @@ The total field size in bytes is `1 + Length`. The total field size in bits is
 method, and flags. The decoder reads this byte to determine how to interpret all
 subsequent bytes.
 
-```
+```text
  0   1   2   3   4   5   6   7
 +---+---+---+---+---+---+---+---+
 | Format| Size  | Comp  | Flags |
@@ -1180,7 +1180,7 @@ without Image support can still decode all other fields in the packet.
 When Compression = RLE, the pixel data is encoded as a sequence of run-length
 pairs. Each pair is a single byte:
 
-```
+```text
  0   1   2   3   4   5   6   7
 +---+---+---+---+---+---+---+---+
 |Val|       Run Length (7)       |
@@ -1326,7 +1326,7 @@ offset that field ended. There is no alignment padding.
 
 Each TLV entry begins with a 16-bit header:
 
-```
+```text
  0                               1
  0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15
 +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
@@ -1384,7 +1384,7 @@ reference implementation. Types 0x10-0x1F are reserved for sensor metadata (see
 Section 11.3 and Section 15) and may have future reference implementation
 support. Types 0x20 onwards are available for application use.
 
-### 9.5. Global TLV Types (0x01-0x0F)
+### 9.5. Global TLV Types
 
 The following TLV types are globally designated and have fixed semantics across
 all variants and deployments. Implementations SHOULD use these types for their
@@ -1414,7 +1414,7 @@ issues.
 The content uses the same space-delimited key-value convention as Config
 (Section 9.5.4), encoded with the 6-bit packed character set (Appendix A):
 
-```
+```text
 KEY1 VALUE1 KEY2 VALUE2 ...
 ```
 
@@ -1478,7 +1478,7 @@ Reports device boot lifecycle: how long since last restart, how long the device
 has been alive in total across all boots, how many times it has restarted, and
 why the most recent restart occurred.
 
-```
+```text
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1582,7 +1582,7 @@ Reports runtime hardware state: thermal, electrical, memory, and duty cycle
 metrics. These change during operation and are useful for detecting overheating,
 power supply issues, memory leaks, and validating power budgets.
 
-```
+```text
  0               1               2
  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1639,7 +1639,7 @@ The firmware increments this counter each time it wakes from sleep, accumulating
 the duration of each active period. Comparing session active to session uptime
 (from Status, Section 9.5.2) yields the duty cycle:
 
-    `duty_cycle = session_active / session_uptime`
+`duty_cycle = session_active / session_uptime`
 
 A sensor with 86400s session uptime but 200 active ticks (1000s) has a duty
 cycle of ~1.2%, confirming that power budgets are being met.
@@ -1680,7 +1680,7 @@ using the 6-bit packed character set (Appendix A).
 
 The content is a sequence of alternating tokens separated by single spaces:
 
-```
+```text
 KEY1 VALUE1 KEY2 VALUE2 ...
 ```
 
@@ -1749,7 +1749,7 @@ Examples:
 
 There is no structure imposed on the message content. The protocol does not
 define severity levels, error codes, or categories. Conventions such as
-prefixing with a subsystem name (`I2C `, `LORA `, `SD `) are recommended but not
+prefixing with a subsystem name (`I2C`, `LORA`, `SD`) are recommended but not
 required.
 
 In the rare case where a diagnostic message contains characters outside the
@@ -2326,7 +2326,7 @@ degrees×100 (e.g. 2250 for 22.50°C), wind speed as m/s×100, radiation dose as
 floating-point dependencies. Future implementations SHOULD utilise this
 multiple-of-ten approach.
 
-**Test targets**
+#### Test targets
 
 The `test-versions` target will build each of versions across the Functional
 subsetting and Floating-point control, including a combined `NO_JSON` and
@@ -2341,7 +2341,7 @@ The `minimal` and `minimal-esp32` targets yield object files for the purpose of
 establishing minimal build sizes (with a comparison to full build sizes) using
 the host (`minimal`) or cross-compiler (`minimal-esp32`) tools.
 
-**Build summary for x86-64, aarch64 and esp32-c3 systems**
+#### Build summary for x86-64, aarch64 and esp32-c3 systems
 
 The following measurements are from GCC on x86-64, aarch64 and ESP32-C3 using
 the `minimal` build target. With space optimisation, the minimal implementation
@@ -2352,9 +2352,9 @@ is less than 1KB on the embedded target.
 | Full library (all elements, encode + decode + JSON) | ~85 KB     | ~29 KB     | ~87 KB      | ~31 KB      | ~67 KB       | ~19 KB       |
 | Encoder-only, battery + environment only            | ~5.5 KB    | ~1.1 KB    | ~5.4 KB     | ~1.1 KB     | ~5.0 KB      | ~0.7 KB      |
 
-**Build output for x86-64 (-O6 and -Os)**
+#### Build output for x86-64 (-O6 and -Os)
 
-```
+```text
 --- Full library ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -O6 -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
    text    data     bss     dec     hex filename
@@ -2375,7 +2375,7 @@ Minimal object size:
 0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
 ```
 
-```
+```text
 --- Full library ---
 gcc -Wall -Wextra -Wpedantic -Werror -Wcast-align -Wcast-qual -Wstrict-prototypes -Wold-style-definition -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal -Wformat=2 -Wformat-security -Winit-self -Wjump-misses-init -Wlogical-op -Wmissing-include-dirs -Wnested-externs -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wswitch-default -Wundef -Wunreachable-code -Wunused -Wwrite-strings  -Os -DIOTDATA_VARIANT_MAPS_DEFAULT -c iotdata.c -o iotdata_full.o
    text    data     bss     dec     hex filename
@@ -2396,9 +2396,9 @@ Minimal object size:
 0000000000000000 l    d  .data.rel.ro.local     0000000000000000 .data.rel.ro.local
 ```
 
-**Build output for esp32-c3 (-Os)**
+#### Build output for esp32-c3 (-Os)
 
-```
+```text
 --- ESP32-C3 full library (no JSON) ---
 riscv32-esp-elf-gcc -march=rv32imc -mabi=ilp32 -Os -DIOTDATA_NO_JSON -c iotdata.c -o iotdata_esp32c3_full.o
    text    data     bss     dec     hex filename
@@ -2416,9 +2416,9 @@ Minimal object size:
 00000000 l    d  .data  00000000 .data
 ```
 
-**Stack usage for x86-64 (-Os)**
+#### Stack usage for x86-64 (-Os)
 
-The `test-example' target compiled with `gcc -fstack-usage -Os` on x86-64
+The `test-example` target compiled with `gcc -fstack-usage -Os` on x86-64
 illustrates per-function stack frames; nested calls accumulate.
 
 | Function                   | Stack (bytes) | Notes                          |
@@ -2575,7 +2575,7 @@ static inline char sixbit_to_char(uint8_t val) {
 
 Input: 75%
 
-```
+```text
 q = round(75 / 100.0 * 31.0) = round(23.25) = 23
 Decoded: round(23 / 31.0 * 100.0) = round(74.19) = 74%
 Error: 1 percentage point
@@ -2585,7 +2585,7 @@ Error: 1 percentage point
 
 Input: -15.25°C
 
-```
+```text
 q = round((-15.25 - (-40.0)) / 0.25) = round(24.75 / 0.25) = round(99.0) = 99
 Decoded: -40.0 + 99 * 0.25 = -40.0 + 24.75 = -15.25°C
 Error: 0.00°C (exact)
@@ -2595,7 +2595,7 @@ Error: 0.00°C (exact)
 
 Latitude:
 
-```
+```text
 q = round((59.334591 - (-90.0)) / 180.0 * 16777215)
   = round(149.334591 / 180.0 * 16777215)
   = round(0.829636617 * 16777215)
@@ -2610,7 +2610,7 @@ Error: 0.000006° ≈ 0.67 m
 
 Longitude:
 
-```
+```text
 q = round((18.063240 - (-180.0)) / 360.0 * 16777215)
   = round(198.063240 / 360.0 * 16777215)
   = round(0.550175667 * 16777215)
@@ -2627,7 +2627,7 @@ Error: 0.000013° ≈ 0.72 m (at 59°N, cos correction)
 
 Input: Day 5, 12:00:00 (432,000 + 43,200 = 475,200 seconds from year start)
 
-```
+```text
 ticks = 475200 / 5 = 95040
 Decoded: 95040 * 5 = 475200 seconds
 Error: 0 seconds (exact, since input is a multiple of 5)
@@ -2635,7 +2635,7 @@ Error: 0 seconds (exact, since input is a multiple of 5)
 
 Input: Day 5, 12:00:03 (475,203 seconds — not a multiple of 5)
 
-```
+```text
 ticks = 475203 / 5 = 95040 (integer division, truncated)
 Decoded: 95040 * 5 = 475200 seconds
 Error: 3 seconds (truncation towards zero)
@@ -3029,7 +3029,7 @@ the last field, go back and write the correct presence bytes. This requires
 fields to be supplied in strict field order (S0, S1, S2...) so that the bit
 cursor advances correctly.
 
-```
+```text
 /* Pseudocode for pack-as-you-go with backfill */
 write_header(buf, variant, station, seq);   /* bits 0-31 */
 pres0_offset = 32;                          /* remember position */
@@ -3364,7 +3364,7 @@ The `test-example` target generates pseudo sensor data simulating a weather
 station to illustrate quantisation effects and ancillary (dump, print and JSON)
 functionality.
 
-```
+```text
 ╔══════════════════════════════════════════════════╗
 ║  iotdata weather station simulator               ║
 ║  Station 42 — variant 0 (weather_station)        ║
@@ -3652,7 +3652,7 @@ stores only its parent, a backup parent, and a small neighbour table.
 
 Topology is built through periodic beacon propagation from gateways outward.
 
-```
+```text
 Gateway (cost=0)
     │
     │  BEACON (gateway_id=G, generation=N, cost=0)
@@ -3691,7 +3691,7 @@ dense areas.
 Sensor data flows inward from sensors toward gateways, relayed transparently by
 relays.
 
-```
+```text
 Sensor S transmits raw iotdata packet (variant=V, station=S, seq=N)
     │
     │  [raw packet, no mesh awareness]
@@ -3728,7 +3728,7 @@ gateway.
 
 Each FORWARD is acknowledged by the receiving parent to confirm delivery.
 
-```
+```text
 Relay A                          Relay B (A's parent)
   │                             │
   │──── FORWARD (seq=X) ───────>│
@@ -3752,7 +3752,7 @@ orphaned state, listening for beacons to reattach to the tree.
 When a relay loses all upstream paths, it broadcasts a ROUTE_ERROR so downstream
 nodes can immediately reroute rather than waiting for beacon timeout.
 
-```
+```text
 Relay B (was Relay C's parent)    Relay C (child of B)
   │                            │
   [B loses its parent]         │
@@ -3796,7 +3796,7 @@ or neighbour report transmission.
 
 The variant and station_id are packed into a 4+12 bit structure:
 
-```
+```c
 byte[0] = (variant << 4) | (station_id >> 8)
 byte[1] = station_id & 0xFF
 ```
@@ -3836,7 +3836,7 @@ Originated by gateways, rebroadcast by relays. Flows outward from gateway.
 
 Byte packing detail:
 
-```
+```c
 buf[4] = (0x0 << 4) | (gateway_id >> 8)
 buf[5] = gateway_id & 0xFF
 buf[6] = cost
@@ -3864,9 +3864,9 @@ Wraps a raw sensor packet for relay toward the gateway.
 
 Byte packing detail:
 
-```
+```c
 buf[4] = (0x1 << 4) | (ttl >> 4)
-buf[5] = (ttl & 0x0F) << 4          /* lower nibble is zero pad */
+buf[5] = (ttl & 0x0F) << 4           /* lower nibble is zero pad */
 memcpy(&buf[6], inner_packet, N)     /* byte-aligned, no shifting */
 ```
 
@@ -3884,7 +3884,7 @@ For duplicate suppression, the relay reads bytes 6–9 of the radio frame (the
 inner packet's iotdata header) to extract the originating sensor's station_id
 and sequence:
 
-```
+```c
 origin_station = ((buf[6] & 0x0F) << 8) | buf[7]
 origin_sequence = (buf[8] << 8) | buf[9]
 ```
@@ -4062,7 +4062,7 @@ A relay maintains the following state in RAM. Total memory footprint is under
 
 #### E.2 Relay Node Main Loop
 
-```
+```text
 initialise:
     listen for beacons to join a tree
     set status = orphaned
@@ -4290,7 +4290,7 @@ north-facing hillside has intermittent connectivity.
 
 **Deployment:**
 
-```
+```text
                 [WS-4] weather station (hilltop)
                               |
                            direct
@@ -4335,7 +4335,7 @@ line-of-sight. Canopy attenuation is severe.
 
 **Deployment:**
 
-```
+```text
 [GATEWAY-1] research cabin          [GATEWAY-2] fire tower
       |                                    |
    direct                              direct
@@ -4430,7 +4430,7 @@ gateway sources.
 compact dedup notification on the local network whenever it processes a sensor
 packet. The notification contains only the dedup key — no measurement data:
 
-```
+```text
 [gateway_id]        2 bytes     (12-bit station_id of the broadcasting gateway)
 [num_entries]       1 byte      (number of dedup tuples in this batch, 1–32)
 [entries...]        4 bytes each:
