@@ -381,6 +381,14 @@ extern "C" {
  * -------------------------------------------------------------------------*/
 
 #if defined(IOTDATA_ENABLE_POSITION)
+#define IOTDATA_POS_LAT_OFFSET   90.0
+#define IOTDATA_POS_LAT_RANGE    180.0
+#define IOTDATA_POS_LON_OFFSET   180.0
+#define IOTDATA_POS_LON_RANGE    360.0
+#define IOTDATA_POS_LAT_OFFSET_I 900000000LL
+#define IOTDATA_POS_LAT_RANGE_I  1800000000LL
+#define IOTDATA_POS_LON_OFFSET_I 1800000000LL
+#define IOTDATA_POS_LON_RANGE_I  3600000000LL
 #define IOTDATA_POSITION_FIELDS \
     iotdata_double_t position_lat; \
     iotdata_double_t position_lon;
@@ -988,9 +996,18 @@ size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *ou
 #endif
 
 #if defined(IOTDATA_ENABLE_TLV) && !defined(IOTDATA_NO_TLV_SPECIFIC)
+#define IOTDATA_TLV_TYPE_GLOBAL_MAX  0x0F
+#define IOTDATA_TLV_TYPE_QUALITY_MAX 0x1F
+
 #define IOTDATA_TLV_VERSION          0x01
 #define IOTDATA_TLV_STATUS           0x02
+#define IOTDATA_TLV_STATUS_LENGTH    9
+#define IOTDATA_TLV_STATUS_TICKS_RES 5
+#define IOTDATA_TLV_STATUS_TICKS_MAX 0xFFFFFF
 #define IOTDATA_TLV_HEALTH           0x03
+#define IOTDATA_TLV_HEALTH_LENGTH    7
+#define IOTDATA_TLV_HEALTH_TICKS_RES 5
+#define IOTDATA_TLV_HEALTH_TICKS_MAX 0xFFFF
 #define IOTDATA_TLV_CONFIG           0x04
 #define IOTDATA_TLV_DIAGNOSTIC       0x05
 #define IOTDATA_TLV_USERDATA         0x06

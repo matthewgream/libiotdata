@@ -186,20 +186,57 @@ static inline size_t bits_to_bytes(size_t bits) {
 
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool bits_write(uint8_t *buf, size_t buf_bits, size_t *bp, uint32_t value, uint8_t nbits) {
-    for (int i = nbits - 1; i >= 0; i--, (*bp)++) {
-        if (*bp >= buf_bits)
-            return false;
-        buf[*bp / 8] = (value & (1U << i)) ? buf[*bp / 8] | (1U << (7 - (*bp % 8))) : buf[*bp / 8] & (uint8_t)~(1U << (7 - (*bp % 8)));
+    if (*bp + nbits > buf_bits)
+        return false;
+    size_t pos = *bp;
+    int rem = nbits, off = pos & 7;
+    if (off) {
+        const int n = rem < (8 - off) ? rem : (8 - off);
+        buf[pos >> 3] = (buf[pos >> 3] & ~(uint8_t)(((1U << n) - 1) << ((8 - off) - n))) | (uint8_t)(((value >> (rem - n)) & ((1U << n) - 1)) << ((8 - off) - n));
+        pos += (size_t)n;
+        rem -= n;
     }
+    while (rem >= 8) {
+        rem -= 8;
+        buf[pos >> 3] = (uint8_t)(value >> rem);
+        pos += 8;
+    }
+    if (rem > 0) {
+        buf[pos >> 3] = (buf[pos >> 3] & ~(uint8_t)(((1U << rem) - 1) << (8 - rem))) | (uint8_t)((value & ((1U << rem) - 1)) << (8 - rem));
+        pos += (size_t)rem;
+    }
+    *bp = pos;
     return true;
 }
 #endif
 
 #if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
 static inline uint32_t bits_read(const uint8_t *buf, size_t buf_bits, size_t *bp, uint8_t nbits) {
+    if (*bp + nbits > buf_bits) {
+        uint32_t value = 0;
+        for (int i = nbits - 1; i >= 0 && *bp < buf_bits; i--, (*bp)++)
+            value |= ((uint32_t)((buf[*bp / 8] >> (7 - (*bp % 8))) & 1U) << i);
+        return value;
+    }
     uint32_t value = 0;
-    for (int i = nbits - 1; i >= 0 && *bp < buf_bits; i--, (*bp)++)
-        value |= ((uint32_t)((buf[*bp / 8] >> (7 - (*bp % 8))) & 1U) << i);
+    size_t pos = *bp;
+    int rem = nbits, off = pos & 7;
+    if (off) {
+        const int n = rem < (8 - off) ? rem : (8 - off);
+        value = (buf[pos >> 3] >> ((8 - off) - n)) & ((1U << n) - 1);
+        pos += (size_t)n;
+        rem -= n;
+    }
+    while (rem >= 8) {
+        value = (value << 8) | buf[pos >> 3];
+        pos += 8;
+        rem -= 8;
+    }
+    if (rem > 0) {
+        value = (value << rem) | ((buf[pos >> 3] >> (8 - rem)) & ((1U << rem) - 1));
+        pos += (size_t)rem;
+    }
+    *bp = pos;
     return value;
 }
 #endif
@@ -210,7 +247,7 @@ static inline uint32_t bits_read(const uint8_t *buf, size_t buf_bits, size_t *bp
 
 #if defined(_IOTDATA_NEED_BASE64_ENCODE)
 static const char _b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static inline void _b64_encode(const uint8_t *in, size_t in_len, char *out) {
+static inline char *_b64_encode(const uint8_t *in, size_t in_len, char *out) {
     size_t i = 0, j = 0;
     while (i < in_len) {
         const uint32_t a = in[i++], b = (i < in_len) ? in[i++] : ~0U, c = (i < in_len) ? in[i++] : ~0U;
@@ -221,6 +258,7 @@ static inline void _b64_encode(const uint8_t *in, size_t in_len, char *out) {
         out[j++] = (c >> 8) ? '=' : _b64_table[(x >> 0) & 0x3F];
     }
     out[j] = '\0';
+    return out;
 }
 #endif
 
@@ -324,29 +362,20 @@ static int dump_add(iotdata_dump_t *dump, int n, size_t bit_offset, size_t bit_l
 #endif
 
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
-static const char _padd_spaces[] = "                    "; /* 20 spaces */
+static const char _padd_spaces[] = "                        "; /* 24 spaces */
 static inline const char *_padd(const char *label) {
-    const int n = 20 - (int)strlen(label);
-    return &_padd_spaces[20 - (n > 0 ? n : 1)];
+    const int n = (int)sizeof(_padd_spaces) - (int)strlen(label);
+    return &_padd_spaces[(int)sizeof(_padd_spaces) - (n > 0 ? n : 1)];
 }
 #endif
 
 #if !(defined(IOTDATA_NO_DUMP) || defined(IOTDATA_NO_PRINT))
 #if defined(IOTDATA_NO_FLOATING)
-static inline int fmt_scaled10(char *buf, size_t sz, int32_t val, const char *unit) {
-    const int32_t a = val < 0 ? -val : val;
-    return snprintf(buf, sz, "%s%d.%01d%s%s", val < 0 ? "-" : "", (int)(a / 10), (int)(a % 10), unit[0] ? " " : "", unit);
+static inline int fmt_scaled(char *buf, size_t sz, int32_t val, int32_t divisor, const char *unit) {
+    return snprintf(buf, sz, "%s%d.%01d%s%s", val < 0 ? "-" : "", (int)((val < 0 ? -val : val) / divisor), (int)((val < 0 ? -val : val) % divisor), unit[0] ? " " : "", unit);
 }
-static inline int fmt_scaled100(char *buf, size_t sz, int32_t val, const char *unit) {
-    const int32_t a = val < 0 ? -val : val;
-    return snprintf(buf, sz, "%s%d.%02d%s%s", val < 0 ? "-" : "", (int)(a / 100), (int)(a % 100), unit[0] ? " " : "", unit);
-}
-static inline int fmt_scaled10000000(char *buf, size_t sz, int32_t val, const char *unit) {
-    const int32_t a = val < 0 ? -val : val;
-    return snprintf(buf, sz, "%s%d.%06d%s%s", val < 0 ? "-" : "", (int)(a / 10000000), (int)(a % 10000000), unit[0] ? " " : "", unit);
-}
-#endif /* !IOTDATA_NO_FLOATING */
-#endif /* !IOTDATA_NO_DUMP */
+#endif
+#endif
 
 /* =========================================================================
  * Field BATTERY
@@ -367,18 +396,26 @@ iotdata_status_t iotdata_encode_battery(iotdata_encoder_t *enc, uint8_t level_pe
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_battery_level(uint8_t pct) {
-    return (uint32_t)(((uint32_t)pct * ((1 << IOTDATA_BATTERY_LEVEL_BITS) - 1) + 50) / IOTDATA_BATTERY_LEVEL_MAX);
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_battery_level(uint8_t pct) {
+    return (uint32_t)(((uint32_t)pct * ((1 << IOTDATA_BATTERY_LEVEL_BITS) - 1) + IOTDATA_BATTERY_LEVEL_MAX / 2) / IOTDATA_BATTERY_LEVEL_MAX);
 }
-static inline uint8_t dequantise_battery_level(uint32_t raw) {
-    return (uint8_t)((raw * IOTDATA_BATTERY_LEVEL_MAX + 15) / ((1 << IOTDATA_BATTERY_LEVEL_BITS) - 1));
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint8_t dequantise_battery_level(uint32_t raw) {
+    return (uint8_t)((raw * IOTDATA_BATTERY_LEVEL_MAX + ((1 << IOTDATA_BATTERY_LEVEL_BITS) - 1) / 2) / ((1 << IOTDATA_BATTERY_LEVEL_BITS) - 1));
 }
-static inline uint32_t quantise_battery_state(bool charging) {
+#endif
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_battery_state(bool charging) {
     return (uint32_t)(charging ? 1 : 0);
 }
-static inline bool dequantise_battery_state(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static bool dequantise_battery_state(uint32_t raw) {
     return (bool)(raw & 1);
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_battery(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_battery_level(enc->battery_level), IOTDATA_BATTERY_LEVEL_BITS) && bits_write(buf, bb, bp, quantise_battery_state(enc->battery_charging), IOTDATA_BATTERY_CHARGE_BITS);
@@ -478,26 +515,38 @@ iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int16_t rssi_dbm, i
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_link_rssi(int16_t rssi) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_link_rssi(int16_t rssi) {
     return (uint32_t)(((rssi < IOTDATA_LINK_RSSI_MIN ? IOTDATA_LINK_RSSI_MIN : rssi > IOTDATA_LINK_RSSI_MAX ? IOTDATA_LINK_RSSI_MAX : rssi) - IOTDATA_LINK_RSSI_MIN) / IOTDATA_LINK_RSSI_STEP);
 }
-static inline int16_t dequantise_link_rssi(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int16_t dequantise_link_rssi(uint32_t raw) {
     return (int16_t)(IOTDATA_LINK_RSSI_MIN + (int)raw * IOTDATA_LINK_RSSI_STEP);
 }
+#endif
 #if !defined(IOTDATA_NO_FLOATING)
-static inline uint32_t quantise_link_snr(float snr) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_link_snr(float snr) {
     return (uint32_t)roundf(((snr < IOTDATA_LINK_SNR_MIN ? IOTDATA_LINK_SNR_MIN : snr > IOTDATA_LINK_SNR_MAX ? IOTDATA_LINK_SNR_MAX : snr) - IOTDATA_LINK_SNR_MIN) / IOTDATA_LINK_SNR_STEP);
 }
-static inline float dequantise_link_snr(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static float dequantise_link_snr(uint32_t raw) {
     return IOTDATA_LINK_SNR_MIN + (float)raw * IOTDATA_LINK_SNR_STEP;
 }
+#endif
 #else
-static inline uint32_t quantise_link_snr(int32_t snr10) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_link_snr(int32_t snr10) {
     return (uint32_t)(((snr10 < IOTDATA_LINK_SNR_MIN ? IOTDATA_LINK_SNR_MIN : snr10 > IOTDATA_LINK_SNR_MAX ? IOTDATA_LINK_SNR_MAX : snr10) - IOTDATA_LINK_SNR_MIN + (IOTDATA_LINK_SNR_STEP / 2)) / IOTDATA_LINK_SNR_STEP);
 }
-static inline int32_t dequantise_link_snr(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int32_t dequantise_link_snr(uint32_t raw) {
     return IOTDATA_LINK_SNR_MIN + (int32_t)raw * IOTDATA_LINK_SNR_STEP;
 }
+#endif
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_link(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
@@ -545,7 +594,7 @@ static inline int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.0f dB", dequantise_link_snr(r));
 #else
-    fmt_scaled10(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_link_snr(r), "dB");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_link_snr(r), 10, "dB");
 #endif
     n = dump_add(dump, n, s, IOTDATA_LINK_SNR_BITS, r, dump->_dec_buf, "-20..+10, 10dB", "link_snr");
     return n;
@@ -608,19 +657,27 @@ iotdata_status_t iotdata_encode_temperature(iotdata_encoder_t *enc, iotdata_floa
 }
 #endif
 #if !defined(IOTDATA_NO_FLOATING)
-static inline uint32_t quantise_temperature(float temperature) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_temperature(float temperature) {
     return (uint32_t)roundf((temperature - IOTDATA_TEMPERATURE_MIN) / IOTDATA_TEMPERATURE_RES);
 }
-static inline float dequantise_temperature(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static float dequantise_temperature(uint32_t raw) {
     return IOTDATA_TEMPERATURE_MIN + (float)raw * IOTDATA_TEMPERATURE_RES;
 }
+#endif
 #else
-static inline uint32_t quantise_temperature(int32_t temperature100) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_temperature(int32_t temperature100) {
     return (uint32_t)((temperature100 - IOTDATA_TEMPERATURE_MIN + (IOTDATA_TEMPERATURE_RES / 2)) / IOTDATA_TEMPERATURE_RES);
 }
-static inline int32_t dequantise_temperature(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int32_t dequantise_temperature(uint32_t raw) {
     return (int32_t)raw * IOTDATA_TEMPERATURE_RES + IOTDATA_TEMPERATURE_MIN;
 }
+#endif
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_temperature(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
@@ -658,7 +715,7 @@ static inline int dump_temperature(const uint8_t *buf, size_t bb, size_t *bp, io
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f C", dequantise_temperature(r));
 #else
-    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_temperature(r), "C");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_temperature(r), 100, "C");
 #endif
     n = dump_add(dump, n, s, IOTDATA_TEMPERATURE_BITS, r, dump->_dec_buf, "-40..+80C, 0.25C", "temperature");
     return n;
@@ -717,12 +774,16 @@ iotdata_status_t iotdata_encode_pressure(iotdata_encoder_t *enc, uint16_t pressu
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_pressure(uint16_t pressure) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_pressure(uint16_t pressure) {
     return (uint32_t)(pressure - IOTDATA_PRESSURE_MIN);
 }
-static inline uint16_t dequantise_pressure(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_pressure(uint32_t raw) {
     return (uint16_t)(raw + IOTDATA_PRESSURE_MIN);
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_pressure(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_pressure(enc->pressure), IOTDATA_PRESSURE_BITS);
@@ -807,12 +868,16 @@ iotdata_status_t iotdata_encode_humidity(iotdata_encoder_t *enc, uint8_t humidit
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_humidity(uint8_t humidity) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_humidity(uint8_t humidity) {
     return (uint32_t)humidity;
 }
-static inline uint8_t dequantise_humidity(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint8_t dequantise_humidity(uint32_t raw) {
     return (uint8_t)raw;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_humidity(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_humidity(enc->humidity), IOTDATA_HUMIDITY_BITS);
@@ -991,19 +1056,27 @@ iotdata_status_t iotdata_encode_wind_speed(iotdata_encoder_t *enc, iotdata_float
 }
 #endif
 #if !defined(IOTDATA_NO_FLOATING)
-static inline uint32_t quantise_wind_speed(float speed) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_wind_speed(float speed) {
     return (uint32_t)roundf(speed / IOTDATA_WIND_SPEED_RES);
 }
-static inline float dequantise_wind_speed(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static float dequantise_wind_speed(uint32_t raw) {
     return (float)raw * IOTDATA_WIND_SPEED_RES;
 }
+#endif
 #else
-static inline uint32_t quantise_wind_speed(int32_t speed100) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_wind_speed(int32_t speed100) {
     return (uint32_t)((speed100 + (IOTDATA_WIND_SPEED_RES / 2)) / IOTDATA_WIND_SPEED_RES);
 }
-static inline int32_t dequantise_wind_speed(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int32_t dequantise_wind_speed(uint32_t raw) {
     return (int32_t)raw * IOTDATA_WIND_SPEED_RES;
 }
+#endif
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_wind_speed(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
@@ -1041,7 +1114,7 @@ static inline int dump_wind_speed(const uint8_t *buf, size_t bb, size_t *bp, iot
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", dequantise_wind_speed(r));
 #else
-    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), "m/s");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), 100, "m/s");
 #endif
     n = dump_add(dump, n, s, IOTDATA_WIND_SPEED_BITS, r, dump->_dec_buf, "0..63.5, 0.5m/s", "wind_speed");
     return n;
@@ -1096,20 +1169,28 @@ iotdata_status_t iotdata_encode_wind_direction(iotdata_encoder_t *enc, uint16_t 
 }
 #endif
 #if !defined(IOTDATA_NO_FLOATING)
-#define IOTDATA_WIND_DIRECTION_SCALE (360.0f / 256.0f)
-static inline uint32_t quantise_wind_direction(uint16_t deg) {
+#define IOTDATA_WIND_DIRECTION_SCALE ((float)(IOTDATA_WIND_DIRECTION_MAX + 1) / (float)(1 << IOTDATA_WIND_DIRECTION_BITS))
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_wind_direction(uint16_t deg) {
     return (uint32_t)roundf((float)deg / IOTDATA_WIND_DIRECTION_SCALE);
 }
-static inline uint16_t dequantise_wind_direction(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_wind_direction(uint32_t raw) {
     return (uint16_t)roundf((float)raw * IOTDATA_WIND_DIRECTION_SCALE);
 }
+#endif
 #else
-static inline uint32_t quantise_wind_direction(uint16_t deg) {
-    return (uint32_t)((deg * (1 << IOTDATA_WIND_DIRECTION_BITS) + 180) / 360);
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_wind_direction(uint16_t deg) {
+    return (uint32_t)((deg * (1 << IOTDATA_WIND_DIRECTION_BITS) + (IOTDATA_WIND_DIRECTION_MAX + 1) / 2) / (IOTDATA_WIND_DIRECTION_MAX + 1));
 }
-static inline uint16_t dequantise_wind_direction(uint32_t raw) {
-    return (uint16_t)((raw * 360 + 128) / (1 << IOTDATA_WIND_DIRECTION_BITS));
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_wind_direction(uint32_t raw) {
+    return (uint16_t)((raw * (IOTDATA_WIND_DIRECTION_MAX + 1) + (1 << IOTDATA_WIND_DIRECTION_BITS) / 2) / (1 << IOTDATA_WIND_DIRECTION_BITS));
 }
+#endif
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_wind_direction(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
@@ -1229,7 +1310,7 @@ static inline int dump_wind_gust(const uint8_t *buf, size_t bb, size_t *bp, iotd
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", dequantise_wind_speed(r));
 #else
-    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), "m/s");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), 100, "m/s");
 #endif
     n = dump_add(dump, n, s, IOTDATA_WIND_GUST_BITS, r, dump->_dec_buf, "0..63.5, 0.5m/s", "wind_gust");
     return n;
@@ -1369,12 +1450,16 @@ iotdata_status_t iotdata_encode_rain_rate(iotdata_encoder_t *enc, uint8_t rate_m
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_rain_rate(uint8_t rain_rate) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_rain_rate(uint8_t rain_rate) {
     return (uint32_t)rain_rate;
 }
-static inline uint8_t dequantise_rain_rate(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint8_t dequantise_rain_rate(uint32_t raw) {
     return (uint8_t)raw;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_rain_rate(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_rain_rate(enc->rain_rate), IOTDATA_RAIN_RATE_BITS);
@@ -1457,12 +1542,16 @@ iotdata_status_t iotdata_encode_rain_size(iotdata_encoder_t *enc, uint8_t size10
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_rain_size(uint8_t rain_size10) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_rain_size(uint8_t rain_size10) {
     return (uint32_t)(rain_size10 / IOTDATA_RAIN_SIZE_SCALE);
 }
-static inline uint8_t dequantise_rain_size(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint8_t dequantise_rain_size(uint32_t raw) {
     return (uint8_t)(raw * IOTDATA_RAIN_SIZE_SCALE);
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_rain_size(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_rain_size(enc->rain_size10), IOTDATA_RAIN_SIZE_BITS);
@@ -1627,18 +1716,26 @@ iotdata_status_t iotdata_encode_solar(iotdata_encoder_t *enc, uint16_t irradianc
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_solar_irradiance(uint16_t solar_irradiance) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_solar_irradiance(uint16_t solar_irradiance) {
     return (uint32_t)solar_irradiance;
 }
-static inline uint16_t dequantise_solar_irradiance(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_solar_irradiance(uint32_t raw) {
     return (uint16_t)raw;
 }
-static inline uint32_t quantise_solar_ultraviolet(uint8_t solar_ultraviolet) {
+#endif
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_solar_ultraviolet(uint8_t solar_ultraviolet) {
     return (uint32_t)solar_ultraviolet;
 }
-static inline uint8_t dequantise_solar_ultraviolet(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint8_t dequantise_solar_ultraviolet(uint32_t raw) {
     return (uint8_t)raw;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_solar(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_solar_irradiance(enc->solar_irradiance), IOTDATA_SOLAR_IRRADIATION_BITS) && bits_write(buf, bb, bp, quantise_solar_ultraviolet(enc->solar_ultraviolet), IOTDATA_SOLAR_ULTRAVIOLET_BITS);
@@ -1733,12 +1830,16 @@ iotdata_status_t iotdata_encode_clouds(iotdata_encoder_t *enc, uint8_t okta) {
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_clouds(uint8_t clouds) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_clouds(uint8_t clouds) {
     return (uint32_t)clouds;
 }
-static inline uint8_t dequantise_clouds(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint8_t dequantise_clouds(uint32_t raw) {
     return (uint8_t)raw;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_clouds(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_clouds(enc->clouds), IOTDATA_CLOUDS_BITS);
@@ -1861,12 +1962,16 @@ iotdata_status_t iotdata_encode_air_quality_index(iotdata_encoder_t *enc, uint16
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_aq_index(uint16_t v) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_aq_index(uint16_t v) {
     return (uint32_t)v;
 }
-static inline uint16_t dequantise_aq_index(uint32_t r) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_aq_index(uint32_t r) {
     return (uint16_t)r;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_aq_index(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_aq_index(enc->aq_index), IOTDATA_AIR_QUALITY_INDEX_BITS);
@@ -1937,7 +2042,7 @@ static const iotdata_field_ops_t _iotdata_field_def_aq_index = {
 
 #if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) || defined(IOTDATA_ENABLE_AIR_QUALITY)
 #if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) && !defined(IOTDATA_NO_ENCODE)
-iotdata_status_t iotdata_encode_air_quality_pm(iotdata_encoder_t *enc, uint8_t pm_present, const uint16_t pm[4]) {
+iotdata_status_t iotdata_encode_air_quality_pm(iotdata_encoder_t *enc, uint8_t pm_present, const uint16_t pm[IOTDATA_AIR_QUALITY_PM_COUNT]) {
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY_PM);
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
@@ -2056,7 +2161,7 @@ static const iotdata_field_ops_t _iotdata_field_def_aq_pm = {
 
 #if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS) || defined(IOTDATA_ENABLE_AIR_QUALITY)
 #if defined(IOTDATA_ENABLE_AIR_QUALITY_GAS) && !defined(IOTDATA_NO_ENCODE)
-iotdata_status_t iotdata_encode_air_quality_gas(iotdata_encoder_t *enc, uint8_t gas_present, const uint16_t gas[8]) {
+iotdata_status_t iotdata_encode_air_quality_gas(iotdata_encoder_t *enc, uint8_t gas_present, const uint16_t gas[IOTDATA_AIR_QUALITY_GAS_COUNT]) {
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY_GAS);
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
@@ -2176,7 +2281,7 @@ static const iotdata_field_ops_t _iotdata_field_def_aq_gas = {
 
 #if defined(IOTDATA_ENABLE_AIR_QUALITY)
 #if !defined(IOTDATA_NO_ENCODE)
-iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aq_index, uint8_t pm_present, const uint16_t pm[4], uint8_t gas_present, const uint16_t gas[8]) {
+iotdata_status_t iotdata_encode_air_quality(iotdata_encoder_t *enc, uint16_t aq_index, uint8_t pm_present, const uint16_t pm[IOTDATA_AIR_QUALITY_PM_COUNT], uint8_t gas_present, const uint16_t gas[IOTDATA_AIR_QUALITY_GAS_COUNT]) {
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_AIR_QUALITY);
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
@@ -2304,12 +2409,16 @@ iotdata_status_t iotdata_encode_radiation_cpm(iotdata_encoder_t *enc, uint16_t c
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_radiation_cpm(uint16_t cpm) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_radiation_cpm(uint16_t cpm) {
     return (uint32_t)cpm;
 }
-static inline uint16_t dequantise_radiation_cpm(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_radiation_cpm(uint32_t raw) {
     return (uint16_t)raw;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_radiation_cpm(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_radiation_cpm(enc->radiation_cpm), IOTDATA_RADIATION_CPM_BITS);
@@ -2393,19 +2502,27 @@ iotdata_status_t iotdata_encode_radiation_dose(iotdata_encoder_t *enc, iotdata_f
 }
 #endif
 #if !defined(IOTDATA_NO_FLOATING)
-static inline uint32_t quantise_radiation_dose(float dose) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_radiation_dose(float dose) {
     return (uint32_t)roundf(dose / IOTDATA_RADIATION_DOSE_RES);
 }
-static inline float dequantise_radiation_dose(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static float dequantise_radiation_dose(uint32_t raw) {
     return (float)raw * IOTDATA_RADIATION_DOSE_RES;
 }
+#endif
 #else
-static inline uint32_t quantise_radiation_dose(int32_t dose100) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_radiation_dose(int32_t dose100) {
     return (uint32_t)dose100;
 }
-static inline int32_t dequantise_radiation_dose(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int32_t dequantise_radiation_dose(uint32_t raw) {
     return (int32_t)raw;
 }
+#endif
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_radiation_dose(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
@@ -2443,7 +2560,7 @@ static inline int dump_radiation_dose(const uint8_t *buf, size_t bb, size_t *bp,
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f uSv/h", dequantise_radiation_dose(r));
 #else
-    fmt_scaled100(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_radiation_dose(r), "uSv/h");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_radiation_dose(r), 100, "uSv/h");
 #endif
     n = dump_add(dump, n, s, IOTDATA_RADIATION_DOSE_BITS, r, dump->_dec_buf, "0..163.83, 0.01", "radiation_dose");
     return n;
@@ -2580,12 +2697,16 @@ iotdata_status_t iotdata_encode_depth(iotdata_encoder_t *enc, uint16_t depth_cm)
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_depth(uint16_t depth) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_depth(uint16_t depth) {
     return (uint32_t)depth;
 }
-static inline uint16_t dequantise_depth(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint16_t dequantise_depth(uint32_t raw) {
     return (uint16_t)raw;
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_depth(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_depth(enc->depth), IOTDATA_DEPTH_BITS);
@@ -2675,31 +2796,55 @@ iotdata_status_t iotdata_encode_position(iotdata_encoder_t *enc, iotdata_double_
 }
 #endif
 #if !defined(IOTDATA_NO_FLOATING)
-static inline uint32_t quantise_position_lat(iotdata_double_t lat) {
-    return (uint32_t)round((lat - (iotdata_double_t)(-90.0)) / (iotdata_double_t)180.0 * (iotdata_double_t)IOTDATA_POS_SCALE);
-}
-static inline iotdata_double_t dequantise_position_lat(uint32_t raw) {
-    return (iotdata_double_t)raw / (iotdata_double_t)IOTDATA_POS_SCALE * (iotdata_double_t)180.0 + (iotdata_double_t)(-90.0);
-}
-static inline uint32_t quantise_position_lon(iotdata_double_t lon) {
-    return (uint32_t)round((lon - (iotdata_double_t)(-180.0)) / (iotdata_double_t)360.0 * (iotdata_double_t)IOTDATA_POS_SCALE);
-}
-static inline iotdata_double_t dequantise_position_lon(uint32_t raw) {
-    return (iotdata_double_t)raw / (iotdata_double_t)IOTDATA_POS_SCALE * (iotdata_double_t)360.0 + (iotdata_double_t)(-180.0);
-}
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_position_lat(iotdata_double_t lat) {
+#if !defined(IOTDATA_NO_FLOATING_DOUBLES)
+    return (uint32_t)round((lat + (iotdata_double_t)IOTDATA_POS_LAT_OFFSET) / (iotdata_double_t)IOTDATA_POS_LAT_RANGE * (iotdata_double_t)IOTDATA_POS_SCALE);
 #else
-static inline uint32_t quantise_position_lat(int32_t lat7) {
-    return (uint32_t)((((int64_t)lat7 + 900000000LL) * IOTDATA_POS_SCALE + 900000000LL) / 1800000000LL);
+    return (uint32_t)roundf((lat + (iotdata_double_t)IOTDATA_POS_LAT_OFFSET) / (iotdata_double_t)IOTDATA_POS_LAT_RANGE * (iotdata_double_t)IOTDATA_POS_SCALE);
+#endif
 }
-static inline int32_t dequantise_position_lat(uint32_t raw) {
-    return (int32_t)(((int64_t)raw * 1800000000LL + IOTDATA_POS_SCALE / 2) / IOTDATA_POS_SCALE - 900000000LL);
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static iotdata_double_t dequantise_position_lat(uint32_t raw) {
+    return (iotdata_double_t)raw / (iotdata_double_t)IOTDATA_POS_SCALE * (iotdata_double_t)IOTDATA_POS_LAT_RANGE - (iotdata_double_t)IOTDATA_POS_LAT_OFFSET;
 }
-static inline uint32_t quantise_position_lon(int32_t lon7) {
-    return (uint32_t)((((int64_t)lon7 + 1800000000LL) * IOTDATA_POS_SCALE + 1800000000LL) / 3600000000LL);
+#endif
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_position_lon(iotdata_double_t lon) {
+#if !defined(IOTDATA_NO_FLOATING_DOUBLES)
+    return (uint32_t)round((lon + (iotdata_double_t)IOTDATA_POS_LON_OFFSET) / (iotdata_double_t)IOTDATA_POS_LON_RANGE * (iotdata_double_t)IOTDATA_POS_SCALE);
+#else
+    return (uint32_t)roundf((lon + (iotdata_double_t)IOTDATA_POS_LON_OFFSET) / (iotdata_double_t)IOTDATA_POS_LON_RANGE * (iotdata_double_t)IOTDATA_POS_SCALE);
+#endif
 }
-static inline int32_t dequantise_position_lon(uint32_t raw) {
-    return (int32_t)(((int64_t)raw * 3600000000LL + IOTDATA_POS_SCALE / 2) / IOTDATA_POS_SCALE - 1800000000LL);
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static iotdata_double_t dequantise_position_lon(uint32_t raw) {
+    return (iotdata_double_t)raw / (iotdata_double_t)IOTDATA_POS_SCALE * (iotdata_double_t)IOTDATA_POS_LON_RANGE - (iotdata_double_t)IOTDATA_POS_LON_OFFSET;
 }
+#endif
+#else
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_position_lat(int32_t lat7) {
+    return (uint32_t)((((int64_t)lat7 + IOTDATA_POS_LAT_OFFSET_I) * IOTDATA_POS_SCALE + IOTDATA_POS_LAT_OFFSET_I) / IOTDATA_POS_LAT_RANGE_I);
+}
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int32_t dequantise_position_lat(uint32_t raw) {
+    return (int32_t)(((int64_t)raw * IOTDATA_POS_LAT_RANGE_I + IOTDATA_POS_SCALE / 2) / IOTDATA_POS_SCALE - IOTDATA_POS_LAT_OFFSET_I);
+}
+#endif
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_position_lon(int32_t lon7) {
+    return (uint32_t)((((int64_t)lon7 + IOTDATA_POS_LON_OFFSET_I) * IOTDATA_POS_SCALE + IOTDATA_POS_LON_OFFSET_I) / IOTDATA_POS_LON_RANGE_I);
+}
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static int32_t dequantise_position_lon(uint32_t raw) {
+    return (int32_t)(((int64_t)raw * IOTDATA_POS_LON_RANGE_I + IOTDATA_POS_SCALE / 2) / IOTDATA_POS_SCALE - IOTDATA_POS_LON_OFFSET_I);
+}
+#endif
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_position(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
@@ -2743,7 +2888,7 @@ static inline int dump_position(const uint8_t *buf, size_t bb, size_t *bp, iotda
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", dequantise_position_lat(r));
 #else
-    fmt_scaled10000000(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lat(r), "");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lat(r), 10000000, "");
 #endif
     n = dump_add(dump, n, s, IOTDATA_POS_LAT_BITS, r, dump->_dec_buf, "-90..+90", "latitude");
     s = *bp;
@@ -2751,7 +2896,7 @@ static inline int dump_position(const uint8_t *buf, size_t bb, size_t *bp, iotda
 #if !defined(IOTDATA_NO_FLOATING)
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", dequantise_position_lon(r));
 #else
-    fmt_scaled10000000(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lon(r), "");
+    fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lon(r), 10000000, "");
 #endif
     n = dump_add(dump, n, s, IOTDATA_POS_LON_BITS, r, dump->_dec_buf, "-180..+180", "longitude");
     return n;
@@ -2762,8 +2907,7 @@ static inline void print_position(const iotdata_decoded_t *dec, FILE *fp, const 
 #if !defined(IOTDATA_NO_FLOATING)
     fprintf(fp, "  %s:%s %.6f, %.6f\n", label, _padd(label), dec->position_lat, dec->position_lon);
 #else
-    const int32_t lat = dec->position_lat, la = lat < 0 ? -lat : lat;
-    const int32_t lon = dec->position_lon, lo = lon < 0 ? -lon : lon;
+    const int32_t lat = dec->position_lat, la = lat < 0 ? -lat : lat, lon = dec->position_lon, lo = lon < 0 ? -lon : lon;
     fprintf(fp, "  %s:%s %s%d.%06d, %s%d.%06d\n", label, _padd(label), lat < 0 ? "-" : "", (int)(la / 10000000), (int)(la % 10000000), lon < 0 ? "-" : "", (int)(lo / 10000000), (int)(lo % 10000000));
 #endif
 }
@@ -2813,12 +2957,16 @@ iotdata_status_t iotdata_encode_datetime(iotdata_encoder_t *enc, uint32_t second
     return IOTDATA_OK;
 }
 #endif
-static inline uint32_t quantise_datetime(uint32_t datetime) {
+#if !defined(IOTDATA_NO_ENCODE)
+static uint32_t quantise_datetime(uint32_t datetime) {
     return (uint32_t)(datetime / IOTDATA_DATETIME_RES);
 }
-static inline uint32_t dequantise_datetime(uint32_t raw) {
+#endif
+#if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
+static uint32_t dequantise_datetime(uint32_t raw) {
     return (uint32_t)(raw * IOTDATA_DATETIME_RES);
 }
+#endif
 #if !defined(IOTDATA_NO_ENCODE)
 static inline bool pack_datetime(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     return bits_write(buf, bb, bp, quantise_datetime(enc->datetime_secs), IOTDATA_DATETIME_BITS);
@@ -2906,40 +3054,30 @@ static const iotdata_field_ops_t _iotdata_field_def_datetime = {
 #if defined(IOTDATA_ENABLE_IMAGE)
 static const uint8_t _image_widths[] = { 24, 32, 48, 64 }, _image_heights[] = { 18, 24, 36, 48 }, _image_bits[] = { 1, 2, 4 };
 size_t iotdata_image_pixel_count(uint8_t size_tier) {
-    return size_tier > 3 ? 0 : (size_t)_image_widths[size_tier] * (size_t)_image_heights[size_tier];
+    return size_tier < sizeof(_image_widths) / sizeof(_image_widths[0]) ? (size_t)_image_widths[size_tier] * (size_t)_image_heights[size_tier] : 0;
 }
 uint8_t iotdata_image_bpp(uint8_t pixel_format) {
-    return pixel_format <= 2 ? _image_bits[pixel_format] : 0;
+    return pixel_format < sizeof(_image_bits) / sizeof(_image_bits[0]) ? _image_bits[pixel_format] : 0;
 }
 static inline size_t _image_raw_bytes(uint8_t pixel_format, uint8_t size_tier) {
     return (iotdata_image_pixel_count(size_tier) * (size_t)iotdata_image_bpp(pixel_format) + 7) / 8;
 }
 static inline uint8_t _pixel_get(const uint8_t *buf, size_t idx, uint8_t bpp) {
-    switch (bpp) {
-    case 1:
+    if (bpp == 1)
         return (buf[idx / 8] >> (7 - (idx % 8))) & 1;
-    case 2:
+    else if (bpp == 2)
         return (buf[idx / 4] >> (6 - (idx % 4) * 2)) & 3;
-    case 4:
+    else if (bpp == 4)
         return (idx & 1) ? buf[idx / 2] & 0x0F : buf[idx / 2] >> 4;
-    default:
-        return 0;
-    }
+    return 0;
 }
 static inline void _pixel_set(uint8_t *buf, size_t idx, uint8_t val, uint8_t bpp) {
-    switch (bpp) {
-    case 1:
+    if (bpp == 1)
         buf[idx / 8] = (uint8_t)((buf[idx / 8] & ~(1U << (7 - (idx % 8)))) | ((val & 1) << (7 - (idx % 8))));
-        break;
-    case 2:
+    else if (bpp == 2)
         buf[idx / 4] = (uint8_t)((buf[idx / 4] & ~(3U << ((idx % 4) * 2))) | ((val & 3) << ((idx % 4) * 2)));
-        break;
-    case 4:
+    else if (bpp == 4)
         buf[idx / 2] = (uint8_t)(idx & 1 ? (buf[idx / 2] & 0xF0) | (val & 0x0F) : (buf[idx / 2] & 0x0F) | ((val & 0x0F) << 4));
-        break;
-    default:
-        break;
-    }
 }
 
 /* -------------------------------------------------------------------------
@@ -2960,7 +3098,7 @@ size_t iotdata_image_rle_compress(const uint8_t *pixels, size_t pixel_count, uin
         size_t count = 1;
         for (size_t i = 1; i < pixel_count; i++) {
             const uint8_t px = _pixel_get(pixels, i, 1);
-            if (px == cur && count < 128)
+            if (px == cur && count < (1 << 7))
                 count++;
             else {
                 if (op >= out_max)
@@ -2978,7 +3116,7 @@ size_t iotdata_image_rle_compress(const uint8_t *pixels, size_t pixel_count, uin
         size_t count = 1;
         for (size_t i = 1; i < pixel_count; i++) {
             const uint8_t px = _pixel_get(pixels, i, bpp);
-            if (px == cur && count < 256)
+            if (px == cur && count < (1 << 8))
                 count++;
             else {
                 if (op + 2 > out_max)
@@ -3061,7 +3199,7 @@ static inline void _hs_bw_put(_hs_bw_t *bw, uint32_t value, uint8_t nbits) {
     for (int i = nbits - 1; i >= 0; i--) {
         if (bw->byte_idx >= bw->max) {
             bw->overflow = true;
-            return;
+            break;
         }
         if (value & (1U << i))
             bw->buf[bw->byte_idx] |= (1U << bw->bit_idx);
@@ -3158,13 +3296,11 @@ size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *ou
         if (flag < 0)
             break;
         if (flag == 0) {
-            /* Literal */
             const int byte = _hs_br_get(&br, 8);
             if (byte < 0)
                 break;
             out[op++] = (uint8_t)byte;
         } else {
-            /* Backref */
             const int index = _hs_br_get(&br, _HS_W_BITS);
             if (index < 0)
                 break;
@@ -3173,10 +3309,8 @@ size_t iotdata_image_hs_decompress(const uint8_t *in, size_t in_len, uint8_t *ou
                 break;
             if (((size_t)index + 1) > op)
                 break; /* invalid: references before start */
-            for (size_t j = 0; j < ((size_t)count + 1) && op < out_max; j++) {
+            for (size_t j = 0; j < ((size_t)count + 1) && op < out_max; j++, op++)
                 out[op] = out[op - ((size_t)index + 1)];
-                op++;
-            }
         }
     }
     return op;
@@ -3257,10 +3391,8 @@ static inline void json_set_image(cJSON *root, const iotdata_decoded_t *dec, con
     cJSON_AddStringToObject(obj, "compression", _image_comp_names[dec->image_compression & 0x03]);
     cJSON_AddBoolToObject(obj, "fragment", (dec->image_flags & IOTDATA_IMAGE_FLAG_FRAGMENT) != 0);
     cJSON_AddBoolToObject(obj, "invert", (dec->image_flags & IOTDATA_IMAGE_FLAG_INVERT) != 0);
-    if (dec->image_data_len > 0) {
-        _b64_encode(dec->image_data, dec->image_data_len, scratch->image.b64);
-        cJSON_AddStringToObject(obj, "pixels", scratch->image.b64);
-    }
+    if (dec->image_data_len > 0)
+        cJSON_AddStringToObject(obj, "pixels", _b64_encode(dec->image_data, dec->image_data_len, scratch->image.b64));
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
@@ -3272,7 +3404,7 @@ static inline iotdata_status_t json_get_image(cJSON *root, iotdata_encoder_t *en
     uint8_t fmt = 0;
     cJSON *jf = cJSON_GetObjectItem(j, "format");
     if (jf && jf->valuestring)
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < (int)(sizeof(_image_fmt_names) / sizeof(_image_fmt_names[0])); i++)
             if (strcmp(jf->valuestring, _image_fmt_names[i]) == 0) {
                 fmt = (uint8_t)i;
                 break;
@@ -3281,7 +3413,7 @@ static inline iotdata_status_t json_get_image(cJSON *root, iotdata_encoder_t *en
     uint8_t sz = 0;
     cJSON *js = cJSON_GetObjectItem(j, "size");
     if (js && js->valuestring)
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < (int)(sizeof(_image_size_names) / sizeof(_image_size_names[0])); i++)
             if (strcmp(js->valuestring, _image_size_names[i]) == 0) {
                 sz = (uint8_t)i;
                 break;
@@ -3290,7 +3422,7 @@ static inline iotdata_status_t json_get_image(cJSON *root, iotdata_encoder_t *en
     uint8_t comp = 0;
     cJSON *jc = cJSON_GetObjectItem(j, "compression");
     if (jc && jc->valuestring)
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < (int)(sizeof(_image_comp_names) / sizeof(_image_comp_names[0])); i++)
             if (strcmp(jc->valuestring, _image_comp_names[i]) == 0) {
                 comp = (uint8_t)i;
                 break;
@@ -3302,11 +3434,8 @@ static inline iotdata_status_t json_get_image(cJSON *root, iotdata_encoder_t *en
     if (cJSON_IsTrue(cJSON_GetObjectItem(j, "invert")))
         flags |= IOTDATA_IMAGE_FLAG_INVERT;
     /* Parse pixels (base64 → raw bytes) */
-    uint8_t dlen = 0;
     cJSON *jp = cJSON_GetObjectItem(j, "pixels");
-    if (jp && jp->valuestring)
-        dlen = (uint8_t)_b64_decode(jp->valuestring, scratch->image.data, sizeof(scratch->image.data));
-    return iotdata_encode_image(enc, fmt, sz, comp, flags, scratch->image.data, dlen);
+    return iotdata_encode_image(enc, fmt, sz, comp, flags, scratch->image.data, jp && jp->valuestring ? (uint8_t)_b64_decode(jp->valuestring, scratch->image.data, sizeof(scratch->image.data)) : 0);
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -3532,11 +3661,11 @@ static iotdata_status_t _encode_tlv_type_kv(iotdata_encoder_t *enc, uint8_t type
 iotdata_status_t iotdata_encode_tlv_type_version(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size) {
     return _encode_tlv_type_kv(enc, IOTDATA_TLV_VERSION, kv, count, raw, buf, buf_size);
 }
-iotdata_status_t iotdata_encode_tlv_type_status(iotdata_encoder_t *enc, uint32_t session_uptime_secs, uint32_t lifetime_uptime_secs, uint16_t restarts, uint8_t reason, uint8_t buf[9]) {
+iotdata_status_t iotdata_encode_tlv_type_status(iotdata_encoder_t *enc, uint32_t session_uptime_secs, uint32_t lifetime_uptime_secs, uint16_t restarts, uint8_t reason, uint8_t buf[IOTDATA_TLV_STATUS_LENGTH]) {
     if (!buf)
         return IOTDATA_ERR_TLV_DATA_NULL;
-    const uint32_t sess = session_uptime_secs / 5, life = lifetime_uptime_secs / 5;
-    if (sess > 0xFFFFFF || life > 0xFFFFFF)
+    const uint32_t sess = session_uptime_secs / IOTDATA_TLV_STATUS_TICKS_RES, life = lifetime_uptime_secs / IOTDATA_TLV_STATUS_TICKS_RES;
+    if (sess > IOTDATA_TLV_STATUS_TICKS_MAX || life > IOTDATA_TLV_STATUS_TICKS_MAX)
         return IOTDATA_ERR_TLV_LEN_HIGH;
     buf[0] = (uint8_t)(sess >> 16);
     buf[1] = (uint8_t)(sess >> 8);
@@ -3547,13 +3676,13 @@ iotdata_status_t iotdata_encode_tlv_type_status(iotdata_encoder_t *enc, uint32_t
     buf[6] = (uint8_t)(restarts >> 8);
     buf[7] = (uint8_t)restarts;
     buf[8] = reason;
-    return iotdata_encode_tlv(enc, IOTDATA_TLV_STATUS, buf, 9);
+    return iotdata_encode_tlv(enc, IOTDATA_TLV_STATUS, buf, IOTDATA_TLV_STATUS_LENGTH);
 }
-iotdata_status_t iotdata_encode_tlv_type_health(iotdata_encoder_t *enc, int8_t cpu_temp, uint16_t supply_mv, uint16_t free_heap, uint32_t session_active_secs, uint8_t buf[7]) {
+iotdata_status_t iotdata_encode_tlv_type_health(iotdata_encoder_t *enc, int8_t cpu_temp, uint16_t supply_mv, uint16_t free_heap, uint32_t session_active_secs, uint8_t buf[IOTDATA_TLV_HEALTH_LENGTH]) {
     if (!buf)
         return IOTDATA_ERR_TLV_DATA_NULL;
-    const uint32_t active = session_active_secs / 5;
-    if (active > 0xFFFF)
+    const uint32_t active = session_active_secs / IOTDATA_TLV_HEALTH_TICKS_RES;
+    if (active > IOTDATA_TLV_HEALTH_TICKS_MAX)
         return IOTDATA_ERR_TLV_LEN_HIGH;
     buf[0] = (uint8_t)cpu_temp;
     buf[1] = (uint8_t)(supply_mv >> 8);
@@ -3562,7 +3691,7 @@ iotdata_status_t iotdata_encode_tlv_type_health(iotdata_encoder_t *enc, int8_t c
     buf[4] = (uint8_t)free_heap;
     buf[5] = (uint8_t)(active >> 8);
     buf[6] = (uint8_t)active;
-    return iotdata_encode_tlv(enc, IOTDATA_TLV_HEALTH, buf, 7);
+    return iotdata_encode_tlv(enc, IOTDATA_TLV_HEALTH, buf, IOTDATA_TLV_HEALTH_LENGTH);
 }
 iotdata_status_t iotdata_encode_tlv_type_config(iotdata_encoder_t *enc, const char *const *kv, size_t count, bool raw, char *buf, size_t buf_size) {
     return _encode_tlv_type_kv(enc, IOTDATA_TLV_CONFIG, kv, count, raw, buf, buf_size);
@@ -3592,18 +3721,17 @@ iotdata_status_t iotdata_encode_tlv_type_userdata(iotdata_encoder_t *enc, const 
 #endif
 static inline bool pack_tlv(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
     for (int i = 0; i < enc->tlv_count; i++) {
-        if (!bits_write(buf, bb, bp, enc->tlv[i].format, IOTDATA_TLV_FMT_BITS) || !bits_write(buf, bb, bp, enc->tlv[i].type, IOTDATA_TLV_TYPE_BITS) || !bits_write(buf, bb, bp, (i < enc->tlv_count - 1) ? 1 : 0, IOTDATA_TLV_MORE_BITS) ||
-            !bits_write(buf, bb, bp, enc->tlv[i].length, IOTDATA_TLV_LENGTH_BITS))
+        if (!bits_write(buf, bb, bp, enc->tlv[i].format, IOTDATA_TLV_FMT_BITS))
             return false;
-        if (enc->tlv[i].format == IOTDATA_TLV_FMT_RAW) {
-            for (int j = 0; j < enc->tlv[i].length; j++)
-                if (!bits_write(buf, bb, bp, enc->tlv[i].data[j], 8))
-                    return false;
-        } else {
-            for (int j = 0; j < enc->tlv[i].length; j++)
-                if (!bits_write(buf, bb, bp, (uint32_t)char_to_sixbit(enc->tlv[i].str[j]), IOTDATA_TLV_CHAR_BITS))
-                    return false;
-        }
+        if (!bits_write(buf, bb, bp, enc->tlv[i].type, IOTDATA_TLV_TYPE_BITS))
+            return false;
+        if (!bits_write(buf, bb, bp, (i < enc->tlv_count - 1) ? 1 : 0, IOTDATA_TLV_MORE_BITS))
+            return false;
+        if (!bits_write(buf, bb, bp, enc->tlv[i].length, IOTDATA_TLV_LENGTH_BITS))
+            return false;
+        for (int j = 0, l = enc->tlv[i].format == IOTDATA_TLV_FMT_STRING ? IOTDATA_TLV_CHAR_BITS : 8; j < enc->tlv[i].length; j++)
+            if (!bits_write(buf, bb, bp, enc->tlv[i].format == IOTDATA_TLV_FMT_STRING ? (uint32_t)char_to_sixbit(enc->tlv[i].str[j]) : enc->tlv[i].data[j], (uint8_t)l))
+                return false;
     }
     return true;
 }
@@ -3618,28 +3746,25 @@ static inline bool unpack_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata
         const uint8_t type = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_TYPE_BITS);
         more = bits_read(buf, bb, bp, IOTDATA_TLV_MORE_BITS) != 0;
         const uint8_t length = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_LENGTH_BITS);
-        if (dec->tlv_count < IOTDATA_TLV_MAX) {
+        const uint8_t bpv = format == IOTDATA_TLV_FMT_STRING ? IOTDATA_TLV_CHAR_BITS : 8;
+        if (*bp + (size_t)bpv * length > bb)
+            return false;
+        if (dec->tlv_count >= IOTDATA_TLV_MAX) {
+            *bp += (size_t)bpv * length;
+        } else {
             const int idx = dec->tlv_count++;
             dec->tlv[idx].format = format;
             dec->tlv[idx].type = type;
             dec->tlv[idx].length = length;
             if (format == IOTDATA_TLV_FMT_STRING) {
-                for (int j = 0; j < length; j++) {
-                    if (*bp + IOTDATA_TLV_CHAR_BITS > bb)
-                        return false;
+                for (int j = 0; j < length; j++)
                     dec->tlv[idx].str[j] = sixbit_to_char((uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_CHAR_BITS));
-                }
                 dec->tlv[idx].str[length] = '\0';
             } else {
-                for (int j = 0; j < length; j++) {
-                    if (*bp + 8 > bb)
-                        return false;
+                for (int j = 0; j < length; j++)
                     dec->tlv[idx].raw[j] = (uint8_t)bits_read(buf, bb, bp, 8);
-                }
             }
-        } else
-            for (int j = 0; j < length; j++)
-                (void)bits_read(buf, bb, bp, 8);
+        }
     }
     return true;
 }
@@ -3655,10 +3780,8 @@ static inline void _json_set_tlv_data(cJSON *obj, const iotdata_decoded_tlv_t *t
     cJSON_AddStringToObject(obj, "format", t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw");
     if (t->format == IOTDATA_TLV_FMT_STRING)
         cJSON_AddStringToObject(obj, "data", t->str);
-    else {
-        _b64_encode(t->raw, t->length, scratch->tlv.b64);
-        cJSON_AddStringToObject(obj, "data", scratch->tlv.b64);
-    }
+    else
+        cJSON_AddStringToObject(obj, "data", _b64_encode(t->raw, t->length, scratch->tlv.b64));
 }
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
 static inline void _json_set_tlv_kv(cJSON *obj, const char *str, iotdata_decode_from_json_scratch_t *scratch) {
@@ -3704,16 +3827,16 @@ static inline void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t 
         break;
     case IOTDATA_TLV_STATUS:
         cJSON_AddStringToObject(obj, "format", "status");
-        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 9) {
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == IOTDATA_TLV_STATUS_LENGTH) {
             const uint8_t *b = t->raw;
             const uint32_t sess = ((uint32_t)b[0] << 16) | ((uint32_t)b[1] << 8) | b[2];
             const uint32_t life = ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5];
             const uint16_t restarts = (uint16_t)((b[6] << 8) | b[7]);
             const uint8_t reason = b[8];
             cJSON *data = cJSON_AddObjectToObject(obj, "data");
-            cJSON_AddNumberToObject(data, "session_uptime", (double)(sess * 5));
+            cJSON_AddNumberToObject(data, "session_uptime", (double)(sess * IOTDATA_TLV_STATUS_TICKS_RES));
             if (life > 0)
-                cJSON_AddNumberToObject(data, "lifetime_uptime", (double)(life * 5));
+                cJSON_AddNumberToObject(data, "lifetime_uptime", (double)(life * IOTDATA_TLV_STATUS_TICKS_RES));
             cJSON_AddNumberToObject(data, "restarts", restarts);
             if (reason < _TLV_REASON_COUNT)
                 cJSON_AddStringToObject(data, "reason", _tlv_reason_names[reason]);
@@ -3723,7 +3846,7 @@ static inline void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t 
         break;
     case IOTDATA_TLV_HEALTH:
         cJSON_AddStringToObject(obj, "format", "health");
-        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 7) {
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == IOTDATA_TLV_HEALTH_LENGTH) {
             const uint8_t *b = t->raw;
             const int8_t cpu_temp = (int8_t)b[0];
             const uint16_t supply_mv = (uint16_t)((b[1] << 8) | b[2]);
@@ -3734,7 +3857,7 @@ static inline void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t 
                 cJSON_AddNumberToObject(data, "cpu_temp", cpu_temp);
             cJSON_AddNumberToObject(data, "supply_mv", supply_mv);
             cJSON_AddNumberToObject(data, "free_heap", free_heap);
-            cJSON_AddNumberToObject(data, "session_active", (double)(active * 5));
+            cJSON_AddNumberToObject(data, "session_active", (double)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
         }
         break;
     case IOTDATA_TLV_CONFIG:
@@ -3780,9 +3903,9 @@ static inline void json_set_tlv(cJSON *root, const iotdata_decoded_t *dec, const
     cJSON *arr = cJSON_AddArrayToObject(root, label);
     for (int i = 0; i < dec->tlv_count; i++) {
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
-        if (dec->tlv[i].type <= 0x0F)
+        if (dec->tlv[i].type <= IOTDATA_TLV_TYPE_GLOBAL_MAX)
             _json_set_tlv_global(arr, &dec->tlv[i], scratch);
-        else if (dec->tlv[i].type <= 0x1F)
+        else if (dec->tlv[i].type <= IOTDATA_TLV_TYPE_QUALITY_MAX)
             _json_set_tlv_quality(arr, &dec->tlv[i], scratch);
         else
             _json_set_tlv_user(arr, &dec->tlv[i], scratch);
@@ -3899,9 +4022,9 @@ static inline iotdata_status_t json_get_tlv(cJSON *root, iotdata_encoder_t *enc,
         const uint8_t type = (uint8_t)j_type->valueint;
         iotdata_status_t rc;
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
-        if (type <= 0x0F)
+        if (type <= IOTDATA_TLV_TYPE_GLOBAL_MAX)
             rc = _json_get_tlv_global(item, enc, tidx, type, scratch);
-        else if (type <= 0x1F)
+        else if (type <= IOTDATA_TLV_TYPE_QUALITY_MAX)
             rc = _json_get_tlv_quality(item, enc, tidx, type, scratch);
         else
             rc = _json_get_tlv_user(item, enc, tidx, type, scratch);
@@ -3930,18 +4053,18 @@ static inline int _dump_tlv_data(size_t *bp, iotdata_dump_t *dump, int n, uint8_
 static inline int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, uint8_t type, uint8_t format, uint8_t length, int tlv_idx) {
     switch (type) {
     case IOTDATA_TLV_STATUS:
-        if (format == IOTDATA_TLV_FMT_RAW && length == 9) {
+        if (format == IOTDATA_TLV_FMT_RAW && length == IOTDATA_TLV_STATUS_LENGTH) {
             size_t p = *bp;
             const uint32_t sess = bits_read(buf, bb, &p, 24);
             const uint32_t life = bits_read(buf, bb, &p, 24);
             const uint16_t restarts = (uint16_t)bits_read(buf, bb, &p, 16);
             const uint8_t reason = (uint8_t)bits_read(buf, bb, &p, 8);
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_uptime", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(sess * 5));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(sess * IOTDATA_TLV_STATUS_TICKS_RES));
             n = dump_add(dump, n, *bp, 24, sess, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].lifetime_uptime", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(life * 5));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(life * IOTDATA_TLV_STATUS_TICKS_RES));
             n = dump_add(dump, n, *bp, 24, life, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].restarts", tlv_idx);
@@ -3956,7 +4079,7 @@ static inline int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, io
         }
         break;
     case IOTDATA_TLV_HEALTH:
-        if (format == IOTDATA_TLV_FMT_RAW && length == 7) {
+        if (format == IOTDATA_TLV_FMT_RAW && length == IOTDATA_TLV_HEALTH_LENGTH) {
             size_t p = *bp;
             const int8_t cpu_temp = (int8_t)(uint8_t)bits_read(buf, bb, &p, 8);
             const uint16_t supply_mv = (uint16_t)bits_read(buf, bb, &p, 16);
@@ -3975,7 +4098,7 @@ static inline int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, io
             n = dump_add(dump, n, *bp, 16, free_heap, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_active", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(active * 5));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
             n = dump_add(dump, n, *bp, 16, active, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 16;
             return n;
@@ -4028,9 +4151,9 @@ static inline int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_du
         n = dump_add(dump, n, s, IOTDATA_TLV_LENGTH_BITS, length, dump->_dec_buf, "0..255", dump->_name_buf);
         if (length > 0) {
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
-            if (type <= 0x0F)
+            if (type <= IOTDATA_TLV_TYPE_GLOBAL_MAX)
                 n = _dump_tlv_global(buf, bb, bp, dump, n, type, format, length, tlv_idx);
-            else if (type <= 0x1F)
+            else if (type <= IOTDATA_TLV_TYPE_QUALITY_MAX)
                 n = _dump_tlv_quality(buf, bb, bp, dump, n, format, length, tlv_idx);
             else
                 n = _dump_tlv_user(buf, bb, bp, dump, n, format, length, tlv_idx);
@@ -4065,13 +4188,14 @@ static inline void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, i
             fprintf(fp, "    [%d] version: raw(%u)\n", i, t->length);
         break;
     case IOTDATA_TLV_STATUS:
-        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 9) {
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == IOTDATA_TLV_STATUS_LENGTH) {
             const uint8_t *b = t->raw;
             const uint32_t sess = ((uint32_t)b[0] << 16) | ((uint32_t)b[1] << 8) | b[2];
             const uint32_t life = ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5];
             const uint16_t restarts = (uint16_t)((b[6] << 8) | b[7]);
             const uint8_t reason = b[8];
-            fprintf(fp, "    [%d] status: session=%lus lifetime=%lus restarts=%u reason=%s", i, (unsigned long)(sess * 5), (unsigned long)(life * 5), restarts, reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
+            fprintf(fp, "    [%d] status: session=%lus lifetime=%lus restarts=%u reason=%s", i, (unsigned long)(sess * IOTDATA_TLV_STATUS_TICKS_RES), (unsigned long)(life * IOTDATA_TLV_STATUS_TICKS_RES), restarts,
+                    reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
             if (reason >= 0x80)
                 fprintf(fp, "(0x%02x)", reason);
             fprintf(fp, "\n");
@@ -4080,7 +4204,7 @@ static inline void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, i
         }
         break;
     case IOTDATA_TLV_HEALTH:
-        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == 7) {
+        if (t->format == IOTDATA_TLV_FMT_RAW && t->length == IOTDATA_TLV_HEALTH_LENGTH) {
             const uint8_t *b = t->raw;
             const int8_t cpu_temp = (int8_t)b[0];
             const uint16_t supply_mv = (uint16_t)((b[1] << 8) | b[2]);
@@ -4089,7 +4213,7 @@ static inline void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, i
             fprintf(fp, "    [%d] health:", i);
             if (cpu_temp != IOTDATA_TLV_HEALTH_TEMP_NA)
                 fprintf(fp, " cpu=%d°C", cpu_temp);
-            fprintf(fp, " supply=%umV heap=%u active=%lus\n", supply_mv, free_heap, (unsigned long)(active * 5));
+            fprintf(fp, " supply=%umV heap=%u active=%lus\n", supply_mv, free_heap, (unsigned long)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
         } else {
             fprintf(fp, "    [%d] health: malformed(%u bytes)\n", i, t->length);
         }
@@ -4147,9 +4271,9 @@ static inline void print_tlv(const iotdata_decoded_t *dec, FILE *fp, const char 
     fprintf(fp, "  %s: %u TLV entries\n", label, dec->tlv_count);
     for (int i = 0; i < dec->tlv_count; i++)
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
-        if (dec->tlv[i].type <= 0x0F)
+        if (dec->tlv[i].type <= IOTDATA_TLV_TYPE_GLOBAL_MAX)
             _print_tlv_global(&dec->tlv[i], fp, i);
-        else if (dec->tlv[i].type <= 0x1F)
+        else if (dec->tlv[i].type <= IOTDATA_TLV_TYPE_QUALITY_MAX)
             _print_tlv_quality(&dec->tlv[i], fp, i);
         else
             _print_tlv_user(&dec->tlv[i], fp, i);
