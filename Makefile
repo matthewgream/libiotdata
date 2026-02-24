@@ -129,6 +129,10 @@ VERSION_BINS = \
 
 ################################################################################
 
+all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN)
+
+################################################################################
+
 lib: $(LIB_STATIC)
 
 $(LIB_OBJ): $(LIB_SRC) $(LIB_HDR)
@@ -217,8 +221,6 @@ test-example: $(TEST_EXAMPLE_BIN)
 tests: test-suites test-versions test-example
 
 ################################################################################
-
-all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN)
 
 format:
 	clang-format -i *.[ch] tests/*.[ch]
