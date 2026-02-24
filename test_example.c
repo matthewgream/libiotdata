@@ -255,9 +255,10 @@ static void print_hex_dump(const uint8_t *buf, size_t len) {
 static void print_diagnostic_dump(const uint8_t *buf, size_t len) {
     iotdata_status_t rc;
     char dump_str[8192];
-    if ((rc = iotdata_dump_to_string(buf, len, dump_str, sizeof(dump_str), true)) == IOTDATA_OK) {
+    iotdata_dump_t dump;
+    if ((rc = iotdata_dump_to_string(&dump, buf, len, dump_str, sizeof(dump_str), true)) == IOTDATA_OK) {
         printf("\n** Diagnostic dump:\n\n%s", dump_str);
-        if ((rc = iotdata_dump_to_string(buf, len, dump_str, sizeof(dump_str), false)) == IOTDATA_OK)
+        if ((rc = iotdata_dump_to_string(&dump, buf, len, dump_str, sizeof(dump_str), false)) == IOTDATA_OK)
             printf("\n%s", dump_str);
     } else
         fprintf(stderr, "\n  dump: %s", iotdata_strerror(rc));
@@ -266,7 +267,8 @@ static void print_diagnostic_dump(const uint8_t *buf, size_t len) {
 static void print_to_string(const uint8_t *buf, size_t len) {
     iotdata_status_t rc;
     char print_str[4096];
-    if ((rc = iotdata_print_to_string(buf, len, print_str, sizeof(print_str))) == IOTDATA_OK)
+    iotdata_print_scratch_t print_scratch;
+    if ((rc = iotdata_print_to_string(buf, len, print_str, sizeof(print_str), &print_scratch)) == IOTDATA_OK)
         printf("\n** Decoded:\n\n%s", print_str);
     else
         fprintf(stderr, "\n  decoded: %s", iotdata_strerror(rc));
@@ -275,7 +277,8 @@ static void print_to_string(const uint8_t *buf, size_t len) {
 static void print_to_json(const uint8_t *buf, size_t len) {
     iotdata_status_t rc;
     char *json_out;
-    if ((rc = iotdata_decode_to_json(buf, len, &json_out)) == IOTDATA_OK) {
+    iotdata_decode_from_json_scratch_t dec_scratch;
+    if ((rc = iotdata_decode_to_json(buf, len, &json_out, &dec_scratch)) == IOTDATA_OK) {
         printf("\n** JSON:\n\n%s", json_out);
         free(json_out);
     } else

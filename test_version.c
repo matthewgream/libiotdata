@@ -293,7 +293,8 @@ int main(void) {
     {
         char str[4096];
         iotdata_status_t rc;
-        rc = iotdata_print_to_string(buf, len, str, sizeof(str));
+        iotdata_print_scratch_t print_scratch;
+        rc = iotdata_print_to_string(buf, len, str, sizeof(str), &print_scratch);
         CHECK(rc == IOTDATA_OK, "print_to_string");
         CHECK(strlen(str) > 0, "print output non-empty");
     }
@@ -303,7 +304,8 @@ int main(void) {
     {
         char str[8192];
         iotdata_status_t rc;
-        rc = iotdata_dump_to_string(buf, len, str, sizeof(str), true);
+        iotdata_dump_t dump;
+        rc = iotdata_dump_to_string(&dump, buf, len, str, sizeof(str), true);
         CHECK(rc == IOTDATA_OK, "dump_to_string");
         CHECK(strlen(str) > 0, "dump output non-empty");
     }
@@ -313,14 +315,16 @@ int main(void) {
     {
         char *json = NULL;
         iotdata_status_t rc;
-        rc = iotdata_decode_to_json(buf, len, &json);
+        iotdata_decode_from_json_scratch_t dec_scratch;
+        rc = iotdata_decode_to_json(buf, len, &json, &dec_scratch);
         CHECK(rc == IOTDATA_OK, "decode_to_json");
         CHECK(json != NULL, "json non-null");
         if (json) {
             uint8_t buf2[256];
             size_t len2;
             memset(buf2, 0, sizeof(buf2));
-            rc = iotdata_encode_from_json(json, buf2, sizeof(buf2), &len2);
+            iotdata_encode_from_json_scratch_t scratch;
+            rc = iotdata_encode_from_json(json, buf2, sizeof(buf2), &len2, &scratch);
             CHECK(rc == IOTDATA_OK, "encode_from_json");
             CHECK(len == len2, "json round-trip length match");
             CHECK(memcmp(buf, buf2, len) == 0, "json round-trip byte match");

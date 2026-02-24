@@ -9,6 +9,7 @@
 #   test          - Build and run all tests
 #   test-default  - Build and run default variant tests
 #   test-custom   - Build and run custom variant tests
+#   test-complete - Build and run comprehensive all-field-type tests
 #   test-example  - Build and run example default variant test
 #   test-versions - Build and run all compile-time variant smoke tests
 #   minimal       - Build and show full versus minimal build sizes (native)
@@ -40,7 +41,7 @@
 CC=gcc
 CFLAGS_DEFINES=
 CFLAGS_COMMON=-Wall -Wextra -Wpedantic
-CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
+CFLAGS_STRICT=-Werror \
     -Wstrict-prototypes \
     -Wold-style-definition \
     -Wcast-align -Wcast-qual -Wconversion \
@@ -89,6 +90,8 @@ TEST_DEFAULT_SRC = test_default.c
 TEST_DEFAULT_BIN = test_default
 TEST_CUSTOM_SRC  = test_custom.c
 TEST_CUSTOM_BIN  = test_custom
+TEST_COMPLETE_SRC = test_complete.c
+TEST_COMPLETE_BIN = test_complete
 TEST_EXAMPLE_SRC = test_example.c
 TEST_EXAMPLE_BIN = test_example
 TEST_VERSION_SRC = test_version.c
@@ -105,9 +108,9 @@ VERSION_BINS = \
     test_version_NO_FLOATING \
     test_version_NO_FLOATING_NO_JSON
 
-.PHONY: all test test-default test-custom test-example test-versions lib format clean minimal
+.PHONY: all test test-default test-custom test-complete test-example test-versions lib format clean minimal
 
-all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN)
+all: lib $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_EXAMPLE_BIN)
 
 lib: $(LIB_STATIC)
 
@@ -120,6 +123,8 @@ $(TEST_DEFAULT_BIN): $(TEST_DEFAULT_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_DEFAULT_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_DEFAULT_BIN)
 $(TEST_CUSTOM_BIN): $(TEST_CUSTOM_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=custom_variants -DIOTDATA_VARIANT_MAPS_COUNT=3 $(TEST_CUSTOM_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_CUSTOM_BIN)
+$(TEST_COMPLETE_BIN): $(TEST_COMPLETE_SRC) $(LIB_HDR) $(LIB_SRC)
+	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS=complete_variants -DIOTDATA_VARIANT_MAPS_COUNT=2 $(TEST_COMPLETE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_COMPLETE_BIN)
 $(TEST_EXAMPLE_BIN): $(TEST_EXAMPLE_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_STACK_USAGE) -DIOTDATA_VARIANT_MAPS_DEFAULT $(TEST_EXAMPLE_SRC) $(LIB_SRC) $(LIBS) -o $(TEST_EXAMPLE_BIN)
 
@@ -127,12 +132,15 @@ test-default: $(TEST_DEFAULT_BIN)
 	./$(TEST_DEFAULT_BIN)
 test-custom: $(TEST_CUSTOM_BIN)
 	./$(TEST_CUSTOM_BIN)
+test-complete: $(TEST_COMPLETE_BIN)
+	./$(TEST_COMPLETE_BIN)
 test-example: $(TEST_EXAMPLE_BIN)
 	./$(TEST_EXAMPLE_BIN)
 
-test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN)
+test: $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN)
 	./$(TEST_DEFAULT_BIN)
 	./$(TEST_CUSTOM_BIN)
+	./$(TEST_COMPLETE_BIN)
 
 test_version_FULL: $(TEST_VERSION_SRC) $(LIB_HDR) $(LIB_SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_VERSIONS) \
@@ -165,13 +173,13 @@ test-versions: $(VERSION_BINS)
 	@for t in $(VERSION_BINS); do ./$$t; done
 	@echo ""
 
-test-all: test test-versions test-example
+test-all: test test-versions test-complete test-example
 
 format:
 	clang-format -i *.[ch]
 
 clean:
-	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
+	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
 
 ################################################################################
 

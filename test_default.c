@@ -677,12 +677,14 @@ static void test_json_round_trip(void) {
 
     /* Encode → JSON */
     char *json = NULL;
-    ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json), "to_json");
+    iotdata_decode_from_json_scratch_t dec_scratch;
+    ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     /* JSON → binary */
     uint8_t pkt2[256];
     size_t len2;
-    ASSERT_OK(iotdata_encode_from_json(json, pkt2, sizeof(pkt2), &len2), "from_json");
+    iotdata_encode_from_json_scratch_t enc_scratch;
+    ASSERT_OK(iotdata_encode_from_json(json, pkt2, sizeof(pkt2), &len2, &enc_scratch), "from_json");
     free(json);
 
     /* Compare wire bytes */
@@ -700,7 +702,8 @@ static void test_dump_output(void) {
     finish();
 
     char str[8192];
-    ASSERT_OK(iotdata_dump_to_string(pkt, pkt_len, str, sizeof(str), true), "to_string");
+    iotdata_dump_t dump;
+    ASSERT_OK(iotdata_dump_to_string(&dump, pkt, pkt_len, str, sizeof(str), true), "to_string");
     if (!strstr(str, "Offset")) {
         FAIL("missing header");
         return;
@@ -730,7 +733,8 @@ static void test_print_output(void) {
     finish();
 
     char str[8192];
-    ASSERT_OK(iotdata_print_to_string(pkt, pkt_len, str, sizeof(str)), "to_string");
+    iotdata_print_scratch_t print_scratch;
+    ASSERT_OK(iotdata_print_to_string(pkt, pkt_len, str, sizeof(str), &print_scratch), "to_string");
     if (!strstr(str, "Station 7")) {
         FAIL("missing station");
         return;

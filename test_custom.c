@@ -421,7 +421,8 @@ static void test_json_uses_custom_labels(void) {
     finish();
 
     char *json = NULL;
-    ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json), "to_json");
+    iotdata_decode_from_json_scratch_t dec_scratch;
+    ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     /* Verify custom labels appear */
     if (!strstr(json, "soil_temp")) {
@@ -443,7 +444,8 @@ static void test_json_uses_custom_labels(void) {
     /* JSON round-trip */
     uint8_t pkt2[256];
     size_t len2;
-    ASSERT_OK(iotdata_encode_from_json(json, pkt2, sizeof(pkt2), &len2), "from_json");
+    iotdata_encode_from_json_scratch_t enc_scratch;
+    ASSERT_OK(iotdata_encode_from_json(json, pkt2, sizeof(pkt2), &len2, &enc_scratch), "from_json");
     free(json);
 
     ASSERT_EQ(pkt_len, len2, "len match");
@@ -463,7 +465,8 @@ static void test_json_wind_mast_labels(void) {
     finish();
 
     char *json = NULL;
-    ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json), "to_json");
+    iotdata_decode_from_json_scratch_t dec_scratch;
+    ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     if (!strstr(json, "wind_speed")) {
         free(json);
@@ -484,7 +487,8 @@ static void test_json_wind_mast_labels(void) {
     /* JSON round-trip */
     uint8_t pkt2[256];
     size_t len2;
-    ASSERT_OK(iotdata_encode_from_json(json, pkt2, sizeof(pkt2), &len2), "from_json");
+    iotdata_encode_from_json_scratch_t enc_scratch;
+    ASSERT_OK(iotdata_encode_from_json(json, pkt2, sizeof(pkt2), &len2, &enc_scratch), "from_json");
     free(json);
 
     ASSERT_EQ(pkt_len, len2, "len match");
@@ -500,7 +504,8 @@ static void test_print_shows_variant_name(void) {
     finish();
 
     char str[4096];
-    ASSERT_OK(iotdata_print_to_string(pkt, pkt_len, str, sizeof(str)), "print");
+    iotdata_print_scratch_t print_scratch;
+    ASSERT_OK(iotdata_print_to_string(pkt, pkt_len, str, sizeof(str), &print_scratch), "print");
     if (!strstr(str, "soil_sensor")) {
         FAIL("missing soil_sensor");
         return;
@@ -510,7 +515,7 @@ static void test_print_shows_variant_name(void) {
     ASSERT_OK(iotdata_encode_battery(&enc, 50, false), "bat");
     finish();
 
-    ASSERT_OK(iotdata_print_to_string(pkt, pkt_len, str, sizeof(str)), "print");
+    ASSERT_OK(iotdata_print_to_string(pkt, pkt_len, str, sizeof(str), &print_scratch), "print");
     if (!strstr(str, "wind_mast")) {
         FAIL("missing wind_mast");
         return;
@@ -521,10 +526,21 @@ static void test_print_shows_variant_name(void) {
 
 static void test_get_variant_function(void) {
     TEST("iotdata_get_variant returns correct variants");
-
     const iotdata_variant_def_t *v0 = iotdata_get_variant(0);
+    if (v0 == NULL) {
+        FAIL("v0 null");
+        return;
+    }
     const iotdata_variant_def_t *v1 = iotdata_get_variant(1);
+    if (v1 == NULL) {
+        FAIL("v1 null");
+        return;
+    }
     const iotdata_variant_def_t *v2 = iotdata_get_variant(2);
+    if (v2 == NULL) {
+        FAIL("v2 null");
+        return;
+    }
 
     if (strcmp(v0->name, "soil_sensor") != 0) {
         FAIL("v0 name");
@@ -543,10 +559,10 @@ static void test_get_variant_function(void) {
     ASSERT_EQ(v1->num_pres_bytes, 1, "v1 pres");
     ASSERT_EQ(v2->num_pres_bytes, 2, "v2 pres");
 
-    /* Out-of-range variant falls back to variant 0 */
+    /* Out-of-range variant returns NULL */
     const iotdata_variant_def_t *vx = iotdata_get_variant(14);
-    if (strcmp(vx->name, "soil_sensor") != 0) {
-        FAIL("fallback name");
+    if (vx != NULL) {
+        FAIL("out of range variant");
         return;
     }
 

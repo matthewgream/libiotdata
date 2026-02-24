@@ -432,30 +432,23 @@ extern "C" {
  * -------------------------------------------------------------------------*/
 
 #if defined(IOTDATA_ENABLE_IMAGE)
-
 #define IOTDATA_IMAGE_DATA_MAX         254 /* max pixel data after control byte */
-
 /* Control byte: format(2) | size(2) | compression(2) | flags(2) */
 #define IOTDATA_IMAGE_FMT_BILEVEL      0 /* 1 bpp */
 #define IOTDATA_IMAGE_FMT_GREY4        1 /* 2 bpp */
 #define IOTDATA_IMAGE_FMT_GREY16       2 /* 4 bpp */
-
 #define IOTDATA_IMAGE_SIZE_24x18       0
 #define IOTDATA_IMAGE_SIZE_32x24       1
 #define IOTDATA_IMAGE_SIZE_48x36       2
 #define IOTDATA_IMAGE_SIZE_64x48       3
-
 #define IOTDATA_IMAGE_COMP_RAW         0
 #define IOTDATA_IMAGE_COMP_RLE         1
 #define IOTDATA_IMAGE_COMP_HEATSHRINK  2
-
 #define IOTDATA_IMAGE_FLAG_FRAGMENT    (1U << 1)
 #define IOTDATA_IMAGE_FLAG_INVERT      (1U << 0)
-
 /* Heatshrink fixed parameters */
 #define IOTDATA_IMAGE_HS_WINDOW_SZ2    8 /* 256-byte window */
 #define IOTDATA_IMAGE_HS_LOOKAHEAD_SZ2 4 /* 16-byte lookahead */
-
 #if !defined(IOTDATA_NO_ENCODE)
 #define IOTDATA_IMAGE_FIELDS_ENCODE \
     uint8_t image_pixel_format; \
@@ -467,7 +460,6 @@ extern "C" {
 #else
 #define IOTDATA_IMAGE_FIELDS_ENCODE
 #endif
-
 #if !defined(IOTDATA_NO_DECODE)
 #define IOTDATA_IMAGE_FIELDS_DECODE \
     uint8_t image_pixel_format; \
@@ -479,7 +471,11 @@ extern "C" {
 #else
 #define IOTDATA_IMAGE_FIELDS_DECODE
 #endif
-
+typedef struct {
+    union {
+        char b64[((IOTDATA_IMAGE_DATA_MAX + 2) / 3) * 4 + 1];
+    };
+} iotdata_decode_to_json_scratch_image_t;
 #else
 #define IOTDATA_IMAGE_FIELDS_ENCODE
 #define IOTDATA_IMAGE_FIELDS_DECODE
@@ -490,12 +486,9 @@ extern "C" {
  * -------------------------------------------------------------------------*/
 
 #if defined(IOTDATA_ENABLE_TLV)
-
 #define IOTDATA_TLV_MAX         8
-
 #define IOTDATA_TLV_DATA_MAX    255
 #define IOTDATA_TLV_STR_LEN_MAX 255
-
 #if !defined(IOTDATA_NO_ENCODE)
 typedef struct {
     uint8_t format;
@@ -504,6 +497,12 @@ typedef struct {
     const uint8_t *data;
     const char *str;
 } iotdata_encoder_tlv_t;
+typedef struct {
+    union {
+        uint8_t raw[IOTDATA_TLV_MAX][IOTDATA_TLV_DATA_MAX];
+        char str[IOTDATA_TLV_MAX][IOTDATA_TLV_STR_LEN_MAX + 1];
+    };
+} iotdata_encode_from_json_scratch_tlv_t;
 #define IOTDATA_TLV_FIELDS_ENCODE \
     uint8_t tlv_count; \
     iotdata_encoder_tlv_t tlv[IOTDATA_TLV_MAX];
@@ -520,13 +519,18 @@ typedef struct {
         char str[IOTDATA_TLV_STR_LEN_MAX + 1];
     };
 } iotdata_decoded_tlv_t;
+typedef struct {
+    union {
+        char b64[((IOTDATA_TLV_DATA_MAX + 2) / 3) * 4 + 1];
+        char str[IOTDATA_TLV_STR_LEN_MAX + 1];
+    };
+} iotdata_decode_to_json_scratch_tlv_t;
 #define IOTDATA_TLV_FIELDS_DECODE \
     uint8_t tlv_count; \
     iotdata_decoded_tlv_t tlv[IOTDATA_TLV_MAX];
 #else
 #define IOTDATA_TLV_FIELDS_DECODE
 #endif
-
 #define IOTDATA_TLV_FMT_BITS    1
 #define IOTDATA_TLV_TYPE_BITS   6
 #define IOTDATA_TLV_TYPE_MAX    63
@@ -560,15 +564,15 @@ typedef float iotdata_float_t;
  * Header: variant(4) + station(12) + sequence(16) = 32 bits
  * -------------------------------------------------------------------------*/
 
-#define IOTDATA_VARIANT_BITS          4
-#define IOTDATA_STATION_BITS          12
-#define IOTDATA_SEQUENCE_BITS         16
-#define IOTDATA_HEADER_BITS           (IOTDATA_VARIANT_BITS + IOTDATA_STATION_BITS + IOTDATA_SEQUENCE_BITS)
+#define IOTDATA_VARIANT_BITS      4
+#define IOTDATA_STATION_BITS      12
+#define IOTDATA_SEQUENCE_BITS     16
+#define IOTDATA_HEADER_BITS       (IOTDATA_VARIANT_BITS + IOTDATA_STATION_BITS + IOTDATA_SEQUENCE_BITS)
 
-#define IOTDATA_VARIANT_MAX           14
-#define IOTDATA_VARIANT_RESERVED      15
-#define IOTDATA_STATION_MAX           4095
-#define IOTDATA_SEQUENCE_MAX          65535
+#define IOTDATA_VARIANT_MAX       14
+#define IOTDATA_VARIANT_RESERVED  15
+#define IOTDATA_STATION_MAX       4095
+#define IOTDATA_SEQUENCE_MAX      65535
 
 /* ---------------------------------------------------------------------------
  * Presence byte layout (N-byte extension chain)
@@ -588,20 +592,19 @@ typedef float iotdata_float_t;
  * but that is not a limitation in the protocol.
  * -------------------------------------------------------------------------*/
 
-#define IOTDATA_PRES_TLV              (1U << 6)
-#define IOTDATA_PRES_EXT              (1U << 7)
-#define IOTDATA_PRES0_DATA_FIELDS     6
-#define IOTDATA_PRESN_DATA_FIELDS     7
-#define IOTDATA_PRES_MINIMUM          1
-#define IOTDATA_PRES_MAXIMUM          4
-#define IOTDATA_MAX_DATA_FIELDS       (IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (IOTDATA_PRES_MAXIMUM - 1))
+#define IOTDATA_PRES_TLV          (1U << 6)
+#define IOTDATA_PRES_EXT          (1U << 7)
+#define IOTDATA_PRES0_DATA_FIELDS 6
+#define IOTDATA_PRESN_DATA_FIELDS 7
+#define IOTDATA_PRES_MINIMUM      1
+#define IOTDATA_PRES_MAXIMUM      4
+#define IOTDATA_MAX_DATA_FIELDS   (IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (IOTDATA_PRES_MAXIMUM - 1))
 
 /* ---------------------------------------------------------------------------
  * Packet
  * -------------------------------------------------------------------------*/
 
-#define IOTDATA_PACKET_MINIMUM        ((IOTDATA_HEADER_BITS / 8) + IOTDATA_PRES_MINIMUM)
-#define IOTDATA_PACKET_MAXIMUM_NO_TLV (128) // XXX fix me
+#define IOTDATA_PACKET_MINIMUM    ((IOTDATA_HEADER_BITS / 8) + IOTDATA_PRES_MINIMUM)
 
 /* ---------------------------------------------------------------------------
  * Field types
@@ -750,14 +753,16 @@ typedef enum {
     IOTDATA_ERR_BUF_TOO_SMALL,
 #elif !defined(IOTDATA_NO_DUMP)
     IOTDATA_ERR_CTX_NULL,
+    IOTDATA_ERR_BUF_NULL,
 #endif
 
 #if !defined(IOTDATA_NO_DECODE)
     IOTDATA_ERR_DECODE_SHORT,
-    IOTDATA_ERR_DECODE_VARIANT,
     IOTDATA_ERR_DECODE_TRUNCATED,
+    IOTDATA_ERR_DECODE_VARIANT,
 #elif !defined(IOTDATA_NO_DUMP)
     IOTDATA_ERR_DECODE_SHORT,
+    IOTDATA_ERR_DECODE_TRUNCATED,
 #endif
 
 #if !defined(IOTDATA_NO_DUMP)
@@ -787,6 +792,8 @@ typedef enum {
     IOTDATA_ERR_TLV_STR_NULL,
     IOTDATA_ERR_TLV_STR_LEN_HIGH,
     IOTDATA_ERR_TLV_STR_CHAR_INVALID,
+    IOTDATA_ERR_TLV_UNMATCHED,
+    IOTDATA_ERR_TLV_KV_MISMATCH,
 #endif
 
 //
@@ -1121,25 +1128,74 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_DUMP)
-iotdata_status_t iotdata_dump_to_file(const uint8_t *buf, size_t len, FILE *fp, bool verbose);
-iotdata_status_t iotdata_dump_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose);
+
+#define IOTDATA_DUMP_FIELD_NAME_MAX  32
+#define IOTDATA_DUMP_DECODED_STR_MAX 32
+#define IOTDATA_DUMP_RANGE_STR_MAX   32
+
+typedef struct {
+    size_t bit_offset;
+    size_t bit_length;
+    char field_name[IOTDATA_DUMP_FIELD_NAME_MAX];
+    uint32_t raw_value;
+    char decoded_str[IOTDATA_DUMP_DECODED_STR_MAX];
+    char range_str[IOTDATA_DUMP_RANGE_STR_MAX];
+} iotdata_dump_entry_t;
+
+#define IOTDATA_MAX_DUMP_ENTRIES 48
+
+typedef struct {
+    char _name_buf[IOTDATA_DUMP_FIELD_NAME_MAX];
+    char _dec_buf[IOTDATA_DUMP_DECODED_STR_MAX];
+    iotdata_dump_entry_t entries[IOTDATA_MAX_DUMP_ENTRIES];
+    size_t count;
+    size_t packed_bits;
+    size_t packed_bytes;
+} iotdata_dump_t;
+
+iotdata_status_t iotdata_dump_to_file(iotdata_dump_t *dump, const uint8_t *buf, size_t len, FILE *fp, bool verbose);
+iotdata_status_t iotdata_dump_to_string(iotdata_dump_t *dump, const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose);
 #endif /* !IOTDATA_NO_DUMP */
 
 #if !defined(IOTDATA_NO_PRINT)
 #if !defined(IOTDATA_NO_DECODE)
 iotdata_status_t iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp);
 iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, char *out, size_t out_size);
+typedef struct {
+    iotdata_decoded_t dec;
+} iotdata_print_scratch_t;
+iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp, iotdata_print_scratch_t *scratch);
+iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, iotdata_print_scratch_t *scratch);
 #endif
-iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp);
-iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size);
 #endif /* !IOTDATA_NO_PRINT */
 
 #if !defined(IOTDATA_NO_JSON)
 #if !defined(IOTDATA_NO_DECODE)
-iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out);
+typedef struct {
+    iotdata_decoded_t dec;
+    union {
+        bool _dummy;
+#if defined(IOTDATA_ENABLE_IMAGE)
+        iotdata_decode_to_json_scratch_image_t image;
+#endif
+#if defined(IOTDATA_ENABLE_TLV)
+        iotdata_decode_to_json_scratch_tlv_t tlv;
+#endif
+    };
+} iotdata_decode_from_json_scratch_t;
+iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out, iotdata_decode_from_json_scratch_t *scratch);
 #endif /* !IOTDATA_NO_DECODE */
 #if !defined(IOTDATA_NO_ENCODE)
-iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t buf_size, size_t *out_bytes);
+typedef struct {
+    iotdata_encoder_t enc;
+    union {
+        bool _dummy;
+#if defined(IOTDATA_ENABLE_TLV)
+        iotdata_encode_from_json_scratch_tlv_t tlv;
+#endif
+    };
+} iotdata_encode_from_json_scratch_t;
+iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t buf_size, size_t *out_bytes, iotdata_encode_from_json_scratch_t *scratch);
 #endif /* !IOTDATA_NO_ENCODE */
 #endif /* !IOTDATA_NO_JSON */
 
@@ -1147,7 +1203,7 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
  * Ancillary
  * -------------------------------------------------------------------------*/
 
-#if !defined(IODATA_NO_ERROR_STRINGS)
+#if !defined(IOTDATA_NO_ERROR_STRINGS)
 const char *iotdata_strerror(iotdata_status_t status);
 #endif
 
