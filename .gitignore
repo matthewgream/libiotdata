@@ -1,5 +1,6 @@
 *.o
 *.a
+test_complete
 test_default
 test_custom
 test_example

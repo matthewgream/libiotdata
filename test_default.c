@@ -96,7 +96,6 @@ static size_t pkt_len;
 static iotdata_decoded_t dec;
 
 static void begin(uint16_t station, uint16_t seq) {
-    memset(&enc, 0, sizeof(enc));
     assert(iotdata_encode_begin(&enc, pkt, sizeof(pkt), 0, station, seq) == IOTDATA_OK);
 }
 
@@ -105,7 +104,6 @@ static void finish(void) {
 }
 
 static void decode(void) {
-    memset(&dec, 0, sizeof(dec));
     assert(iotdata_decode(pkt, pkt_len, &dec) == IOTDATA_OK);
 }
 

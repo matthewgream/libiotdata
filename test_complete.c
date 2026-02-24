@@ -169,7 +169,6 @@ static size_t pkt_len;
 static iotdata_decoded_t dec;
 
 static void begin(uint8_t variant, uint16_t station, uint16_t seq) {
-    memset(&enc, 0, sizeof(enc));
     assert(iotdata_encode_begin(&enc, pkt, sizeof(pkt), variant, station, seq) == IOTDATA_OK);
 }
 
@@ -178,7 +177,6 @@ static void finish(void) {
 }
 
 static void decode_pkt(void) {
-    memset(&dec, 0, sizeof(dec));
     assert(iotdata_decode(pkt, pkt_len, &dec) == IOTDATA_OK);
 }
 
@@ -279,7 +277,7 @@ static void test_image_round_trip(void) {
  * =========================================================================*/
 
 static void test_complete_variant_all_fields(void) {
-    TEST("Complete variant — all 16 fields");
+    TEST("Complete variant - all 16 fields");
     begin(0, 100, 500);
 
     ASSERT_OK(iotdata_encode_battery(&enc, 90, true), "bat");
@@ -318,7 +316,7 @@ static void test_complete_variant_all_fields(void) {
 }
 
 static void test_standalone_variant_all_fields(void) {
-    TEST("Standalone variant — all 15 fields");
+    TEST("Standalone variant - all 15 fields");
     begin(1, 200, 600);
 
     ASSERT_OK(iotdata_encode_battery(&enc, 60, false), "bat");
@@ -513,7 +511,6 @@ static void test_encode_buffer_overflow(void) {
     /* 5 bytes = header(4) + pres0(1), no room for field data */
     uint8_t small_buf[5];
     iotdata_encoder_t small_enc;
-    memset(&small_enc, 0, sizeof(small_enc));
     ASSERT_OK(iotdata_encode_begin(&small_enc, small_buf, 5, 0, 1, 1), "begin ok");
     ASSERT_OK(iotdata_encode_battery(&small_enc, 50, false), "bat ok");
     size_t out_len;
@@ -811,7 +808,6 @@ static void test_json_round_trip_with_tlv(void) {
     free(json);
 
     /* Decode round-tripped packet and verify TLVs */
-    memset(&dec, 0, sizeof(dec));
     ASSERT_OK(iotdata_decode(pkt2, len2, &dec), "decode2");
     ASSERT_EQ(dec.tlv_count, 3, "tlv count");
     ASSERT_EQ(dec.tlv[0].type, 0x20, "t0 type");
@@ -867,7 +863,6 @@ static void test_decode_short(void) {
     TEST("Decode short buffer");
 
     uint8_t short_buf[] = { 0x00, 0x00, 0x00 };
-    memset(&dec, 0, sizeof(dec));
     ASSERT_ERR(iotdata_decode(short_buf, 3, &dec), IOTDATA_ERR_DECODE_SHORT, "short");
     PASS();
 }
@@ -881,7 +876,6 @@ static void test_decode_truncated(void) {
     finish();
 
     /* Full packet is 6 bytes; truncate to 5 (header + pres0, no field data) */
-    memset(&dec, 0, sizeof(dec));
     ASSERT_ERR(iotdata_decode(pkt, 5, &dec), IOTDATA_ERR_DECODE_TRUNCATED, "truncated");
     PASS();
 }
@@ -891,7 +885,6 @@ static void test_decode_reserved_variant(void) {
 
     /* Manually construct: variant=15, station=0, seq=0, pres0=0 */
     uint8_t bad[] = { 0xF0, 0x00, 0x00, 0x00, 0x00 };
-    memset(&dec, 0, sizeof(dec));
     ASSERT_ERR(iotdata_decode(bad, 5, &dec), IOTDATA_ERR_DECODE_VARIANT, "reserved");
     PASS();
 }
@@ -951,9 +944,7 @@ static void test_image_rle_round_trip(void) {
     TEST("Image RLE compress/decompress");
 
     /* 128 bilevel pixels: 64 white + 64 black */
-    uint8_t pixels[16];
-    memset(pixels, 0xFF, 8);
-    memset(pixels + 8, 0x00, 8);
+    uint8_t pixels[16] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     uint8_t compressed[64];
     size_t comp_len = iotdata_image_rle_compress(pixels, 128, 1, compressed, sizeof(compressed));
@@ -962,8 +953,7 @@ static void test_image_rle_round_trip(void) {
         return;
     }
 
-    uint8_t decompressed[16];
-    memset(decompressed, 0x42, sizeof(decompressed));
+    uint8_t decompressed[16] = { 0x42 };
     size_t decomp_len = iotdata_image_rle_decompress(compressed, comp_len, 1, decompressed, sizeof(decompressed));
     if (decomp_len == 0) {
         FAIL("decompress failed");
@@ -989,8 +979,7 @@ static void test_image_heatshrink_round_trip(void) {
         return;
     }
 
-    uint8_t decompressed[64];
-    memset(decompressed, 0xFF, sizeof(decompressed));
+    uint8_t decompressed[64] = { 0xFF };
     size_t decomp_len = iotdata_image_hs_decompress(compressed, comp_len, decompressed, sizeof(decompressed));
     if (decomp_len == 0) {
         FAIL("decompress failed");

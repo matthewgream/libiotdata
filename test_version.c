@@ -14,13 +14,18 @@
  *
  * Variants built by `make test-versions`:
  *
- *   FULL            All features (encode + decode + print + dump + JSON)
- *   NO_PRINT        Exclude iotdata_print / iotdata_print_to_string
- *   NO_DUMP         Exclude iotdata_dump / iotdata_dump_to_string
- *   NO_JSON         Exclude JSON support (no cJSON dependency)
- *   NO_DECODE       Encoder only (no decode/print/dump/JSON)
- *   NO_ENCODE       Decoder only (no encoder)
- *   NO_FLOATING     Integer-only mode (int32_t scaled values)
+ *   FULL                All features (encode + decode + print + dump + JSON)
+ *   NO_PRINT            Exclude iotdata_print / iotdata_print_to_string
+ *   NO_DUMP             Exclude iotdata_dump / iotdata_dump_to_string
+ *   NO_JSON             Exclude JSON support (no cJSON dependency)
+ *   NO_DECODE           Encoder only (no decode/print/dump/JSON)
+ *   NO_ENCODE           Decoder only (no encoder)
+ *   NO_FLOATING         Integer-only mode (int32_t scaled values)
+ *   NO_FLOATING_NO_JSON Integer-only + no JSON + no FP instructions
+ *   NO_ERROR_STRINGS    Exclude iotdata_strerror
+ *   NO_FLOATING_DOUBLES Use float instead of double for position
+ *   SELECTIVE           All types via IOTDATA_ENABLE_SELECTIVE
+ *   NO_CHECKS           No runtime state or type checks
  *
  * Compile (example, full variant):
  *   cc -DIOTDATA_VARIANT_MAPS=test_version_variants
@@ -87,12 +92,20 @@ static const char *build_label(void) {
     return "NO_FLOATING_NO_JSON";
 #elif defined(IOTDATA_NO_FLOATING)
     return "NO_FLOATING";
+#elif defined(IOTDATA_NO_FLOATING_DOUBLES)
+    return "NO_FLOATING_DOUBLES";
 #elif defined(IOTDATA_NO_PRINT)
     return "NO_PRINT";
 #elif defined(IOTDATA_NO_DUMP)
     return "NO_DUMP";
 #elif defined(IOTDATA_NO_JSON)
     return "NO_JSON";
+#elif defined(IOTDATA_NO_ERROR_STRINGS)
+    return "NO_ERROR_STRINGS";
+#elif defined(IOTDATA_NO_CHECKS_STATE)
+    return "NO_CHECKS";
+#elif defined(IOTDATA_ENABLE_SELECTIVE)
+    return "SELECTIVE";
 #else
     return "FULL";
 #endif
@@ -231,7 +244,11 @@ static int do_encode(uint8_t *buf, size_t buf_size, size_t *out_len) {
     rc = iotdata_encode_depth(&enc, 150); /* 150 cm */
     CHECK(rc == IOTDATA_OK, "encode_depth");
 
+#if defined(IOTDATA_NO_FLOATING_DOUBLES)
+    rc = iotdata_encode_position(&enc, 51.5072220f, -0.1275000f);
+#else
     rc = iotdata_encode_position(&enc, 51.5072220, -0.1275000);
+#endif
     CHECK(rc == IOTDATA_OK, "encode_position");
 
     rc = iotdata_encode_datetime(&enc, 86400);
@@ -320,9 +337,8 @@ int main(void) {
         CHECK(rc == IOTDATA_OK, "decode_to_json");
         CHECK(json != NULL, "json non-null");
         if (json) {
-            uint8_t buf2[256];
+            uint8_t buf2[256] = { 0 };
             size_t len2;
-            memset(buf2, 0, sizeof(buf2));
             iotdata_encode_from_json_scratch_t scratch;
             rc = iotdata_encode_from_json(json, buf2, sizeof(buf2), &len2, &scratch);
             CHECK(rc == IOTDATA_OK, "encode_from_json");
