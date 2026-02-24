@@ -2671,7 +2671,7 @@ void encode_full_packet(uint8_t *buf, size_t buf_size, size_t *out_len)
 
     /* Pres1 fields — trigger extension byte */
     iotdata_encode_cloud(&enc, 6);
-    iotdata_encode_air_quality(&enc, 75);
+    iotdata_encode_air_quality_index(&enc, 75);
     iotdata_encode_radiation(&enc, 100, 0.50f);
     iotdata_encode_position(&enc, 59.334591, 18.063240);
     iotdata_encode_datetime(&enc, 3251120);
