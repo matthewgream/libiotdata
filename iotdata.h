@@ -987,6 +987,7 @@ typedef struct {
 #if defined(IOTDATA_ENABLE_IMAGE)
 size_t iotdata_image_pixel_count(uint8_t size_tier);
 uint8_t iotdata_image_bpp(uint8_t pixel_format);
+size_t iotdata_image_bytes(uint8_t pixel_format, uint8_t size_tier);
 /* RLE: returns output bytes written, 0 on error */
 size_t iotdata_image_rle_compress(const uint8_t *pixels, size_t pixel_count, uint8_t bpp, uint8_t *out, size_t out_max);
 size_t iotdata_image_rle_decompress(const uint8_t *compressed, size_t comp_len, uint8_t bpp, uint8_t *pixels, size_t pixel_buf_bytes);
