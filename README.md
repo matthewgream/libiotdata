@@ -19,11 +19,12 @@
 
 This document specifies a bit-packed telemetry protocol for battery- and
 transmission- constrained IoT sensor systems, with particular emphasis on
-LoRa-based remote environmental monitoring, seamlessly operable in
-point-to-point and mesh-relay deployments. The protocol has a reference
-implementation in C (`libiotdata`) which is the normative source for any
-ambiguity in this specification. In the tradition of RFC 1, the specification is
-informed by running code.
+LoRa-based remote environmental monitoring, and seamlessly deployable in
+point-to-point and mesh-relay topologies.
+
+The protocol has a reference implementation in C (`libiotdata`) which is the
+normative source for any ambiguity in this specification. In the tradition of
+RFC 1, the specification is informed by running code.
 
 Discussion of this document and the reference implementation takes place on the
 project's GitHub repository.
@@ -78,6 +79,7 @@ project's GitHub repository.
   - [11.3. Sensor Metadata and Interoperability](#113-sensor-metadata-and-interoperability)
   - [11.4. Unknown Variants](#114-unknown-variants)
   - [11.5. Quantisation Error Budgets](#115-quantisation-error-budgets)
+  - [11.6. Error Handling and Malformed Packets](#116-error-handling-and-malformed-packets)
 - [12. Packet Size Reference](#12-packet-size-reference)
 - [13. Implementation Notes](#13-implementation-notes)
   - [13.1. Reference Implementation](#131-reference-implementation)
@@ -87,13 +89,16 @@ project's GitHub repository.
   - [13.5. Variant Table Extension](#135-variant-table-extension)
 - [14. Security Considerations](#14-security-considerations)
 - [15. Future Work](#15-future-work)
+- [16. Versioning and Forward Compatibility](#16-versioning-and-forward-compatibility)
 - [Appendix A. 6-Bit Character Table](#appendix-a-6-bit-character-table)
 - [Appendix B. Quantisation Worked Examples](#appendix-b-quantisation-worked-examples)
 - [Appendix C. Complete Encoder Example](#appendix-c-complete-encoder-example)
 - [Appendix D. Transmission Medium Considerations](#appendix-d-transmission-medium-considerations)
 - [Appendix E. System Implementation Considerations](#appendix-e-system-implementation-considerations)
 - [Appendix F. Example Weather Station Output](#appendix-f-example-weather-station-output)
-- [Appendix G. Mesh Relay Protocol](#appendix-g-mesh-relay-protocol)
+- [Appendix G. Mesh Protocol](#appendix-g-mesh-protocol)
+- [Appendix H. System Architecture Considerations](#appendix-h-system-architecture-considerations)
+- [Appendix I. Comparison with Alternative Encodings](#appendix-i-comparison-with-alternative-encodings)
 
 ---
 
@@ -107,14 +112,14 @@ simultaneously:
 1. **Power** — battery and/or small solar panel, particularly in locations with
    limited winter daylight.
 
-2. **Transmission** — LoRa, 802.11ah, SigFox, cellular SMS, low-frequency RF, or
-   similar low-power point-to-point, wide-area, or mesh networks with effective
-   payload limits of tens of bytes per transmission. Regulatory limits on
-   transmission time (typically 1% duty cycle in EU ISM bands) mean that every
-   byte transmitted has a direct cost in time-on-air and energy.
+2. **Communications** — LoRa, 802.11ah, SigFox, cellular SMS, low-frequency RF,
+   or similar low-power point-to-point, wide-area, or mesh networks with
+   effective payload limits of tens of bytes per transmission. Regulatory limits
+   on transmission time (typically 1% duty cycle in EU ISM bands) mean that
+   every byte transmitted has a direct cost in time-on-air and energy.
 
-3. **Processing** — small, inexpensive embedded microcontrollers running at tens
-   of megahertz with tens or hundreds of kilobytes of RAM and program storage,
+3. **Compute** — small, inexpensive embedded microcontrollers running at tens of
+   megahertz with tens or hundreds of kilobytes of RAM and program storage,
    where code size and complexity are real constraints, and where there are no,
    or limited, operating system or protocol support.
 
@@ -136,6 +141,12 @@ handshake, or acknowledgement at this layer. A sensor wakes, encodes its
 readings, transmits, and sleeps. Transmissions are typically infrequent (minutes
 to hours), bursty, and rely on lower-layer integrity (checksums or CRC) without
 lower-layer reliability (retransmission or acknowledgement).
+
+The protocol can be deployed in point-to-point arrangements, where edge devices
+transmit directly to one or more gateways or in a mesh arrangement, where
+intermediate relays automatically and periodically (re)configure to determine
+primary and backup paths to gateways. Edge devices need no awareness of the mesh
+protocol and can operate identically with or without it.
 
 ## 2. Conventions and Terminology
 
@@ -159,8 +170,8 @@ bits if the total bit count is not a multiple of 8.
 
 **Quantisation:** The process of mapping a continuous or large-range value to a
 reduced set of discrete steps that fit in fewer bits. All quantisation in this
-protocol uses `round()` (round half away from zero) and can be carried out as
-floating-point or integer-only.
+protocol uses `round()` (round half away from zero), unless otherwise specified,
+and can be carried out as floating-point or integer-only.
 
 ## 3. Design Principles
 
@@ -192,7 +203,7 @@ The following principles guided the protocol design:
 6. **Encode-only on the sensor.** The encoder is small enough for
    resource-constrained MCUs. JSON serialisation and other server-side features
    are optional and can be excluded from embedded builds. The reference
-   implementation can build to 1 KB and non-refernece implementations to less
+   implementation can build to 1 KB and non-reference implementations to less
    than 512 bytes.
 
 7. **Transport-delegated integrity.** The protocol carries no checksum, CRC,
@@ -204,9 +215,9 @@ The following principles guided the protocol design:
 
 8. **No global interoperability.** It is expressly not a goal to support
    interoperability between implementations, e.g. between vendors. Rather, the
-   design intends to provide an optimal framework and reference for a specific
-   vendor across a suite of devices. Interoperability may be a goal for future
-   versions.
+   design intends to provide an optimal framework and reference for a given
+   deployment across a suite of devices. Interoperability may be a goal for
+   future versions.
 
 ## 4. Packet Structure Overview
 
@@ -253,9 +264,9 @@ The header is always the first 32 bits of a packet.
 ```
 
 **Variant** (4 bits, offset 0): Index into the variant field table (Section 7).
-Values 0-14 are usable. Value 15 is RESERVED for a future extended header format
-and MUST NOT be used. An encoder MUST reject variant 15. A decoder encountering
-variant 15 SHOULD reject the packet.
+Values 0-14 are usable for sensor oriented data; value 15 is RESERVED for the
+mesh protocol control messages. A non mesh capable device encountering variant
+15 SHOULD reject the packet.
 
 **Station ID** (12 bits, offset 4): Identifies the transmitting station. Range
 0-4095. Station IDs are assigned by the deployment operator; this protocol does
@@ -409,7 +420,7 @@ standardised variants, as global interoperability is not a goal.
 | 0         | S5    | SOLAR             | solar       | 14   |
 | 1         | S6    | CLOUDS            | clouds      | 4    |
 | 1         | S7    | AIR_QUALITY_INDEX | air_quality | 9    |
-| 1         | S8    | RADIATION         | radiation   | 30   |
+| 1         | S8    | RADIATION         | radiation   | 28   |
 | 1         | S9    | POSITION          | position    | 48   |
 | 1         | S10   | DATETIME          | datetime    | 24   |
 | 1         | S11   | FLAGS             | flags       | 8    |
@@ -465,10 +476,10 @@ IDs 0-14; with variant 15 reserved for the mesh protocol (see Appendix G).
 | ------- | --------------- | ---------- | ------ | ---------------------------- |
 | 0       | weather_station | 2          | 12     | Default (built-in)           |
 | 1-14    | (application)   | —          | —      | User-defined via custom maps |
-| 15      | RESERVED        | —          | —      | Mesh protocol (Appendix G)   |
+| 15      | MESH PROTOCOL   | —          | —      | Mesh protocol (Appendix G)   |
 
-A receiver encountering an unknown variant SHOULD fall back to variant 0's field
-mapping and flag the packet as using an unknown variant (see Section 11.4).
+A receiver encountering an unknown variant SHOULD not process the packet and
+flag it as using an unknown variant (see Section 11.4).
 
 ## 8. Field Encodings
 
@@ -493,7 +504,7 @@ transmitted.
 
 - **Rain** (Section 8.16) is a convenience bundle that packs rain rate, and rain
   size into a single 12-bit field. The same two measurements are also available
-  as individual field types: Rate Rate (8.16), and Rain Size (8.17). The
+  as individual field types: Rate Rate (8.17), and Rain Size (8.18). The
   encodings and quantisation are identical.
 
 - **Air Quality** (Section 8.19) is a convenience bundle that packs air quality
@@ -503,7 +514,7 @@ transmitted.
   encodings and quantisation are identical.
 
 - **Radiation** (Section 8.23) is a convenience bundle that packs radiation cpm,
-  and radiation dose into a single 30-bit field. The same two measurements are
+  and radiation dose into a single 28-bit field. The same two measurements are
   also available as individual field types: Radiation CPM (8.24), and Radiation
   Dose (8.25). The encodings and quantisation are identical.
 
@@ -722,7 +733,7 @@ Encode: `q = round((temp_c - (-40.0)) / 0.25)`
 Decode: `temp_c = -40.0 + q * 0.25`
 
 This is the same encoding as the temperature component of the Environment bundle
-(Section 8.2). Use this standalone type in variants that need temperature
+(Section 8.3). Use this standalone type in variants that need temperature
 without pressure and humidity.
 
 ### 8.10. Pressure (standalone)
@@ -736,7 +747,7 @@ Encode: `q = pressure_hpa - 850`
 Decode: `pressure_hpa = q + 850`
 
 This is the same encoding as the pressure component of the Environment bundle
-(Section 8.2).
+(Section 8.3).
 
 ### 8.11. Humidity (standalone)
 
@@ -747,7 +758,7 @@ Range: 0 to 100%. Resolution: 1% (7 bits = 128 values, 0-100 used).
 Encode/Decode: direct (no quantisation needed).
 
 This is the same encoding as the humidity component of the Environment bundle
-(Section 8.2).
+(Section 8.3).
 
 ### 8.12. Wind (bundle)
 
@@ -832,7 +843,7 @@ Same encoding as the gust component of the Wind bundle (8.12).
 +-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-This is a convenience bundle that packs rain rate, and size into a single field.
+This is a convenience bundle that packs rain rate and size into a single field.
 The component encodings are identical to the standalone Rain Rate (8.17), and
 Rain Size (8.18) types.
 
@@ -880,7 +891,7 @@ Gas (8.21) types.
 +-----------+-----------+-----------+
 ```
 
-The three sub-fields are packed in order: index, PM, gas. Each sub-field
+The three sub-fields are packed in order: index, PM, and gas. Each sub-field
 includes its own presence mask, so absent PM channels and gas slots consume no
 bits beyond the mask itself.
 
@@ -1003,9 +1014,9 @@ station (VOC + NOx + CO₂) sends 8 + 8 + 8 + 10 = 34 bits.
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
-This is a convenience bundle that packs radiation CPM, and dose into a single
+This is a convenience bundle that packs radiation CPM and dose into a single
 field. The component encodings are identical to the standalone Radiation CPM
-(8.21), and Radiation Dose (8.22) types.
+(8.24) and Radiation Dose (8.25) types.
 
 **CPM** (14 bits):
 
@@ -1397,7 +1408,7 @@ strategy varies by type:
 
 - **VERSION**: Once at boot (first packet after restart).
 - **STATUS**: Every Nth packet (e.g. every 10th), or periodically.
-- **HEALTH**: Less frequently (e.g. every 50th), or when signficantly changed.
+- **HEALTH**: Less frequently (e.g. every 50th), or when significantly changed.
 - **CONFIG**: Once at boot, or after configuration changes.
 - **DIAGNOSTIC**: When a notable condition occurs.
 - **USERDATA**: When a user interaction event occurs.
@@ -1851,7 +1862,7 @@ label depending on the variant definition.
   "rain": {
     "rate": 3,
     "size": 2.5,
-  },,
+  },
   "solar": {
     "irradiance": 850,
     "ultraviolet": 7
@@ -2135,6 +2146,127 @@ These quantisation errors are generally smaller than the measurement uncertainty
 of the sensors themselves. For example, a typical BME280 temperature sensor has
 ±1°C accuracy, well above the 0.125°C quantisation error.
 
+#### Boundary Conditions
+
+The encode formulae in Section 8 define behaviour for values within the stated
+range of each field. The protocol does not mandate a specific behaviour for
+out-of-range inputs (e.g. a temperature of -45°C when the defined range is -40°C
+to +80°C, or a wind speed of 70 m/s when the maximum is 63.5 m/s).
+
+Implementations SHOULD adopt one of the following strategies, applied
+consistently across all field types:
+
+1. **Clamp to range.** Values below the minimum are encoded as the minimum;
+   values above the maximum are encoded as the maximum. This preserves the
+   invariant that every input produces a valid encoded value. Clamped values are
+   silently distorted — the receiver cannot distinguish a clamped reading from a
+   genuine reading at the boundary.
+
+2. **Reject and omit.** The encoder refuses to encode the field and clears its
+   presence bit. The receiver sees the field as absent rather than as a
+   potentially misleading value. This is appropriate for safety-critical
+   deployments where an out-of-range reading may indicate a sensor fault.
+
+3. **Clamp and flag.** As (1), but the encoder also sets a deployment-specific
+   flag bit (Section 8.6) or emits a DIAGNOSTIC TLV indicating the condition.
+
+The reference implementation uses strategy (1): all values are clamped to the
+representable range with no indication to the receiver. Deployments that require
+out-of-range detection SHOULD use the Flags field or a DIAGNOSTIC TLV to
+communicate the condition.
+
+For fields with a defined "not available" sentinel (e.g. CPU Temperature = 0x7F
+in the Health TLV), the sentinel MUST NOT be produced by clamping. If the
+clamped value would collide with the sentinel, the encoder MUST use strategy (2)
+instead.
+
+## 11.6. Error Handling and Malformed Packets
+
+The protocol is designed for environments where packet corruption is handled at
+the link layer (LoRa CRC, LoRaWAN MIC, cellular integrity checks). However,
+decoders may encounter malformed packets due to firmware bugs, version
+mismatches, partial reception on links without CRC, or deliberate fuzzing. This
+section defines the expected decoder behaviour.
+
+### General Principle
+
+A decoder that encounters any condition it cannot resolve MUST discard the
+entire packet. Partial decoding — where some fields are extracted and others are
+silently skipped or defaulted — is NOT RECOMMENDED, as it can produce internally
+inconsistent records (e.g. a wind direction without a wind speed, or a position
+from a different transmission cycle than the temperature).
+
+A decoder MAY log or count discarded packets for diagnostic purposes. The
+discard reason SHOULD be made available to the operator.
+
+### Specific Conditions
+
+The following conditions MUST result in packet discard:
+
+1. **Packet too short.** A packet shorter than 5 bytes (32-bit header + 1
+   presence byte) is not a valid iotdata packet.
+
+2. **Unknown variant.** A variant ID that does not appear in the decoder's
+   variant table. See also Section 11.4. The decoder cannot determine field
+   widths or ordering without a variant definition, so no fields can be
+   extracted.
+
+3. **Truncated fields.** The presence bits indicate a field is present, but the
+   remaining packet data is insufficient to contain it. This typically indicates
+   corruption or a version mismatch where the receiver's field table does not
+   match the transmitter's.
+
+4. **Truncated TLV.** The TLV bit (bit 6 of Presence Byte 0) is set, but the
+   remaining data after the last data field is insufficient to contain a valid
+   TLV header (16 bits), or a TLV entry's length field extends past the end of
+   the packet.
+
+5. **Extension byte overflow.** A presence byte chain exceeds the decoder's
+   maximum supported depth (4 bytes in the reference implementation). A decoder
+   SHOULD discard rather than attempt to process an unexpectedly deep presence
+   chain, as it may indicate corruption of the extension bits.
+
+### Conditions That SHOULD NOT Cause Discard
+
+The following conditions are anomalous but not fatal. A decoder SHOULD process
+the packet and MAY flag the anomaly:
+
+1. **Quantised value at range boundary.** A decoded value at exactly the minimum
+   or maximum of its defined range is valid. It may represent a clamped
+   out-of-range input (see Section 11.5), but the decoder cannot distinguish
+   this from a genuine boundary reading.
+
+2. **Out-of-range quantised value.** A raw quantised value that exceeds the
+   number of defined steps (e.g. humidity = 120 in a 7-bit field with range
+   0–100) indicates corruption or a version mismatch. The decoder SHOULD clamp
+   the value to the defined range and MAY flag the anomaly. Discarding is also
+   acceptable.
+
+3. **Sequence number discontinuity.** A gap in the sequence number indicates
+   lost packets, not a malformed packet. The receiver SHOULD track and report
+   gaps but MUST NOT discard the current packet.
+
+4. **Unknown TLV type.** A TLV entry with an unrecognised type code is not an
+   error. The decoder MUST skip the entry using its length field and continue
+   processing subsequent TLV entries and SHOULD preserve the entry in its
+   generic form (Section 10) for downstream consumers.
+
+5. **Trailing bytes.** If all presence-indicated fields and TLV entries have
+   been decoded and bytes remain in the packet, the decoder SHOULD ignore the
+   trailing data. This allows future protocol extensions to append data without
+   breaking existing decoders.
+
+### Implementation Guidance
+
+Decoders MUST validate buffer bounds before every field read. The bit-packing
+functions in the reference implementation accept a `max_bits` parameter and
+return an error if a read would exceed it. Implementations that omit bounds
+checking risk buffer overflows from crafted or corrupted packets.
+
+A decoder operating on untrusted input (e.g. a gateway receiving packets from
+unknown stations) SHOULD treat all packets as potentially malformed and MUST NOT
+assume that a valid header implies a valid payload.
+
 ## 12. Packet Size Reference
 
 The following table shows exact bit and byte counts for common packet
@@ -2162,17 +2294,18 @@ gateways/servers. It consists of:
 
 - `iotdata.h` — Public API, constants, and type definitions.
 - `iotdata.c` — Encoder, decoder, JSON, print, and dump.
-- `test_default.c` — Test suite for the default variant (31 tests).
-- `test_custom.c` — Test suite for custom variant maps (14 tests).
-- `test_version.c` — Test smoke evaluation for build versions.
-- `test_example.c` — Test example for a periodic weather station.
+- `tests/test_default.c` — Test suite for the default variant.
+- `tests/test_custom.c` — Test suite for custom variant maps.
+- `tests/test_failures.c` — Test suite for failure modes.
+- `tests/test_version.c` — Test smoke evaluation for build versions.
+- `tests/test_example.c` — Test example for a periodic weather station.
 - `Makefile` — Builds `libiotdata.a` static library and tests.
 
 Build:
 
 ```bash
 make                # Build library and both test suites
-make test           # Build and run default and custom tests
+make tests          # Build and run default and custom tests
 make test-example   # Build and run example test
 make test-versions  # Build and run versions tests
 make lib            # Build static library only
@@ -2331,7 +2464,7 @@ multiple-of-ten approach.
 The `test-versions` target will build each of versions across the Functional
 subsetting and Floating-point control, including a combined `NO_JSON` and
 `NO_FLOATING` version. This is intended as a build smoke test to verify
-compilation control paths. Note that the combined version, will on x86
+compilation control paths. Note that the combined version will, on x86
 platforms, force the compiler to reject floating-point operations, so as to
 ensure they are not latent in the implementation.
 
@@ -2520,6 +2653,112 @@ The following items are identified for future revisions:
    instance. A future implementation could decouple field type from field
    storage, allowing the variant map to bind each slot to an independent storage
    location.
+
+## 16. Versioning and Forward Compatibility
+
+### 16.1. Protocol Version
+
+This document defines version 1 of the IoT Sensor Telemetry Protocol. The
+protocol does not carry an explicit version field in the packet header. Version
+identification relies on the combination of variant ID and the field table known
+to the receiver.
+
+This is a deliberate design choice. A version field would cost 2–4 bits in every
+packet — significant when the minimum useful packet is 46 bits. The trade-off is
+that version negotiation and graceful version coexistence are not supported at
+the wire level.
+
+### 16.2. Compatibility Model
+
+The protocol's compatibility properties differ by component:
+
+**Within a variant definition (fully compatible).** Adding or removing optional
+fields within an existing variant does not break compatibility. A transmitter
+that begins including a new field (e.g. adding air quality to a weather station
+that previously omitted it) is handled transparently by the presence bit
+mechanism. Receivers that understand the variant's field table will decode the
+new field; the packet is self-describing within the scope of the variant.
+
+**New variant definitions (forward compatible).** A transmitter using a new
+variant ID (e.g. variant 3 for a soil sensor) produces packets that existing
+receivers cannot decode, because the receiver does not have the field table for
+variant 3. The receiver MUST discard such packets (Section 11.4, Section 11.6).
+This is the intended behaviour — variants are deployment-specific, and receivers
+are expected to be configured with the variant tables relevant to their
+deployment.
+
+**Field encoding changes (incompatible).** Any change to a field type's bit
+width, quantisation formula, or semantic meaning is a breaking change. A
+receiver using the old encoding will silently produce incorrect values. There is
+no mechanism to detect this at the wire level. Such changes MUST be accompanied
+by a new variant ID, ensuring that old receivers discard the packet rather than
+misinterpret it.
+
+**Header changes (incompatible).** Any change to the header layout (variant
+field width, station ID width, sequence width, or total header length) breaks
+all existing encoders and decoders. Such changes are not contemplated for
+version 1 and would constitute a new protocol version, distinguishable only by
+out-of-band means (e.g. separate radio channel, different LoRaWAN port, or
+application-layer framing).
+
+### 16.3. Receiver Requirements
+
+A receiver MUST be configured — at compile time or runtime — with the set of
+variant definitions it is expected to decode. A receiver MUST reject packets
+with variant IDs not in its configured set (Section 11.4).
+
+A receiver SHOULD NOT attempt heuristic detection of unknown field layouts.
+Because fields are bit-packed with no delimiters or self-describing type tags,
+misalignment by even one bit corrupts all subsequent fields in the packet.
+
+### 16.4. Upgrading Deployments
+
+When a deployment upgrades field definitions or introduces new variants, the
+following procedure is RECOMMENDED:
+
+1. **Update receivers first.** Gateways and servers are updated with the new
+   variant tables before any transmitter firmware is changed. This ensures that
+   new-format packets are understood upon arrival.
+
+2. **Update transmitters.** Sensors are updated via OTA or physical access. The
+   transition period — where some sensors use the old variant and others use the
+   new — is handled naturally, since each packet carries its variant ID and
+   receivers can decode both.
+
+3. **Retire old variants.** Once all transmitters have been updated, old variant
+   definitions may be removed from receiver configurations. This is optional;
+   retaining them costs only the memory for the field table.
+
+For breaking changes (field encoding modifications), the old and new encodings
+MUST use different variant IDs. This allows both to coexist during the
+transition.
+
+### 16.5. Mesh Protocol Versioning
+
+The mesh protocol (Appendix G) uses a separate versioning strategy. Mesh control
+packets are identified by variant ID 15 and dispatched by the ctrl_type field.
+Reserved ctrl_type values (0x7–0xF) MUST be silently discarded by nodes that do
+not recognise them, allowing incremental deployment of new mesh packet types.
+See Appendix G, Section J.7 for details.
+
+### 16.6. Future Version Considerations
+
+If a future protocol revision requires an explicit version field, the following
+mechanisms are available without breaking the v1 header layout:
+
+- **Variant-based versioning.** Reserve one or more variant IDs (e.g. 14) for
+  "versioned payload" packets where the first N bits after the presence bytes
+  carry a version identifier. Existing v1 receivers discard variant 14 packets
+  as unknown.
+
+- **TLV-based version advertisement.** A VERSION TLV (type 0x01) already exists
+  for firmware identification. A similar mechanism could carry a protocol
+  version, though this is available only to receivers that successfully decode
+  the packet — a circular dependency for breaking changes.
+
+- **Out-of-band signalling.** LoRaWAN FPort, MQTT topic, HTTP header, or other
+  transport-layer metadata can indicate the protocol version without consuming
+  payload bits.
 
 ---
 
@@ -3064,7 +3303,7 @@ stored elsewhere or re-read from hardware.
 The reference implementation uses store-then-pack because it is the most
 developer-friendly and the target devices (ESP32-C3, Class 3) have ample RAM.
 Implementers targeting Class 1 devices SHOULD consider pack-as-you-go with
-backfill. Approach A maybe provided in a future version of the reference
+backfill. Approach A maybe be provided in a future version of the reference
 implementation.
 
 ### E.5. Compile-Time Field Stripping (#ifdef)
@@ -3510,11 +3749,11 @@ Station 42 seq=2 var=0 (weather_station) [124 bits, 16 bytes]
 {"variant":0,"station":42,"sequence":2,"packed_bits":124,"packed_bytes":16,"battery":{"level":84,"charging":false},"link":{"rssi":-88,"snr":10},"environment":{"temperature":14.5,"pressure":1013,"humidity":55},"wind":{"speed":3.5,"direction":172,"gust":7},"rain":{"rate":5,"size":0},"solar":{"irradiance":390,"ultraviolet":3}}
 ```
 
-## Appendix G. Mesh Relay Protocol
+## Appendix G. Mesh Protocol
 
 ### Overview
 
-The iotdata mesh relay protocol extends the reach of sensor networks by allowing
+The iotdata mesh protocol extends the reach of sensor networks by allowing
 dedicated relays to forward sensor data across multiple relays toward one or
 more gateways. The protocol is designed to be **seamless** — existing sensors
 require no firmware changes, the system works without mesh infrastructure, and
@@ -3527,9 +3766,9 @@ channel, and are handled by the same receive path up to the point of variant
 dispatch. Relay nodes have a dedicated station ID and can also convey sensor
 data under that ID.
 
-### A. Use Cases and System Roles
+### G.1. Use Cases and System Roles
 
-#### A.1 The Problem
+#### G.1.1. The Problem
 
 LoRa radio links between sensors and gateways are subject to terrain,
 vegetation, buildings, and seasonal variation. A sensor that works reliably in
@@ -3538,7 +3777,7 @@ in a valley or behind a structure may never reach the gateway directly.
 Increasing transmit power or antenna height is not always practical or
 permitted.
 
-#### A.2 The Solution
+#### G.1.2. The Solution
 
 Rather than requiring all sensors to participate in a mesh network (which adds
 complexity, power consumption, and firmware requirements), the protocol
@@ -3546,7 +3785,7 @@ introduces a separate class of mesh-aware relays that transparently extend
 range. Sensors remain simple transmit-only devices. The mesh is an overlay
 infrastructure.
 
-#### A.3 System Roles
+#### G.1.3. System Roles
 
 The protocol defines three roles. A single physical device may implement one or
 two of these roles simultaneously.
@@ -3567,7 +3806,7 @@ never inspects or interprets measurement fields. A relay may optionally also
 function as a sensor (dual-role), transmitting its own measurement data (e.g.
 position, battery level, environment) using a standard iotdata variant alongside
 its mesh traffic on variant 15. Relays have higher power demand than sensors,
-but are more than likely not to be mains powered.
+but are still unlikely to be mains powered.
 
 **Gateway** — A mesh-aware device that receives sensor data (directly or via
 relays) and delivers it to upstream systems for processing, storage, and
@@ -3578,7 +3817,7 @@ suppression — if the same sensor packet arrives both directly and via a relay,
 only the first arrival is processed. Gateways are typically mains powered and
 likely to be connected to network and internet infrastructure.
 
-#### A.4 Role Capabilities
+#### G.1.4. Role Capabilities
 
 | Capability                       | Sensor            | Relay                | Gateway            |
 | -------------------------------- | ----------------- | -------------------- | ------------------ |
@@ -3591,9 +3830,9 @@ likely to be connected to network and internet infrastructure.
 | Requires iotdata field knowledge | yes (own variant) | no (opaque relay)    | yes (all variants) |
 | Firmware changes for mesh        | none              | mesh-specific        | mesh additions     |
 
-### B. Design Principles
+### G.2. Design Principles
 
-#### B.1 Seamless Operation
+#### G.2.1. Seamless Operation
 
 The mesh layer is an optional enhancement, not a prerequisite. A deployment
 consisting only of sensors and gateways works exactly as it does today. Mesh
@@ -3601,7 +3840,7 @@ infrastructure can be added incrementally — deploying a relay between a
 struggling sensor and the gateway immediately improves reliability without
 touching the sensor.
 
-#### B.2 Protocol Integration
+#### G.2.2. Protocol Integration
 
 Mesh control packets use iotdata variant ID 15 (0x0F). This reserves the final
 variant slot for mesh traffic while leaving variants 0–14 available for sensor
@@ -3615,7 +3854,7 @@ packet type (4 bits, supporting up to 16 types). This allows the receive path to
 branch on variant ID alone: variants 0–14 route to the sensor data decoder,
 variant 15 routes to the mesh handler.
 
-#### B.3 Opaque Forwarding
+#### G.2.3. Opaque Forwarding
 
 Relays never inspect the contents of sensor packets beyond the 4-byte iotdata
 header. The header is read only to extract the originating sensor's station_id
@@ -3628,7 +3867,7 @@ The sole structural dependency is the position and size of station_id (12 bits
 at bytes 0–1) and sequence (16 bits at bytes 2–3) in the iotdata header. This is
 the most stable contract in the protocol and is not expected to change.
 
-#### B.4 Multiple Gateway Support
+#### G.2.4. Multiple Gateway Support
 
 Each gateway originates its own beacon stream identified by its station_id
 (carried as `gateway_id` in the beacon). Relays independently track which
@@ -3637,7 +3876,7 @@ breaking ties by received signal strength. If a gateway fails, its beacons
 cease, and so relays in its tree will time out after a configurable number of
 missed beacon rounds, and automatically adopt an alternative gateway's tree.
 
-#### B.5 Gradient-Based Routing
+#### G.2.5. Gradient-Based Routing
 
 The mesh uses a simplified distance-vector approach where each relay knows its
 cost (number of relays to reach the gateway) and forwards data toward lower-cost
@@ -3646,9 +3885,9 @@ Low-Power and Lossy Networks) but dramatically simplified — no full topology
 state, no Directed Acyclic Graph computation, no IPv6 dependency. Each node
 stores only its parent, a backup parent, and a small neighbour table.
 
-### C. Protocol Flows
+### G.3. Protocol Flows
 
-#### C.1 Topology Discovery
+#### G.3.1. Topology Discovery
 
 Topology is built through periodic beacon propagation from gateways outward.
 
@@ -3686,7 +3925,7 @@ The random rebroadcast jitter (1–5 seconds) prevents synchronised retransmissi
 from nodes that hear the same beacon simultaneously, reducing collisions in
 dense areas.
 
-#### C.2 Sensor Data Forwarding
+#### G.3.2. Sensor Data Forwarding
 
 Sensor data flows inward from sensors toward gateways, relayed transparently by
 relays.
@@ -3724,7 +3963,7 @@ transmits. The parent, if another relay, repeats the process — unwrap, dedup,
 re-wrap with its own header, forward to its parent — until the packet reaches a
 gateway.
 
-#### C.3 Relay-by-Relay Acknowledgement
+#### G.3.3. Relay-by-Relay Acknowledgement
 
 Each FORWARD is acknowledged by the receiving parent to confirm delivery.
 
@@ -3747,7 +3986,7 @@ backup parent (if available), and retransmits the FORWARD to the new parent. If
 no backup parent is available, the node broadcasts a ROUTE_ERROR and enters an
 orphaned state, listening for beacons to reattach to the tree.
 
-#### C.4 Fast Failover
+#### G.3.4. Fast Failover
 
 When a relay loses all upstream paths, it broadcasts a ROUTE_ERROR so downstream
 nodes can immediately reroute rather than waiting for beacon timeout.
@@ -3766,7 +4005,7 @@ Relay B (was Relay C's parent)    Relay C (child of B)
 This converts a multi-minute outage (waiting for 3 missed beacon rounds × 60s =
 180s) into sub-second failover in the best case.
 
-#### C.5 Network Monitoring
+#### G.3.5. Network Monitoring
 
 Relays periodically send NEIGHBOUR_REPORT messages upstream to the gateway,
 providing a snapshot of their local topology view. These reports are forwarded
@@ -3775,7 +4014,7 @@ aggregates reports from all relays to build a complete network topology graph,
 enabling operators to visualise the mesh, identify weak links, and plan node
 placement.
 
-#### C.6 Reachability Testing (v2)
+#### G.3.6. Reachability Testing (v2)
 
 In a future protocol revision, the gateway may send PING messages routed
 downstream toward a specific target node. The target responds with a PONG that
@@ -3783,9 +4022,9 @@ routes back upstream. This provides on-demand reachability confirmation and
 round-trip-time measurement without waiting for the target's next scheduled data
 or neighbour report transmission.
 
-### D. Packet Structures
+### G.4. Packet Structures
 
-#### D.1 Standard iotdata Header (all packets, all variants)
+#### G.4.1. Standard iotdata Header (all packets, all variants)
 
 | Byte | Bits        | Field                                                               |
 | ---- | ----------- | ------------------------------------------------------------------- |
@@ -3804,7 +4043,7 @@ byte[1] = station_id & 0xFF
 This packing primitive recurs throughout the mesh protocol wherever a 4-bit
 field is paired with a 12-bit station_id or generation counter.
 
-#### D.2 Variant 15 Common Header
+#### G.4.2. Variant 15 Common Header
 
 All mesh control packets share this structure:
 
@@ -3819,7 +4058,7 @@ The remaining 4 bits of Byte 4 and the whole bytes of Byte 5 onward are
 control-type-specific. Fields pack as a bitstream from byte 4, MSB-first, with
 no padding except where explicitly noted.
 
-#### D.3 BEACON (ctrl_type 0x0)
+#### G.4.3. BEACON (ctrl_type 0x0)
 
 Originated by gateways, rebroadcast by relays. Flows outward from gateway.
 
@@ -3848,7 +4087,7 @@ Generation uses wraparound comparison: beacon A is newer than B if
 `(A - B) mod 4096` is in the range 1–2047. At a 60-second beacon interval,
 generation wraps every ~68 hours.
 
-#### D.4 FORWARD (ctrl_type 0x1)
+#### G.4.4. FORWARD (ctrl_type 0x1)
 
 Wraps a raw sensor packet for relay toward the gateway.
 
@@ -3893,7 +4132,7 @@ No FORWARD nesting occurs. Each relay creates a fresh FORWARD with its own
 sender_station and sender_seq. The inner_packet bytes are always the original
 sensor transmission, regardless of how many relays have occurred.
 
-#### D.5 ACK (ctrl_type 0x2)
+#### G.4.5. ACK (ctrl_type 0x2)
 
 Relay-by-relay acknowledgement of a received FORWARD.
 
@@ -3906,7 +4145,7 @@ Relay-by-relay acknowledgement of a received FORWARD.
 
 **Total: 8 bytes.**
 
-#### D.6 ROUTE_ERROR (ctrl_type 0x3)
+#### G.4.6. ROUTE_ERROR (ctrl_type 0x3)
 
 Broadcast by a relay that has lost all upstream paths.
 
@@ -3928,7 +4167,7 @@ Reason codes:
 | 0x2     | shutdown — graceful node shutdown             |
 | 0x3–0xF | reserved                                      |
 
-#### D.7 NEIGHBOUR_REPORT (ctrl_type 0x4)
+#### G.4.7. NEIGHBOUR_REPORT (ctrl_type 0x4)
 
 Periodic topology snapshot sent upstream to the gateway.
 
@@ -3980,7 +4219,7 @@ Example sizes:
 All fit within standard LoRa maximum payload sizes (222 bytes at SF7/125kHz, up
 to 255 at lower spreading factors).
 
-#### D.8 PING (ctrl_type 0x5) — v2
+#### G.4.8. PING (ctrl_type 0x5) — v2
 
 Gateway-originated reachability test, routed downstream toward a target node.
 
@@ -3994,7 +4233,7 @@ Gateway-originated reachability test, routed downstream toward a target node.
 
 **Total: 8 bytes.**
 
-#### D.9 PONG (ctrl_type 0x6) — v2
+#### G.4.9. PONG (ctrl_type 0x6) — v2
 
 Response to PING, flows upstream toward the gateway.
 
@@ -4008,7 +4247,7 @@ Response to PING, flows upstream toward the gateway.
 
 **Total: 8 bytes.**
 
-#### D.10 Reserved (ctrl_type 0x7–0xF)
+#### G.4.10. Reserved (ctrl_type 0x7–0xF)
 
 Reserved for future use. Relays receiving an unrecognised ctrl_type should
 silently discard the packet.
@@ -4026,9 +4265,9 @@ silently discard the packet.
 | 0x6     | PONG             | inward (target → gateway)     | 8        | v2      |
 | 0x7–0xF | reserved         | —                             | —        | —       |
 
-### E. Node Operation and Requirements
+### G.5. Node Operation and Requirements
 
-#### E.1 Relay Node State
+#### G.5.1. Relay Node State
 
 A relay maintains the following state in RAM. Total memory footprint is under
 512 bytes for typical configurations.
@@ -4060,7 +4299,7 @@ A relay maintains the following state in RAM. Total memory footprint is under
   attempt, parent at time of send
 - Entries cleared on ACK receipt or after max retries
 
-#### E.2 Relay Node Main Loop
+#### G.5.2. Relay Node Main Loop
 
 ```text
 initialise:
@@ -4087,7 +4326,7 @@ periodic timers:
     own sensor readings  — if dual-role, encode and transmit own data
 ```
 
-#### E.3 Gateway Additions
+#### G.5.3. Gateway Additions
 
 An existing iotdata gateway requires three additions to support mesh:
 
@@ -4107,7 +4346,7 @@ first arrival.
 
 The existing iotdata decode path for variants 0–14 is completely untouched.
 
-#### E.4 Duplicate Suppression
+#### G.5.4. Duplicate Suppression
 
 Duplicate suppression is critical because the same sensor packet may arrive at a
 gateway via multiple paths: directly, via one relay, or via different relay
@@ -4127,7 +4366,7 @@ A ring buffer of 64 entries is sufficient for most deployments. With 16 sensors
 transmitting every 5–15 seconds, the ring covers approximately 5–20 minutes of
 history. The ring is FIFO — the oldest entry is evicted when the buffer is full.
 
-#### E.5 Parent Selection and Failover
+#### G.5.5. Parent Selection and Failover
 
 A relay selects its parent using the following priority:
 
@@ -4148,7 +4387,7 @@ parent's cost + 1), and continues forwarding. If no backup is available, the
 node broadcasts a ROUTE_ERROR with reason=parent_lost and enters orphaned state,
 listening for beacons from any tree.
 
-#### E.6 Beacon Rebroadcast Rules
+#### G.5.6. Beacon Rebroadcast Rules
 
 A relay rebroadcasts a received beacon only if:
 
@@ -4163,7 +4402,7 @@ beacon storms in dense deployments where many nodes hear the same beacon
 simultaneously. The random rebroadcast jitter (1–5 seconds) further reduces
 collision probability.
 
-#### E.7 Forward Suppression (Trickle)
+#### G.5.7. Forward Suppression (Trickle)
 
 When a relay hears a raw sensor packet that it intends to forward, it waits a
 random backoff period (200–1000ms) before transmitting the FORWARD. During this
@@ -4176,9 +4415,9 @@ redundant airtime in areas where multiple relay nodes have overlapping coverage.
 In the worst case (no other relay forwards), it adds 200–1000ms latency to the
 first relay. In dense areas, it eliminates duplicate transmissions entirely.
 
-### F. Deployment Considerations
+### G.6. Deployment Considerations
 
-#### F.1 Hardware
+#### G.6.1. Hardware
 
 The mesh protocol is designed for off-the-shelf LoRa modules (e.g. Semtech
 SX1262-based modules like Ebyte E22-900T22D) connected to ESP32-class
@@ -4196,7 +4435,7 @@ between transmissions, relays must listen continuously. Solar + battery is
 viable in most climates with an appropriately sized panel (5–10W) and battery
 (5–10Ah).
 
-#### F.2 Range and Relay Budgets
+#### G.6.2. Range and Relay Budgets
 
 Typical LoRa range per relay in different environments at commonly used settings
 (SF7–SF9, 125kHz bandwidth, 14–22 dBm transmit power):
@@ -4215,7 +4454,7 @@ useful depth to 5–10 relays in most deployments. Beyond 10 relays, per-packet
 latency (including backoff, transmission time, and ACK round-trips) accumulates
 significantly.
 
-#### F.3 Latency Budget
+#### G.6.3. Latency Budget
 
 Per-relay latency for a forwarded packet:
 
@@ -4241,7 +4480,7 @@ latencies are entirely acceptable. The data is not time-critical — a few secon
 of additional delay has no impact on the value of temperature, moisture, or
 depth readings.
 
-#### F.4 Airtime and Duty Cycle
+#### G.6.4. Airtime and Duty Cycle
 
 Every relay consumes airtime. A packet forwarded across 3 relays uses 3× the
 airtime of a direct transmission plus ACK overhead. In regions with regulatory
@@ -4265,7 +4504,7 @@ For deployments requiring higher throughput, use the 915MHz ISM band (Americas,
 Australia) which has more relaxed duty cycle requirements, or use LoRa spreading
 factor 7 (fastest airtime) with forward error correction.
 
-#### F.5 Recommended Maximum Configuration Per Deployment
+#### G.6.5. Recommended Maximum Configuration Per Deployment
 
 | Parameter                      | Recommended limit | Hard limit                                 |
 | ------------------------------ | ----------------- | ------------------------------------------ |
@@ -4277,9 +4516,9 @@ factor 7 (fastest airtime) with forward error correction.
 | Neighbour table size per relay | 8–16 typical      | 63 (protocol limit)                        |
 | Total nodes (sensors + relays) | 100–200           | 4095 (station_id space)                    |
 
-### G. Example Deployments
+### G.7. Example Deployments
 
-#### G.1 Moderate Farm (Mixed Arable and Livestock)
+#### G.7.1. Moderate Farm (Mixed Arable and Livestock)
 
 A 500-hectare farm with a central farmhouse, outlying barns, fields extending
 2–3 km in each direction, and a river valley at the property boundary.
@@ -4323,7 +4562,7 @@ provide a 2-relay path: WS-5 → Relay B → Relay A → Gateway. Relay B
 automatically integrates — it hears Relay A's rebroadcast beacon (cost=1), sets
 itself as cost=2, and begins forwarding.
 
-#### G.2 Forest Research Station
+#### G.7.2. Forest Research Station
 
 A 2000-hectare managed forest with environmental sensors distributed along
 trails and watercourses. Dense canopy limits per-relay range to 500m–1.5km. A
@@ -4370,7 +4609,7 @@ rounds, and adopts GW-2's tree via HOP-5 at cost=3. Sensors SM-1..4 and WL-1
 continue to operate without interruption — they are unaware of the topology
 change.
 
-#### G.3 Considerations for Moving Sensors
+#### G.7.3. Considerations for Moving Sensors
 
 If a sensor is mounted on a vehicle (e.g. a tractor, livestock tracker, or
 patrol vehicle) that moves between coverage areas, the protocol handles this
@@ -4398,14 +4637,14 @@ location in real time. The gateway sees the same station_id and sequence numbers
 regardless of which relay forwarded the data. Duplicate suppression handles
 cases where the sensor is within range of multiple relays simultaneously.
 
-### H. Protocol Version History
+### G.8. Protocol Version History
 
 | Version      | Description                                                                                                                                                         |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | v1           | Initial mesh protocol. BEACON, FORWARD, ACK, ROUTE_ERROR, NEIGHBOUR_REPORT. Gradient-based routing with single parent selection and relay-by-relay acknowledgement. |
 | v2 (planned) | Adds PING/PONG for gateway-initiated reachability testing. Requires downstream routing capability at relays.                                                        |
 
-### I. Reserved Identifiers
+### G.9. Reserved Identifiers
 
 | Identifier   | Value     | Meaning                           |
 | ------------ | --------- | --------------------------------- |
@@ -4416,9 +4655,9 @@ cases where the sensor is within range of multiple relays simultaneously.
 | station_id   | 0x000     | Reserved (do not assign to nodes) |
 | reason codes | 0x3–0xF   | Reserved for future use           |
 
-### J. Future Considerations
+### G.10. Future Considerations
 
-#### J.1 Cross-Gateway Duplicate Suppression
+#### G.10.1. Cross-Gateway Duplicate Suppression
 
 In multi-gateway deployments, a sensor positioned between two gateways (or a
 relay node with paths to both) may deliver the same packet to multiple gateways.
@@ -4476,7 +4715,7 @@ no changes to relays or sensors.
   reroutes to a different gateway may fall outside the assigned range. Not
   recommended for dynamic mesh deployments.
 
-#### J.2 Potential Additional Control Packet Types
+#### G.10.2. Potential Additional Control Packet Types
 
 The ctrl_type field has 10 unused values (0x7–0xF, plus 0x5–0x6 reserved for
 PING/PONG v2). Future protocol revisions may define additional packet types. The
@@ -4534,7 +4773,7 @@ single relay forwards for many sensors. Trade-off: increases single-packet
 airtime and failure blast radius (losing one aggregated transmission loses
 multiple sensor readings).
 
-#### J.3 Extended Neighbour Metrics
+#### G.10.3. Extended Neighbour Metrics
 
 The current NEIGHBOUR_REPORT carries cost, RSSI, and station_id per neighbour.
 Future revisions may extend neighbour entries with additional quality metrics:
@@ -4556,7 +4795,7 @@ These extensions would increase neighbour entry size from 3 to 4 bytes. The
 num_neighbours field (6 bits, max 63) and LoRa payload limits (222 bytes at SF7)
 would support up to 53 extended entries — still more than sufficient.
 
-#### J.4 Security Considerations
+#### G.10.4. Security Considerations
 
 The v1 protocol includes no authentication or encryption. For agricultural and
 environmental monitoring deployments, the threat model is typically low — the
@@ -4589,7 +4828,7 @@ involvement. The sensor would encrypt before transmission, the gateway would
 decrypt after receipt, and relay nodes would forward the encrypted blob
 unchanged.
 
-#### J.5 Power Management for Relay Nodes
+#### G.10.5. Power Management for Relay Nodes
 
 Relays must listen continuously, which prevents the aggressive sleep modes used
 by transmit-only sensors. Typical listen-mode current for an SX1262 LoRa module
@@ -4616,7 +4855,7 @@ the relay to learn sensor transmission intervals through observation, which is
 feasible since sensors typically transmit at regular (if slightly randomised)
 intervals.
 
-#### J.6 Network Capacity Planning
+#### G.10.6. Network Capacity Planning
 
 The mesh protocol's capacity is fundamentally limited by shared airtime on the
 LoRa channel. All nodes — sensors, relays, and gateways — share a single
@@ -4657,7 +4896,7 @@ no more than 30–50 sensors per gateway, with no more than 20 forwarded through
 any single relay-1 relay. Scale beyond this by adding gateways, not by deepening
 the mesh.
 
-#### J.7 Interoperability and Versioning
+#### G.10.7. Interoperability and Versioning
 
 The protocol currently has no version negotiation mechanism. All mesh nodes are
 expected to run the same protocol version. For future-proofing:
@@ -4677,6 +4916,425 @@ If a formal version field becomes necessary, it could be encoded in the BEACON's
 reserved flag bits (e.g. flags bits 2–3 as a 2-bit protocol version, supporting
 4 versions). Alternatively, a VERSION_ANNOUNCE packet type could be defined
 using one of the reserved ctrl_type slots.
+
+## Appendix H. System Architecture Considerations
+
+This appendix discusses system-level concerns that fall outside the wire
+protocol but are essential for reliable deployment. The protocol defines how
+data is encoded and transmitted; this appendix addresses how the broader system
+around it should be designed and operated.
+
+### H.1. Transmission Scheduling
+
+The protocol does not define or constrain the sensor's transmission interval. In
+practice, the interval is a deployment parameter balancing data freshness
+against power consumption and airtime budget.
+
+#### Interval Selection
+
+Typical intervals for environmental monitoring range from 5 seconds (high-rate
+weather stations during storm events) to 3600 seconds (daily check-in for
+dormant sensors). The most common operational range is 30–300 seconds.
+
+The interval SHOULD be chosen with awareness of the regulatory duty cycle limit.
+At 1% duty cycle (EU 868MHz), a 30-byte packet at SF7 (~50ms airtime) can be
+transmitted every 5 seconds. At SF12 (~1.5s airtime), the minimum interval rises
+to 150 seconds. Implementations that transmit more frequently than their duty
+cycle permits risk regulatory non-compliance and may interfere with other users
+of the shared ISM band.
+
+#### Jitter
+
+Sensors that transmit at a fixed interval risk persistent collisions if multiple
+sensors are powered on simultaneously (e.g. after a site-wide power restoration
+or batch deployment). Two sensors with identical 60-second intervals that happen
+to align will collide on every transmission indefinitely.
+
+Sensors SHOULD add uniformly distributed random jitter to each transmission
+interval. A jitter of ±10% of the base interval is sufficient to decorrelate
+sensors within a few transmission cycles. For example, a 60-second base interval
+should use a random delay of 54–66 seconds per cycle.
+
+The jitter SHOULD be re-randomised for each transmission, not fixed at boot. A
+fixed offset (e.g. "this sensor always transmits at base + 3 seconds") reduces
+collision probability at boot but does not eliminate persistent collisions
+between sensors that happen to draw similar offsets.
+
+#### Adaptive Intervals
+
+Some deployments benefit from event-driven interval changes:
+
+- **Storm mode.** A weather station that detects rapidly changing pressure or
+  high wind speeds may temporarily reduce its interval (e.g. from 60s to 10s) to
+  capture the event at higher resolution.
+
+- **Low battery mode.** A sensor below a battery threshold may increase its
+  interval to extend operational life.
+
+- **Quiet mode.** A sensor that detects no change in its readings over several
+  cycles may increase its interval. The presence bit mechanism ensures that
+  unchanged fields can be omitted entirely, further reducing airtime.
+
+These behaviours are deployment-specific and are not standardised by this
+protocol. The CONFIG TLV (Section 9.5.4) can report the current interval to the
+gateway for fleet monitoring.
+
+### H.2. Gateway Architecture
+
+A gateway receives iotdata packets (directly or via mesh relays), decodes them,
+and delivers the data to upstream systems. The gateway is the protocol's
+termination point — upstream of the gateway, data is typically represented as
+JSON, stored in a time-series database, or forwarded via MQTT or HTTP.
+
+#### Receive Path
+
+The gateway's receive path should be structured as a pipeline:
+
+1. **Radio receive.** The LoRa (or other) radio delivers a raw byte buffer and
+   link metadata (RSSI, SNR, frequency, spreading factor).
+
+2. **Duplicate suppression.** Check {station_id, sequence} against a ring buffer
+   of recently processed packets. Discard duplicates. See Section E.4 of
+   Appendix G for implementation details; this mechanism applies equally to
+   non-mesh deployments where a sensor may be heard by multiple gateways.
+
+3. **Decode.** Decode the binary packet to the internal representation or
+   directly to JSON. Discard malformed packets per Section 11.6.
+
+4. **Enrich.** Attach gateway-side metadata: receive timestamp (from the
+   gateway's clock, independent of any datetime field in the packet), gateway
+   identity, link quality metrics, and any cached state for this station (last
+   known position, firmware version, etc.).
+
+5. **Deliver.** Forward the enriched record to upstream systems via MQTT, HTTP
+   POST, database insertion, or local storage.
+
+#### State Management
+
+A gateway SHOULD maintain per-station state for:
+
+- **Last sequence number.** For gap detection and duplicate suppression.
+
+- **Last known position.** Cached from the most recent packet containing a
+  position field. Associated with subsequent packets that omit position (see
+  Section 11.2).
+
+- **Last known datetime offset.** For stations that transmit datetime
+  infrequently, the gateway can estimate the sensor's clock drift by comparing
+  the sensor's datetime field against the gateway's receive timestamp.
+
+- **Firmware version and configuration.** Cached from VERSION and CONFIG TLV
+  entries. Used for fleet management and diagnostics.
+
+- **Cumulative statistics.** Packet count, gap count, average RSSI, last heard
+  timestamp. See Section H.3.
+
+This state may be held in memory (sufficient for small deployments), in a local
+key-value store (e.g. SQLite, Redis), or in the upstream database.
+
+### H.3. Operational Monitoring
+
+Operators SHOULD monitor the following metrics to maintain system health. These
+metrics are derived from the packet stream and gateway state, not from any
+specific protocol field.
+
+#### Per-Station Metrics
+
+| Metric                   | Derivation                                           | Alerts on                                                                  |
+| ------------------------ | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| Packets per interval     | Count packets per station per time window            | Station silent for >2× expected interval                                   |
+| Sequence gap rate        | Count gaps in sequence number per station            | Gap rate exceeding expected packet loss for the link                       |
+| RSSI trend               | Moving average of link RSSI per station              | Sustained decline indicating antenna, obstruction, or hardware degradation |
+| Battery trend            | Track battery level over time                        | Level below deployment-specific threshold; unexpected discharge rate       |
+| Decode error rate        | Count packets that fail decoding per station         | Non-zero rate from a previously healthy station                            |
+| TLV diagnostic frequency | Count DIAGNOSTIC TLV entries per station per window  | Sudden increase indicating sensor fault                                    |
+| Restart frequency        | Track restart count from STATUS TLV                  | Restarts with WATCHDOG or PANIC reason                                     |
+| Clock drift              | Compare sensor datetime against gateway receive time | Drift exceeding 30 seconds (may indicate RTC failure)                      |
+
+#### System-Wide Metrics
+
+| Metric              | Derivation                                               | Alerts on                                       |
+| ------------------- | -------------------------------------------------------- | ----------------------------------------------- |
+| Active stations     | Count stations heard within the last N intervals         | Station count drops below expected fleet size   |
+| Duplicate rate      | Count packets suppressed by dedup as a fraction of total | High rate may indicate unnecessary mesh overlap |
+| Gateway packet rate | Total packets processed per second across all stations   | Approaching processing or duty cycle capacity   |
+| Airtime utilisation | Sum of received packet airtimes per time window          | Approaching regulatory duty cycle limit         |
+| Decode failure rate | Aggregate decode errors across all stations              | Spike indicating firmware rollout issues        |
+
+These metrics can be derived from the gateway's receive path with minimal
+overhead. The enrichment step (Section H.2) is the natural point to update
+counters and evaluate alert conditions.
+
+#### Alerting
+
+Alerting thresholds are deployment-specific. A remote weather station in a
+mountain location with marginal link budget has different expectations than a
+soil sensor 50 metres from the gateway. Operators SHOULD configure per-station
+or per-station-class thresholds rather than global defaults.
+
+The most critical alert is **station silence** — a station that stops
+transmitting entirely. This may indicate hardware failure, power exhaustion,
+theft, or catastrophic link degradation. The alert threshold should be set to
+2–3× the expected transmission interval to avoid false positives from normal
+jitter and occasional packet loss.
+
+### H.4. Time Synchronisation
+
+The protocol's datetime field (Section 8.8) encodes time relative to the start
+of the year with no absolute time reference. The receiver resolves the year
+(Section 11.1). This design assumes that the receiver has an accurate clock.
+
+For gateways, this is typically satisfied by NTP synchronisation over an
+internet connection, or by a local GNSS receiver. Gateways that lack both SHOULD
+use the receive timestamp as the primary time reference and treat the sensor's
+datetime field as a secondary indicator, useful for detecting transmission
+delays or buffered transmissions but not as the authoritative timestamp.
+
+For sensors, the time source determines the accuracy of the datetime field:
+
+| Source             | Typical accuracy      | Drift                       |
+| ------------------ | --------------------- | --------------------------- |
+| GNSS (GPS/Galileo) | < 1 second            | None (re-acquired each fix) |
+| NTP (via WiFi)     | < 100 ms              | None (re-synchronised)      |
+| RTC (crystal)      | ±2 ppm (good crystal) | ~1 minute per year          |
+| RTC (internal RC)  | ±1-5% (uncalibrated)  | Minutes per day             |
+
+Sensors using a free-running RTC with no external synchronisation will
+accumulate drift. The 5-second resolution of the datetime field means that RTC
+drift below 5 seconds is invisible, but over days or weeks the drift becomes
+significant. The gateway can detect and report drift by comparing the sensor's
+datetime against its own receive timestamp (Section H.3).
+
+### H.5. Data Pipeline Considerations
+
+The gateway's output — typically JSON records — feeds into a data pipeline for
+storage, analysis, and visualisation. The following considerations apply to the
+pipeline design:
+
+**Idempotent ingestion.** The combination of {station_id, sequence} is unique
+per transmission. The ingestion layer SHOULD use this as a deduplication key,
+ensuring that duplicate deliveries (from multi-gateway deployments, message
+broker retries, or pipeline replays) do not create duplicate records.
+
+**Schema evolution.** When new field types or variants are introduced, the
+upstream schema must accommodate new JSON keys. A schema-on-read approach (e.g.
+storing the full JSON document in a document store or a JSONB column) is more
+resilient to evolution than a rigid relational schema with a column per field.
+
+**Backfill and reprocessing.** If the binary packets are stored alongside (or
+instead of) the decoded JSON, the pipeline can be reprocessed when decoder bugs
+are fixed or new field interpretations are added. Storing the raw hex alongside
+the decoded output is inexpensive (typically 16–32 bytes per record) and
+provides an authoritative source of truth.
+
+**Retention.** Environmental monitoring data is typically retained for years or
+decades. At one packet per minute per station, a 16-station deployment produces
+approximately 8.4 million records per year — modest by time-series database
+standards.
+
+### H.6. Multi-Gateway Deployments
+
+Deployments with multiple gateways provide redundancy and extended coverage but
+introduce coordination requirements.
+
+**Duplicate suppression.** A sensor within range of two gateways will be
+received by both. Each gateway independently decodes and delivers the data,
+producing duplicate records upstream. See Appendix G, Section J.1 for
+gateway-to-gateway dedup strategies. For non-mesh deployments, upstream dedup on
+{station_id, sequence} in the ingestion layer is the simplest and most robust
+approach.
+
+**Gateway identity.** Each gateway SHOULD tag its output with its own identity
+(station_id, hostname, or other identifier) so that the upstream system can
+distinguish which gateway received each packet. This is essential for link
+quality analysis — a packet received by gateway A at -90 dBm and gateway B at
+-110 dBm indicates the sensor is closer to A.
+
+**Failover.** If one gateway fails, sensors within range of both gateways
+continue to be received by the surviving gateway with no data loss. Sensors
+within range of only the failed gateway are lost until the gateway is restored
+or a mesh relay is deployed to bridge the gap.
+
+## Appendix I. Comparison with Alternative Encodings
+
+This appendix compares the iotdata wire format against commonly used
+serialisation approaches for the same sensor payload. The comparison uses the
+default weather station variant (variant 0) with a representative set of fields.
+
+### I.1. Test Payload
+
+The following sensor reading is used for all comparisons:
+
+| Field            | Value    |
+| ---------------- | -------- |
+| Battery level    | 84%      |
+| Battery charging | false    |
+| Link RSSI        | -96 dBm  |
+| Link SNR         | 10 dB    |
+| Temperature      | 21.5°C   |
+| Pressure         | 1013 hPa |
+| Humidity         | 45%      |
+| Wind speed       | 5.0 m/s  |
+| Wind direction   | 180°     |
+| Wind gust        | 8.5 m/s  |
+| Rain rate        | 3 mm/hr  |
+| Rain drop size   | 2.5 mm   |
+| Solar irradiance | 850 W/m² |
+| UV index         | 7        |
+
+This is a Presence Byte 0 only packet (no position, datetime, radiation, or TLV
+data). It represents the most common transmission for a weather station.
+
+### I.2. Encoding Comparison
+
+#### iotdata (this protocol)
+
+Header (32 bits) + Presence Byte 0 (8 bits) + Battery (6) + Link (6) +
+Environment (24) + Wind (22) + Rain (12) + Solar (14) = 124 bits = **16 bytes**
+(after zero-padding the final byte).
+
+```text
+Hex: 00 2A C3 50 FF D5 EB 95 BA 2F 52 8A 35 28 70 00
+     [header ] [p][bat+lnk+environment ][wind     ]...
+```
+
+#### JSON (compact, no whitespace)
+
+```json
+{
+  "battery": { "level": 84, "charging": false },
+  "link": { "rssi": -96, "snr": 10.0 },
+  "environment": { "temperature": 21.5, "pressure": 1013, "humidity": 45 },
+  "wind": { "speed": 5.0, "direction": 180, "gust": 8.5 },
+  "rain": { "rate": 3, "size": 2.5 },
+  "solar": { "irradiance": 850, "ultraviolet": 7 }
+}
+```
+
+**261 bytes.** With keys shortened to single characters: ~130 bytes. Even
+aggressively minified JSON is 8× larger than iotdata.
+
+#### CBOR (Concise Binary Object Representation, RFC 8949)
+
+CBOR encodes the same structure as a map of maps with integer keys. Using
+single-byte integer keys for all fields:
+
+- Map overhead: ~14 bytes (outer map + 6 inner maps)
+- Values: ~40 bytes (integers and floats in their minimal CBOR representation)
+- Keys: ~12 bytes (single-byte integer keys)
+
+**~66 bytes.** CBOR's self-describing nature adds per-field type tags and
+lengths. It is approximately 4× larger than iotdata for this payload.
+
+#### Protocol Buffers (Protobuf, varint encoding)
+
+A Protobuf message with field numbers and varint/fixed encoding:
+
+- Field tags: ~12 bytes (one per field, varint-encoded field number + wire type)
+- Values: ~30 bytes (varints for integers, fixed32 for floats)
+- No nested message overhead if flattened
+
+**~42 bytes** (flattened). With nested messages matching the JSON structure:
+**~52 bytes.** Protobuf is approximately 2.5–3× larger than iotdata. The
+overhead comes from per-field tags and byte-aligned varint encoding.
+
+#### MessagePack
+
+MessagePack with integer keys produces results comparable to CBOR:
+
+**~62 bytes.** Slightly smaller than CBOR due to more compact map headers.
+Approximately 4× larger than iotdata.
+
+#### Raw C struct (packed)
+
+```c
+struct __attribute__((packed)) weather_packet {
+    uint8_t  battery_level;     /* 1 byte (wastes 8 bits for a 0-100 value) */
+    uint8_t  battery_charging;  /* 1 byte (wastes 7 bits for a boolean)     */
+    int8_t   link_rssi;         /* 1 byte */
+    int8_t   link_snr;          /* 1 byte */
+    int16_t  temperature;       /* 2 bytes (×100 fixed point) */
+    uint16_t pressure;          /* 2 bytes */
+    uint8_t  humidity;          /* 1 byte */
+    uint16_t wind_speed;        /* 2 bytes (×100) */
+    uint16_t wind_direction;    /* 2 bytes */
+    uint16_t wind_gust;         /* 2 bytes (×100) */
+    uint8_t  rain_rate;         /* 1 byte */
+    uint8_t  rain_size;         /* 1 byte (×10) */
+    uint16_t solar_irradiance;  /* 2 bytes */
+    uint8_t  uv_index;          /* 1 byte */
+};
+```
+
+**20 bytes** (plus typically 4 bytes of header for station ID and sequence, = 24
+bytes total). The packed C struct is the closest competitor in size. However, it
+wastes bits on byte alignment (the boolean charging flag consumes 8 bits instead
+of 1, battery level uses 8 bits instead of 5, etc.) and has no presence flag
+mechanism — all fields are always transmitted regardless of whether they have
+changed or are relevant.
+
+### I.3. Summary
+
+| Encoding       | Bytes | Ratio vs iotdata | Presence flags | Self-describing | Byte-aligned |
+| -------------- | ----: | ---------------: | :------------: | :-------------: | :----------: |
+| **iotdata**    |    16 |             1.0× |       ✓        |        ✗        |      ✗       |
+| Raw C struct   |    24 |             1.5× |       ✗        |        ✗        |      ✓       |
+| Protobuf       |    42 |             2.6× |      ✓\*       |     Partial     |      ✓       |
+| MessagePack    |    62 |             3.9× |       ✗        |        ✓        |      ✓       |
+| CBOR           |    66 |             4.1× |       ✗        |        ✓        |      ✓       |
+| JSON (compact) |   261 |            16.3× |       ✗        |        ✓        |      ✓       |
+
+\*Protobuf omits default/zero values, which functions as implicit presence for
+non-zero fields.
+
+### I.4. Analysis
+
+The size advantage of iotdata comes from three sources:
+
+1. **Sub-byte field packing.** Fields are packed to the exact number of bits
+   required. A boolean is 1 bit, a battery level is 5 bits, a wind direction is
+   8 bits. No other format in this comparison operates below byte granularity.
+
+2. **No per-field metadata.** There are no field tags, type indicators, length
+   prefixes, or key strings. The field layout is determined entirely by the
+   variant table, which both sides know at compile time. This eliminates the
+   overhead that makes self-describing formats flexible but verbose.
+
+3. **Quantisation to operational resolution.** Temperature is quantised to
+   0.25°C steps, fitting in 9 bits. A Protobuf float or CBOR float uses 32 bits
+   for the same value. The quantisation is chosen to be within or below the
+   sensor's own measurement accuracy, so no operationally useful information is
+   lost.
+
+The trade-off is the loss of self-description. An iotdata packet cannot be
+decoded without prior knowledge of the variant table. For the target use case —
+closed deployments where the operator controls all devices — this is acceptable.
+For open or interoperable systems, a self-describing format like CBOR or
+Protobuf would be more appropriate, at the cost of 3–4× larger payloads.
+
+Alternatively, the specific variant table could be determined from the device's
+VERSION or CONFIG information, as transmitted at startup.
+
+### I.5. Impact on LoRa Airtime and Battery Life
+
+The size difference has direct operational consequences on LoRa:
+
+| Encoding | Bytes | Airtime (SF7/125kHz) | Airtime (SF10/125kHz) | Fits SF12? |
+| -------- | ----: | -------------------: | --------------------: | :--------: |
+| iotdata  |    16 |               ~36 ms |               ~247 ms |     ✓      |
+| C struct |    24 |               ~46 ms |               ~370 ms |     ✓      |
+| Protobuf |    42 |               ~72 ms |               ~617 ms |    ✓\*     |
+| CBOR     |    66 |              ~107 ms |               ~925 ms |     ✗      |
+| JSON     |   261 |              ~369 ms |                     ✗ |     ✗      |
+
+\*Protobuf at 42 bytes fits the SF12/125kHz maximum payload of 51 bytes, but
+with minimal room for header overhead.
+
+At SF10 with a 1% duty cycle, the minimum transmission interval for iotdata is
+25 seconds. For JSON, it is 93 seconds — nearly 4× longer between transmissions
+for the same regulatory budget. For battery-powered sensors where radio
+transmission dominates power consumption, this difference translates directly to
+battery life.
 
 ---
 
