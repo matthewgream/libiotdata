@@ -4,7 +4,7 @@
 
 ```text
     Title:     IoT Sensor Telemetry Protocol
-    Version:   1
+    Version:   0.90 (breakingly unstable, until 1.00)
     Status:    Running Code
     Created:   2026-02-07
     Authors:   Matthew Gream
@@ -99,6 +99,7 @@ project's GitHub repository.
 - [Appendix G. Mesh Protocol](#appendix-g-mesh-protocol)
 - [Appendix H. System Architecture Considerations](#appendix-h-system-architecture-considerations)
 - [Appendix I. Comparison with Alternative Encodings](#appendix-i-comparison-with-alternative-encodings)
+- [Appendix J. Known Limitations and Open Issues](#appendix-j-known-limitations-and-open-issues)
 
 ---
 
@@ -5335,6 +5336,438 @@ At SF10 with a 1% duty cycle, the minimum transmission interval for iotdata is
 for the same regulatory budget. For battery-powered sensors where radio
 transmission dominates power consumption, this difference translates directly to
 battery life.
+
+## Appendix J. Known Limitations and Open Issues
+
+This appendix documents known limitations, unresolved design questions, and
+areas where the current specification reflects engineering judgement rather than
+systematic analysis. These items are recorded to inform implementers of known
+risks and to scope the work required before the protocol advances beyond its
+current pre-release status.
+
+The protocol is currently at version 0.90 (alpha/beta). Breaking changes to
+field encodings, header layout, and quantisation parameters are expected before
+the protocol is finalised as version 1.0. Implementers SHOULD be aware that
+deploying the current specification may require firmware updates when these
+issues are resolved. The items in this appendix will be systematically addressed
+— resolved, accepted with justification, or deferred — before the protocol is
+submitted as an Internet-Draft.
+
+### J.1. Pressure Range
+
+**Issue:** The pressure field (Section 8.3, 8.10) encodes 850–1105 hPa in 8 bits
+at 1 hPa resolution. This range excludes altitudes above approximately 1,500
+metres, where standard atmospheric pressure falls below 850 hPa.
+
+**Impact:** Deployments at moderate altitude are affected. A weather station at
+1,600 metres (e.g. Davos, Switzerland, ~840 hPa) cannot encode its pressure
+readings. Mountain agriculture, ski resort monitoring, and high-altitude
+research stations — all plausible use cases for this protocol — are excluded by
+the current range.
+
+**Context:** The BME280 sensor, explicitly named in the specification, measures
+300–1100 hPa. The protocol's range covers only the upper third of the sensor's
+capability.
+
+**Options under consideration:**
+
+| Option            | Bits | Range        | Resolution | Notes                                                     |
+| ----------------- | ---- | ------------ | ---------- | --------------------------------------------------------- |
+| Current           | 8    | 850–1105 hPa | 1 hPa      | Excludes altitudes above ~1,500m                          |
+| Wider range       | 10   | 300–1100 hPa | ~0.8 hPa   | Covers full BME280 range; 2 extra bits                    |
+| Wider, coarser    | 8    | 300–1100 hPa | ~3.1 hPa   | Same bit width; resolution exceeds BME280 ±1 hPa accuracy |
+| Wider, compromise | 9    | 540–1066 hPa | 1 hPa      | Covers altitudes to ~5,000m; 1 extra bit                  |
+
+**Recommendation:** This is a likely breaking change before v1.0. The current
+range is too restrictive for the protocol's stated deployment scenarios.
+
+### J.2. Wind Speed Range and Resolution
+
+**Issue:** Wind speed (Section 8.12, 8.13) is encoded as 0–63.5 m/s in 7 bits at
+0.5 m/s resolution. The maximum corresponds to the onset of Beaufort 12
+(hurricane force). Actual hurricane and cyclone wind speeds reach 85+ m/s;
+tornado wind speeds exceed 100 m/s.
+
+**Impact:** Weather stations that survive extreme wind events will saturate the
+field. The encoder clamps to 63.5 m/s, and the receiver cannot distinguish "63.5
+m/s" from "90 m/s." For stations deployed specifically to monitor severe
+weather, this is a data loss.
+
+**Analysis needed:** Whether the 0.5 m/s resolution is operationally justified.
+Most consumer and semi-professional anemometers (Davis Vantage Pro2, Inspeed
+Vortex) have ±1 m/s accuracy or ±5% of reading. At 10 m/s, ±5% is ±0.5 m/s, so
+the 0.5 m/s resolution is at the sensor's accuracy limit. At 30 m/s, ±5% is ±1.5
+m/s, and the 0.5 m/s resolution is well below the noise floor.
+
+**Options under consideration:**
+
+| Option            | Bits | Range       | Resolution | Notes                                      |
+| ----------------- | ---- | ----------- | ---------- | ------------------------------------------ |
+| Current           | 7    | 0–63.5 m/s  | 0.5 m/s    | Saturates at hurricane onset               |
+| Extended range    | 8    | 0–127.5 m/s | 0.5 m/s    | Covers all terrestrial wind; 1 extra bit   |
+| Extended, coarser | 7    | 0–127 m/s   | 1.0 m/s    | Same bit width; resolution matches sensors |
+| Non-linear        | 7    | 0–127+ m/s  | Variable   | Finer below 30 m/s, coarser above; complex |
+
+The same analysis applies to the wind gust field (Section 8.15), which shares
+the encoding.
+
+### J.3. Linear Quantisation vs. Real-World Distributions
+
+**Issue:** All field encodings use linear quantisation, allocating equal
+resolution across the entire range. Many environmental measurements have heavily
+right-skewed distributions where most readings cluster at low values with rare
+high excursions.
+
+**Affected fields:**
+
+- **Wind speed:** Most readings are 0–10 m/s; extreme values above 30 m/s are
+  rare but operationally significant.
+- **Rain rate:** Most readings are 0–10 mm/hr; extreme events reach 100+ mm/hr.
+- **Radiation CPM:** Background is 10–50 CPM; elevated readings are 100+;
+  emergency-level readings are 1,000+.
+- **Radiation dose:** Background is 0.05–0.20 µSv/h; the 0.01 µSv/h resolution
+  provides only 5–20 distinguishable levels in the normal background range,
+  while 16,363 of the 16,383 steps cover values that will never be observed in
+  normal operation.
+- **Air quality PM:** Background PM2.5 in clean environments is 0–10 µg/m³; the
+  5 µg/m³ resolution provides only 2 distinguishable levels (0 and 5) in this
+  range.
+
+**Analysis needed:** For each field, characterise the real-world distribution of
+values (from public meteorological and environmental datasets) and compute the
+information content per quantisation step. Compare linear quantisation against
+logarithmic, square-root, and piecewise-linear alternatives in terms of
+mean-squared quantisation error for typical measurement distributions.
+
+**Trade-off:** Non-linear quantisation improves effective resolution in common
+value ranges but adds implementation complexity. Linear quantisation requires
+one multiply and one add; logarithmic quantisation requires a lookup table or a
+log/exp computation. On Class 1 MCUs (Section E.1), this is a meaningful cost.
+Additionally, non-linear quantisation violates the principle of least surprise —
+a user examining the raw quantised value cannot easily estimate the physical
+value without consulting the transfer function.
+
+**Current position:** Linear quantisation is retained in v0.90 for simplicity. A
+systematic analysis of the quantisation error budget against real sensor data is
+planned before v1.0.
+
+### J.4. Datetime Resolution vs. Bit Allocation
+
+**Issue:** The datetime field (Section 8.8) uses 24 bits at 5-second resolution,
+covering 971 days. The 5-second tick was chosen because 24 bits at 1-second
+resolution covers only 194 days — insufficient for a calendar year.
+
+**Observation:** The protocol operates at arbitrary bit boundaries throughout. A
+25-bit datetime field at 1-second resolution covers 388 days — sufficient for a
+full year with 23 days of margin. The cost is 1 additional bit per packet when
+the datetime field is present. For sensors with GNSS time sources (sub-second
+accurate), the current design degrades accuracy by up to 4 seconds to preserve a
+round bit count that has no structural significance in a bit-packed protocol.
+
+**Counter-argument:** The 5-second resolution exceeds the typical sensor
+observation cycle (tens of seconds to minutes). For a sensor that wakes, reads,
+encodes, and transmits once per minute, a ±4 second timestamp error is
+negligible. The 24-bit width also provides 971-day coverage, which is convenient
+for resolving year boundaries (Section 11.1) — a 25-bit field at 1-second
+resolution would require the year-boundary algorithm to handle timestamps up to
+23 days into the next year rather than 241 days.
+
+**Analysis needed:** Survey of sensor timing requirements across target use
+cases. Determine whether any use case benefits materially from 1-second vs.
+5-second resolution, given that the protocol does not provide sub-second
+timestamps in either case.
+
+### J.5. Header Bit Allocation
+
+**Issue:** The 32-bit header allocates 4 bits to variant (16 values), 12 bits to
+station ID (4,096 values), and 16 bits to sequence (65,536 values). The
+specification recommends 100–200 nodes per deployment, meaning approximately 95%
+of the station ID space is typically unused. The sequence field wraps every ~3.6
+days at 5-second intervals or ~45 days at 60-second intervals.
+
+**Observation:** A 24-bit header with 4 bits variant, 8 bits station ID (256
+values), and 12 bits sequence (4,096 values before wrap) would save 8 bits per
+packet — a 17% reduction in minimum packet size (from 46 to 38 bits). The
+reduced station ID space (256) still exceeds the recommended deployment size.
+The reduced sequence space wraps every ~5.7 hours at 5-second intervals, which
+is adequate for dedup (where the relevant window is seconds, not hours) but
+reduces the gap detection window.
+
+**Counter-argument:** The 32-bit header aligns to a 4-byte boundary, which
+simplifies implementation on platforms where the header is read as a single
+uint32_t. It also provides headroom for larger deployments and longer gap
+detection windows without protocol changes. The 8-bit saving per packet is
+meaningful for the shortest packets (battery-only heartbeats) but diminishes in
+significance for typical 16–32 byte weather station packets.
+
+**Analysis needed:** Survey of real deployment sizes and transmission intervals
+to determine whether the current allocation is well-matched or over-provisioned.
+Consider whether a configurable header format (selected by variant or by a
+deployment-wide parameter) could serve both small and large deployments without
+a fixed compromise.
+
+The specification already acknowledges this issue (Section 5, final paragraph)
+and notes that a reduction is "not contemplated in this version."
+
+### J.6. Presence Byte TLV Bit Placement
+
+**Issue:** Bit 6 of Presence Byte 0 is permanently allocated to the TLV flag.
+Every packet pays this bit regardless of whether TLV data is present. In the
+common case (no TLV data), this bit is always 0 and conveys no information.
+
+**Impact:** Presence Byte 0 has 6 data field slots (bits 0–5) rather than 7. A
+variant with 7 frequently-transmitted fields must use an extension byte for the
+seventh field, adding 8 bits to every packet. If the TLV bit were relocated, 7
+fields could fit in a single presence byte.
+
+**Alternatives:**
+
+- **TLV as an extension byte sentinel.** TLV data could be signalled by a
+  specific extension bit pattern (e.g. an extension byte where all data field
+  bits are 0) rather than a dedicated bit.
+- **TLV as a field type.** A field type IOTDATA_FIELD_TLV could be defined,
+  occupying a field slot in the variant table. Variants that need TLV would
+  allocate a slot; variants that don't would reclaim the slot.
+- **Accept the cost.** The current design is simple, unambiguous, and costs at
+  most 1 bit per packet. The number of deployments that need exactly 7 fields in
+  pres0 may be small.
+
+**Analysis needed:** Survey of planned and potential variant definitions to
+determine how many would benefit from a 7th slot in pres0.
+
+### J.7. Rain Drop Size Semantics
+
+**Issue:** The rain size field (Section 8.18) encodes a value in the range 0–6.0
+mm at 0.25 mm resolution, but the specification does not define what physical
+quantity this represents.
+
+Meteorological raindrop measurements come in several forms:
+
+- **Median volume diameter (D₀ or D₅₀):** The drop diameter at which half the
+  total volume is in smaller drops and half in larger. This is the standard
+  descriptor for a raindrop size distribution.
+- **Mean diameter:** Arithmetic mean of all detected drops.
+- **Maximum detected diameter:** The largest single drop in the observation
+  period.
+- **Modal diameter:** The most common drop size.
+
+These quantities differ significantly for the same rain event. A moderate
+stratiform rain might have D₅₀ = 1.5 mm, mean = 1.0 mm, and maximum = 3.5 mm.
+
+**Impact:** Without a defined physical quantity, the field is ambiguous. Two
+different sensor implementations might encode different quantities using the
+same field, producing incomparable data.
+
+**Additionally:** The 0.25 mm resolution is coarse for the scientifically
+interesting region below 2 mm, where the Marshall-Palmer distribution
+concentrates most drops. The field's utility for meteorological research is
+limited unless the resolution is improved or the target application (coarse
+operational classification rather than scientific measurement) is stated.
+
+**Recommendation:** Define the field as encoding the median volume diameter
+(D₀), or explicitly state that the quantity is implementation-defined and
+intended for coarse classification rather than research-grade measurement.
+
+### J.8. UV Index Range
+
+**Issue:** The UV index field (Section 8.4) is encoded as 4 bits, range 0–15.
+The WHO UV Index scale is nominally 0–11+ with values above 11 classified as
+"extreme." Measured UV indices above 15 are documented at high altitude near the
+equator (Andes, Tibetan Plateau), with readings up to 20+ recorded by research
+stations.
+
+**Impact:** Minimal for the majority of deployments. The ceiling of 15
+accommodates all but the most extreme high-altitude equatorial conditions.
+Deployments targeting such environments would saturate the field.
+
+**Recommendation:** Accept as a known limitation for v1.0, with a note that
+5-bit encoding (range 0–31) would cover all documented terrestrial UV conditions
+at a cost of 1 additional bit.
+
+### J.9. Information-Theoretic Efficiency
+
+**Issue:** The protocol claims bit efficiency as its primary design goal, and
+the comparison with alternative encodings (Appendix I) demonstrates that iotdata
+is significantly more compact than JSON, CBOR, Protobuf, and packed C structs.
+However, the specification does not establish how close the encoding is to the
+theoretical minimum.
+
+**Analysis needed:** For a representative weather station payload (the variant 0
+default), compute the Shannon entropy of each field given real-world measurement
+distributions. Sum the per-field entropies to obtain the theoretical minimum
+number of bits required to represent a typical reading. Compare this against the
+actual bit allocation.
+
+For example, if the entropy of a typical reading is 90 bits, then the current
+124-bit encoding has 38% overhead and there may be significant room for
+improvement. If the entropy is 115 bits, the encoding is within 8% of optimal
+and further compression would yield diminishing returns.
+
+This analysis would also identify which fields contribute the most overhead
+relative to their information content, guiding any future optimisation of bit
+allocations.
+
+**Context:** The protocol deliberately avoids variable-length or
+entropy-optimised encodings (Huffman, arithmetic coding) for implementation
+simplicity. A fixed bit-packed encoding can never reach the Shannon limit for
+variable-entropy data. The analysis would quantify the cost of this design
+choice and determine whether it is a few percent (acceptable) or tens of percent
+(worth revisiting).
+
+### J.10. Sensor-Specific Field Semantics
+
+**Issue:** Several fields encode physical quantities without specifying the
+measurement conditions, averaging periods, or sensor calibration assumptions
+that affect their interpretation.
+
+**Examples:**
+
+- **Temperature:** Dry-bulb? Wet-bulb? Aspirated or unaspirated sensor housing?
+  The difference between an aspirated and unaspirated temperature reading in
+  direct sunlight can be 5–10°C — well above the 0.25°C quantisation resolution.
+- **Wind speed and gust:** What averaging period? WMO standard is 10-minute mean
+  speed and 3-second gust. The National Weather Service uses 2-minute mean and
+  5-second gust. The protocol does not specify, so two stations with different
+  averaging periods produce incomparable data.
+- **Humidity:** Relative humidity depends on temperature. Is the temperature
+  co-located and simultaneous? The Environment bundle (Section 8.3) implies yes,
+  but standalone Humidity (Section 8.11) makes no such guarantee.
+- **Rain rate:** Instantaneous rate? 1-minute average? 10-minute average?
+  Tipping-bucket gauges report discrete tip events; the computed "rate" depends
+  entirely on the averaging algorithm.
+
+**Impact:** For closed deployments where the operator controls all sensors and
+understands their characteristics, this ambiguity is manageable. For any form of
+data sharing or comparison between deployments, it undermines data quality.
+
+**Relationship to Section 11.3 and Section 15:** The specification acknowledges
+this gap and identifies sensor metadata TLVs (types 0x10–0x1F) as future work.
+This appendix entry records the specific fields where the ambiguity is most
+significant to guide the design of those TLVs.
+
+### J.11. Irradiance Range
+
+**Issue:** The solar irradiance field (Section 8.4) encodes 0–1023 W/m² in 10
+bits. The solar constant (top-of-atmosphere irradiance) is approximately 1,361
+W/m². At the Earth's surface, clear-sky irradiance rarely exceeds 1,100 W/m²,
+but localised reflections from clouds (the "cloud enhancement" or "lensing"
+effect) can produce transient readings of 1,200–1,400 W/m² as measured by
+high-quality pyranometers.
+
+**Impact:** Stations equipped with research-grade pyranometers in environments
+prone to cloud enhancement (e.g. tropical cumulus, mountain environments) may
+occasionally saturate the field. For most operational deployments with standard
+silicon-cell sensors, the 1,023 W/m² ceiling is adequate.
+
+**Recommendation:** Consider 11 bits (0–2,047 W/m², 1 W/m² resolution) for
+headroom, or accept the current range with a documented limitation. The
+additional bit is a minor cost.
+
+### J.12. Image Field Practicality
+
+**Issue:** The Image field (Section 8.27) is the most complex and largest field
+type in the protocol. It supports multiple pixel formats, compression methods,
+and sizes, with payload budgets up to 254 bytes. This sits uneasily in a
+protocol designed around 16–32 byte packets for resource-constrained sensors.
+
+**Concerns:**
+
+- **Payload budget conflict.** A 96-byte BILEVEL image at 32×24 plus a 16-byte
+  weather station payload totals 112 bytes. This fits at SF7 (222 byte limit)
+  but not at SF9 (115 bytes) or above. The image effectively precludes higher
+  spreading factors, which are often needed precisely in the remote deployments
+  where camera-equipped sensors might be deployed.
+- **Compression complexity.** Heatshrink decompression requires ~256 bytes of
+  RAM — feasible on Class 3 devices but prohibitive on Class 1 and marginal on
+  Class 2. This creates a field type that cannot be decoded on the same device
+  classes the protocol targets for encoding.
+- **Use case validation.** The field was designed for motion-detection
+  thumbnails (wildlife, livestock, security). It is not clear whether a 32×24
+  1-bit image transmitted over LoRa provides sufficient utility to justify the
+  protocol complexity. Alternative approaches (transmitting a motion-detected
+  flag bit and storing full images locally for periodic retrieval) may be more
+  practical.
+
+**Current position:** The Image field is included in v0.90 as an experimental
+capability. Its inclusion in v1.0 will be reviewed based on implementation
+experience and demonstrated operational utility.
+
+### J.13. Absence of Test Vectors
+
+**Issue:** The specification does not include normative test vectors (known
+inputs with expected binary outputs). The reference implementation test suite
+provides de facto test cases, but these are not reproduced in the specification
+document.
+
+**Impact:** An independent implementer working from the specification alone
+cannot verify conformance without access to the reference implementation. This
+is a significant gap for a protocol intended for independent implementation.
+
+**Plan:** A set of normative test vectors covering the following cases will be
+added before v1.0:
+
+- Minimum valid packet (header + empty presence byte).
+- Battery-only heartbeat (minimum useful packet).
+- Full weather station packet (variant 0, all pres0 fields).
+- Full weather station packet with pres1 fields (position, datetime, flags).
+- Packet with TLV data (VERSION + STATUS).
+- Edge cases: all fields at minimum values, all fields at maximum values, all
+  fields at quantisation boundary values where round-trip error is maximised.
+
+### J.14. Formal Decode Specification
+
+**Issue:** The specification describes the packet structure through bit
+diagrams, encode/decode formulae, and narrative text. It does not include a
+formal or pseudocode description of the complete decode procedure as a single
+algorithm.
+
+**Impact:** The decode path requires synthesising information from Sections 4,
+5, 6, 7, and 8. A reader must mentally reconstruct the decode loop: read header,
+look up variant, read presence bytes, iterate field table, for each present
+field read the appropriate number of bits and apply the decode formula. This is
+straightforward but is not stated as an explicit algorithm anywhere in the
+document.
+
+**Plan:** A pseudocode decode algorithm (comparable to the encoder example in
+Appendix C) will be added before v1.0, likely as an additional appendix.
+
+### J.15. Bundle vs. Standalone Asymmetry
+
+**Issue:** Some sensor groupings have both bundle and standalone forms
+(Environment, Wind, Rain, Air Quality, Radiation), while Solar (irradiance + UV)
+exists only as a bundle with no standalone components. Section 8 acknowledges
+this: "some bundles have no standalone forms ... this may be addressed in future
+versions."
+
+**Impact:** A variant that needs irradiance without UV, or UV without
+irradiance, must either waste bits on the unwanted component or leave the field
+absent entirely. This is inconsistent with the protocol's bit-efficiency
+principle.
+
+**Recommendation:** Add standalone Irradiance (10 bits) and standalone UV Index
+(4 bits) field types for completeness before v1.0.
+
+### J.16. Cloud Cover Resolution
+
+**Issue:** The clouds field (Section 8.26) uses 4 bits to encode 0–8 okta,
+leaving 7 of 16 possible values unused. The okta scale is inherently coarse (9
+levels for the entire range of cloud cover), and the 4-bit encoding wastes
+nearly half its capacity.
+
+**Alternatives:**
+
+- **3 bits (0–7) with 8 mapped to 7.** Saves 1 bit but conflates "overcast" (8
+  okta) with "nearly overcast" (7 okta), which is a meaningful distinction in
+  meteorology.
+- **4 bits (0–15) with extended resolution.** Use 0–16 to represent cloud cover
+  in sixteenths rather than eighths, providing ~6% resolution. This matches some
+  automated ceilometer outputs more closely than okta.
+- **Accept as-is.** The 4-bit allocation is the smallest whole unit that
+  accommodates 9 values. The waste is 3.17 bits of entropy in a 4-bit field —
+  less than 1 bit of overhead.
+
+**Current position:** Accepted as-is. The overhead is negligible and the okta
+scale is the established meteorological standard.
 
 ---
 
