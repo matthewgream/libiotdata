@@ -5769,6 +5769,256 @@ nearly half its capacity.
 **Current position:** Accepted as-is. The overhead is negligible and the okta
 scale is the established meteorological standard.
 
+### J.17. Additional Sensor Field Types
+
+The current field type inventory covers core meteorological and environmental
+measurements. The following field types have been identified as absent but
+relevant to the protocol's stated deployment scenarios (farming, forestry,
+outdoor commercial/industrial, water monitoring). None require new encoding
+techniques — they are straightforward linear ranges that fit in 7–10 bits and
+can be added as new field types without structural protocol changes.
+
+The quantisation ranges listed below are preliminary and subject to the same
+systematic analysis discussed in Section J.3 before inclusion in v1.0.
+
+#### J.17.1. Soil Moisture and Conductivity
+
+**Priority: High.** Soil moisture is arguably the most widely deployed
+agricultural sensor type after temperature. Its absence is conspicuous for a
+protocol targeting farm deployments.
+
+**Soil moisture** is typically reported as volumetric water content (VWC), a
+percentage of the soil volume occupied by water. The standalone Humidity field
+(Section 8.11) could be repurposed via variant labelling, as the 0–100% range at
+1% resolution is a reasonable fit for VWC. However, some capacitive and TDR
+sensors (e.g. Meter EC-5, Teros 12) report raw dielectric permittivity rather
+than calibrated VWC, with a range of approximately 1–80. A dedicated field type
+would allow the variant to distinguish calibrated VWC from raw permittivity.
+
+**Soil electrical conductivity (EC)** measures the ability of the soil solution
+to conduct electrical current, serving as a proxy for salinity and dissolved ion
+concentration. This is critical for irrigation management in arid and semi-arid
+agriculture, where soil salinisation is a primary crop yield limiter. Typical
+range: 0–5,000 µS/cm for most agricultural soils (some saline soils reach
+20,000+ µS/cm). Resolution of 10–20 µS/cm is adequate for management decisions.
+A 10-bit field at 20 µS/cm resolution covers 0–20,460 µS/cm.
+
+**Soil temperature** is already available via the standalone Temperature field
+(Section 8.9) with a variant label such as `"soil_temp"`. No new field type is
+needed.
+
+A **soil bundle** (moisture + conductivity + temperature) would be natural,
+mirroring the Environment bundle pattern, for sensors like the Teros 12 and
+Meter TEROS 21 that output all three simultaneously.
+
+| Candidate field     | Bits | Range           | Resolution | Sensor examples        |
+| ------------------- | ---- | --------------- | ---------- | ---------------------- |
+| Soil moisture (VWC) | 7    | 0–100%          | 1%         | Teros 12, EC-5, SHT40  |
+| Soil EC             | 10   | 0–20,460 µS/cm  | 20 µS/cm   | Teros 12, Teros 21     |
+| Soil bundle         | 26   | VWC + EC + temp | As above   | Combined probe outputs |
+
+#### J.17.2. Water Quality: pH
+
+**Priority: High.** pH is the most fundamental water quality measurement,
+relevant to aquaculture, river and lake monitoring, irrigation water assessment,
+and water treatment. The measurement is well-defined (hydrogen ion activity on a
+logarithmic scale), universally understood, and reported by a wide range of
+sensors.
+
+Range: 0.00–14.00. Resolution: 0.1 pH units is standard for field instruments;
+0.01 is available from laboratory-grade probes but rarely meaningful in
+continuous outdoor monitoring due to drift and fouling.
+
+| Candidate field | Bits | Range  | Resolution | Sensor examples                |
+| --------------- | ---- | ------ | ---------- | ------------------------------ |
+| pH (×10)        | 8    | 0–14.0 | ~0.06      | Atlas Scientific EZO-pH, Hanna |
+| pH (×100)       | 10   | 0–14.0 | ~0.014     | Laboratory probes              |
+
+The 8-bit encoding (0–255, mapped to 0–14.0 at 255 steps ≈ 0.055 resolution) is
+adequate for field deployment and matches the ±0.1 accuracy of most submersible
+pH probes.
+
+#### J.17.3. Water Quality: Electrical Conductivity
+
+**Priority: High.** Water EC measures dissolved ion concentration, serving as a
+proxy for total dissolved solids (TDS). It is the primary measurement for
+monitoring water quality in rivers, lakes, aquaculture ponds, and water
+treatment systems.
+
+The range varies enormously by application: freshwater rivers are typically
+50–1,500 µS/cm, drinking water up to 2,500 µS/cm, brackish water 2,500–30,000
+µS/cm, and seawater ~50,000 µS/cm. This wide range is a candidate for non-linear
+quantisation (Section J.3) or a configurable range per variant.
+
+| Candidate field | Bits | Range           | Resolution | Notes                          |
+| --------------- | ---- | --------------- | ---------- | ------------------------------ |
+| EC (freshwater) | 10   | 0–5,115 µS/cm   | 5 µS/cm    | Rivers, lakes, irrigation      |
+| EC (wide range) | 10   | 0–51,150 µS/cm  | 50 µS/cm   | Covers brackish and seawater   |
+| EC (log scale)  | 8    | 1–100,000 µS/cm | ~12%/step  | Single field for all use cases |
+
+Atlas Scientific EZO-EC probes cover 0.07–500,000 µS/cm. A deployment-selected
+range (freshwater vs. wide) via variant label may be the most practical
+approach, using the same bit encoding with different scaling.
+
+Note that soil EC (Section J.17.1) and water EC are the same physical
+measurement with different typical ranges. A single EC field type with
+variant-defined scaling could serve both.
+
+#### J.17.4. Water Quality: Dissolved Oxygen
+
+**Priority: Medium.** Dissolved oxygen (DO) is critical for aquaculture (fish
+require >5 mg/L; below 3 mg/L is lethal for most species) and river ecology
+(regulatory thresholds for water quality classification). It is also relevant to
+wastewater treatment monitoring.
+
+Typical range: 0–20 mg/L. Resolution: 0.1 mg/L is adequate for management
+decisions and matches the ±0.1–0.2 mg/L accuracy of optical DO probes (Atlas
+Scientific EZO-DO, In-Situ RDO).
+
+Some sensors also report oxygen saturation as a percentage (0–100%+ ;
+supersaturation above 100% occurs in algae-rich water). This could be encoded as
+a standalone humidity-style field with a variant label.
+
+| Candidate field   | Bits | Range  | Resolution | Sensor examples        |
+| ----------------- | ---- | ------ | ---------- | ---------------------- |
+| DO (mg/L, ×10)    | 8    | 0–25.5 | 0.1 mg/L   | Atlas EZO-DO, RDO Pro  |
+| DO saturation (%) | 7    | 0–100% | 1%         | Same sensors, % output |
+
+#### J.17.5. Water Quality: Turbidity
+
+**Priority: Medium.** Turbidity measures the optical clarity of water, reported
+in Nephelometric Turbidity Units (NTU). It is a proxy for suspended sediment,
+algal concentration, and general water quality. Relevant for river monitoring
+(sediment transport during flood events), water treatment (intake turbidity),
+and aquaculture (pond clarity).
+
+The distribution is heavily right-skewed: clean water is 0–5 NTU, typical rivers
+10–100 NTU, flood events 1,000+ NTU, and extremely turbid water can exceed
+10,000 NTU. This is a strong candidate for non-linear quantisation.
+
+| Candidate field    | Bits | Range        | Resolution | Notes                         |
+| ------------------ | ---- | ------------ | ---------- | ----------------------------- |
+| Turbidity (linear) | 10   | 0–1,023 NTU  | 1 NTU      | Adequate for clean water only |
+| Turbidity (linear) | 10   | 0–10,230 NTU | 10 NTU     | Covers flood events; coarse   |
+| Turbidity (log)    | 8    | 0.1–10,000   | ~12%/step  | Matches sensor dynamic range  |
+
+#### J.17.6. Water Quality: ORP (Oxidation-Reduction Potential)
+
+**Priority: Low-Medium.** ORP measures the tendency of a solution to oxidise or
+reduce, reported in millivolts. It is used in water treatment, aquaculture, and
+pool/spa monitoring as an indicator of disinfection effectiveness and water
+chemistry. Atlas Scientific produces an EZO-ORP module for this measurement.
+
+Range: -1,000 to +1,000 mV (most natural water: +200 to +600 mV). Resolution:
+1–5 mV is adequate.
+
+| Candidate field | Bits | Range             | Resolution | Sensor examples |
+| --------------- | ---- | ----------------- | ---------- | --------------- |
+| ORP (mV)        | 10   | -999 to +1,024 mV | ~2 mV      | Atlas EZO-ORP   |
+
+#### J.17.7. Water Flow / Discharge
+
+**Priority: Medium.** Flow rate is relevant for river discharge monitoring,
+irrigation flow measurement, and water distribution systems. Unlike water level
+(which can be encoded as depth), flow rate is a derived quantity with a wide
+dynamic range: a small irrigation pipe might carry 0.1 L/s, while a river gauge
+might report 500 m³/s.
+
+The wide dynamic range and the diversity of units (L/s, m³/s, gallons/min)
+suggest that this measurement may be better handled as a variant-specific custom
+encoding or via TLV, rather than as a fixed field type. Alternatively, a generic
+flow field with variant-defined units and a logarithmic encoding could cover the
+range.
+
+**Note:** Many flow measurements are derived from water level via a
+stage-discharge curve (Manning's equation or a calibrated rating curve). In
+these cases, the sensor transmits level (depth field) and the gateway computes
+flow. A flow field type is primarily useful for sensors that output flow
+directly (ultrasonic transit-time meters, electromagnetic flow meters, weir
+gauges with integrated computation).
+
+#### J.17.8. Leaf Wetness / Surface Moisture
+
+**Priority: Low.** Leaf wetness sensors detect the presence and quantity of
+surface moisture on vegetation. They are used in precision viticulture, orchard
+management, and crop disease prediction models (e.g. downy mildew in grapes,
+late blight in potatoes). The measurement is typically reported as a coarse
+categorical scale (dry / dew / wet / saturated) or as a percentage (0–100%) from
+resistive or capacitive sensors.
+
+A 2-bit categorical field (4 levels) or a repurposed 7-bit humidity field with a
+variant label would suffice. The measurement is niche but falls within the
+farming use case.
+
+#### J.17.9. Thermal Rate of Change and Fire Detection
+
+**Priority: Medium.** The protocol encodes instantaneous values: a temperature
+reading is a snapshot at the moment of transmission. For fire detection and
+frost early warning, the rate of temperature change is often more informative
+than the absolute value.
+
+**Fire detection context:** A wildfire approaching a sensor produces a
+characteristic thermal signature: ambient temperature rises rapidly (10–30°C
+over 1–5 minutes) before the absolute temperature reaches alarming levels. By
+the time the temperature reads 60°C, the fire is already at the sensor. Early
+detection depends on recognising the rate of change while the absolute
+temperature is still in the 25–40°C range.
+
+Relevant measurements for fire/thermal anomaly detection:
+
+**Temperature rate of change (°C/min).** A signed value indicating heating or
+cooling rate. Range: -10 to +30 °C/min covers both frost events (slow cooling,
+-1 to -5 °C/min) and fire approach (rapid heating, +5 to +30 °C/min). 8 bits at
+0.2 °C/min resolution (-25.6 to +25.4 °C/min with signed encoding) would
+suffice.
+
+This measurement is computed by the sensor from consecutive temperature readings
+and the interval between them. It requires no additional hardware — only
+firmware logic and retention of the previous reading. The averaging period
+should be stated (e.g. "rate computed over the most recent two readings" or "60-
+second moving average") and could be communicated via a CONFIG TLV.
+
+**Smoke / particulate spike.** The existing Air Quality PM fields (Section 8.21)
+encode absolute particulate concentration, which can indicate smoke. However,
+fire-relevant smoke detection is better characterised by rate of change in PM2.5
+(a sudden spike from baseline) rather than absolute level, since baseline varies
+by location and season. A rate-of-change field for PM2.5 (similar to the thermal
+rate) could complement the absolute PM reading. Alternatively, the sensor
+firmware can set a flag bit (Section 8.6) when it detects a PM spike, leaving
+the algorithm sensor-side.
+
+**Carbon monoxide.** Already available in the Air Quality Gas field (Section
+8.22, slot 3). CO is an early indicator of smouldering combustion. No new field
+type is needed, but the CO slot's 1 ppm resolution and 0–1,023 ppm range are
+well suited to fire detection (dangerous levels are 50+ ppm).
+
+**Summary of fire-relevant capabilities:**
+
+| Measurement          | Current status        | Gap                                        |
+| -------------------- | --------------------- | ------------------------------------------ |
+| Absolute temperature | Available (8.3, 8.9)  | None — but absolute alone is a late signal |
+| Temperature rate     | Not available         | New field type needed                      |
+| PM2.5 absolute       | Available (8.21)      | None                                       |
+| PM2.5 rate           | Not available         | New field type or flag-based approach      |
+| CO                   | Available (8.22)      | None                                       |
+| Humidity drop        | Available (8.3, 8.11) | Rapid humidity drop precedes fire front    |
+| IR flame detection   | Not available         | Specialised sensor; out of scope for v1.0  |
+
+**Design question:** Should rate-of-change be a generic modifier applicable to
+any field type, or a standalone field type? A generic approach (e.g. a "delta"
+flag or a companion field type that encodes the first derivative of any
+measurement) would be more flexible but adds protocol complexity. A standalone
+`TEMPERATURE_RATE` field is simpler and covers the primary use case.
+
+**Recommendation:** Add a standalone temperature rate-of-change field for v1.0
+(simple, no new encoding concepts, high value for fire and frost detection).
+Defer generic rate-of-change mechanisms to a future version.
+
+| Candidate field        | Bits | Range                  | Resolution  | Use case            |
+| ---------------------- | ---- | ---------------------- | ----------- | ------------------- |
+| Temp rate (°C/min)     | 8    | -25.6 to +25.4 °C/min  | 0.2 °C/min  | Fire, frost warning |
+| PM2.5 rate (µg/m³/min) | 8    | -127 to +128 µg/m³/min | 1 µg/m³/min | Smoke detection     |
+
 ---
 
 _This document and the reference implementation are maintained at
