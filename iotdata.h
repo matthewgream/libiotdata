@@ -1176,18 +1176,15 @@ typedef struct {
     size_t packed_bytes;
 } iotdata_dump_t;
 
-iotdata_status_t iotdata_dump_to_file(iotdata_dump_t *dump, const uint8_t *buf, size_t len, FILE *fp, bool verbose);
 iotdata_status_t iotdata_dump_to_string(iotdata_dump_t *dump, const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose);
 #endif /* !IOTDATA_NO_DUMP */
 
 #if !defined(IOTDATA_NO_PRINT)
 #if !defined(IOTDATA_NO_DECODE)
-iotdata_status_t iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp);
 iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, char *out, size_t out_size);
 typedef struct {
     iotdata_decoded_t dec;
 } iotdata_print_scratch_t;
-iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp, iotdata_print_scratch_t *scratch);
 iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, iotdata_print_scratch_t *scratch);
 #endif
 #endif /* !IOTDATA_NO_PRINT */

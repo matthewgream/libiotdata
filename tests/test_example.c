@@ -245,7 +245,7 @@ static void print_pre_encode(const sensor_state_t *s, int full) {
 }
 
 static void print_hex_dump(const uint8_t *buf, size_t len) {
-    printf("\n** Binary (%zu bytes):\n\n", len);
+    printf("\n** Binary (%" PRIu32 " bytes):\n\n", (uint32_t)len);
     if (len > 0)
         printf("    ");
     for (size_t i = 0; i < len; i++)

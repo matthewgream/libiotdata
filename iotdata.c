@@ -372,7 +372,8 @@ static const char *_padd(const char *label) {
 #if !defined(IOTDATA_NO_DUMP)
 #if defined(IOTDATA_NO_FLOATING)
 static int fmt_scaled(char *buf, size_t sz, int32_t val, int32_t divisor, const char *unit) {
-    return snprintf(buf, sz, "%s%d.%01d%s%s", val < 0 ? "-" : "", (int)((val < 0 ? -val : val) / divisor), (int)((val < 0 ? -val : val) % divisor), unit[0] ? " " : "", unit);
+    const uint32_t a = (val < 0) ? -(uint32_t)val : (uint32_t)val;
+    return snprintf(buf, sz, "%s%" PRIu32 ".%01" PRIu32 "%s%s", val < 0 ? "-" : "", a / (uint32_t)divisor, a % (uint32_t)divisor, unit[0] ? " " : "", unit);
 }
 #endif
 #endif
@@ -587,7 +588,7 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_LINK_RSSI_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%d dBm", dequantise_link_rssi(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " dBm", dequantise_link_rssi(r));
     n = dump_add(dump, n, s, IOTDATA_LINK_RSSI_BITS, r, dump->_dec_buf, "-120..-60, 4dBm", "link_rssi");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_LINK_SNR_BITS);
@@ -603,9 +604,9 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_link(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    fprintf(fp, "  %s:%s %d dBm RSSI, %.0f dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr);
+    fprintf(fp, "  %s:%s %" PRIu16 " dBm RSSI, %.0f dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr);
 #else
-    fprintf(fp, "  %s:%s %d dBm RSSI, %d.%d dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr / 10, dec->link_snr % 10);
+    fprintf(fp, "  %s:%s %" PRIu16 " dBm RSSI, %d.%d dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr / 10, dec->link_snr % 10);
 #endif
 }
 #endif
@@ -2113,13 +2114,13 @@ static int dump_aq_pm(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
     (void)label;
     size_t s = *bp;
     uint32_t present = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_PM_PRESENT_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%X", (unsigned)present);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%" PRIX32, present);
     n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_PM_PRESENT_BITS, present, dump->_dec_buf, "4-bit mask", "aq_pm_present");
     for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
         if (present & (1U << i)) {
             s = *bp;
             uint32_t r = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_PM_VALUE_BITS);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u ug/m3", (unsigned)(r * IOTDATA_AIR_QUALITY_PM_VALUE_RES));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 " ug/m3", (uint32_t)(r * IOTDATA_AIR_QUALITY_PM_VALUE_RES));
             n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_PM_VALUE_BITS, r, dump->_dec_buf, "0..1275, 5 ug/m3", _aq_pm_names[i]);
         }
     return n;
@@ -2232,7 +2233,7 @@ static int dump_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t
     (void)label;
     size_t s = *bp;
     uint32_t present = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02X", (unsigned)present);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIX32, present);
     n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS, present, dump->_dec_buf, "8-bit mask", "aq_gas_present");
     for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++) {
         if (present & (1U << i)) {
@@ -4051,7 +4052,7 @@ static iotdata_status_t json_get_tlv(cJSON *root, iotdata_encoder_t *enc, const 
 static int _dump_tlv_data(size_t *bp, iotdata_dump_t *dump, int n, uint8_t format, uint8_t length, int tlv_idx, const char *name) {
     const size_t data_bits = (format == IOTDATA_TLV_FMT_STRING) ? (size_t)length * IOTDATA_TLV_CHAR_BITS : (size_t)length * 8;
     snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].%s", tlv_idx, name);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%zu bits)", data_bits);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%" PRIu32 " bits)", (uint32_t)data_bits);
     n = dump_add(dump, n, *bp, data_bits, 0, dump->_dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", dump->_name_buf);
     *bp += data_bits;
     return n;
@@ -4067,11 +4068,11 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
             const uint16_t restarts = (uint16_t)bits_read(buf, bb, &p, 16);
             const uint8_t reason = (uint8_t)bits_read(buf, bb, &p, 8);
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_uptime", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(sess * IOTDATA_TLV_STATUS_TICKS_RES));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(sess * IOTDATA_TLV_STATUS_TICKS_RES));
             n = dump_add(dump, n, *bp, 24, sess, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].lifetime_uptime", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(life * IOTDATA_TLV_STATUS_TICKS_RES));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(life * IOTDATA_TLV_STATUS_TICKS_RES));
             n = dump_add(dump, n, *bp, 24, life, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].restarts", tlv_idx);
@@ -4105,7 +4106,7 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
             n = dump_add(dump, n, *bp, 16, free_heap, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_active", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%lus", (unsigned long)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
             n = dump_add(dump, n, *bp, 16, active, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 16;
             return n;
@@ -4201,7 +4202,7 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
             const uint32_t life = ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5];
             const uint16_t restarts = (uint16_t)((b[6] << 8) | b[7]);
             const uint8_t reason = b[8];
-            fprintf(fp, "    [%d] status: session=%lus lifetime=%lus restarts=%" PRIu16 " reason=%s", i, (unsigned long)(sess * IOTDATA_TLV_STATUS_TICKS_RES), (unsigned long)(life * IOTDATA_TLV_STATUS_TICKS_RES), restarts,
+            fprintf(fp, "    [%d] status: session=%" PRIu32 "s lifetime=%" PRIu32 "s restarts=%" PRIu16 " reason=%s", i, (uint32_t)(sess * IOTDATA_TLV_STATUS_TICKS_RES), (uint32_t)(life * IOTDATA_TLV_STATUS_TICKS_RES), restarts,
                     reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
             if (reason >= 0x80)
                 fprintf(fp, "(0x%02" PRIx8 ")", reason);
@@ -4220,7 +4221,7 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
             fprintf(fp, "    [%d] health:", i);
             if (cpu_temp != IOTDATA_TLV_HEALTH_TEMP_NA)
                 fprintf(fp, " cpu=%" PRId8 "°C", cpu_temp);
-            fprintf(fp, " supply=%" PRIu16 "mV heap=%" PRIu16 " active=%lus\n", supply_mv, free_heap, (unsigned long)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
+            fprintf(fp, " supply=%" PRIu16 "mV heap=%" PRIu16 " active=%" PRIu32 "s\n", supply_mv, free_heap, (uint32_t)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
         } else {
             fprintf(fp, "    [%d] health: malformed(%" PRIu8 " bytes)\n", i, t->length);
         }
@@ -4866,9 +4867,9 @@ static iotdata_status_t _iotdata_dump_decoded_to_file(const iotdata_dump_t *dump
     fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "------", "---", "-----", "---", "-------", "-----");
     for (size_t i = 0; i < dump->count; i++) {
         const iotdata_dump_entry_t *e = &dump->entries[i];
-        fprintf(fp, "%12zu  %6zu  %-24s  %10" PRIu32 "  %-28s  %s\n", e->bit_offset, e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
+        fprintf(fp, "%12" PRIu32 "  %6" PRIu32 "  %-24s  %10" PRIu32 "  %-28s  %s\n", (uint32_t)e->bit_offset, (uint32_t)e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
     }
-    fprintf(fp, "\nTotal: %zu bits (%zu bytes)\n", dump->packed_bits, dump->packed_bytes);
+    fprintf(fp, "\nTotal: %" PRIu32 " bits (%" PRIu32 " bytes)\n", (uint32_t)dump->packed_bits, (uint32_t)dump->packed_bytes);
     return IOTDATA_OK;
 }
 
@@ -4878,13 +4879,6 @@ static iotdata_status_t _iotdata_dump_oneline_to_file(const iotdata_dump_t *dump
         fprintf(fp, "%s%s=%s%s", (i > 0 ? ", " : ""), e->field_name, e->decoded_str, (i + 1 == dump->count ? "\n" : ""));
     }
     return IOTDATA_OK;
-}
-
-iotdata_status_t iotdata_dump_to_file(iotdata_dump_t *dump, const uint8_t *buf, size_t len, FILE *fp, bool verbose) {
-    iotdata_status_t rc;
-    if ((rc = _iotdata_dump_build(dump, buf, len)) != IOTDATA_OK)
-        return rc;
-    return verbose ? _iotdata_dump_decoded_to_file(dump, fp) : _iotdata_dump_oneline_to_file(dump, fp);
 }
 
 iotdata_status_t iotdata_dump_to_string(iotdata_dump_t *dump, const uint8_t *buf, size_t len, char *out, size_t out_size, bool verbose) {
@@ -4922,12 +4916,12 @@ static void _iotdata_print_field(const iotdata_decoded_t *dec, FILE *fp, iotdata
         ops->print(dec, fp, label);
 }
 
-iotdata_status_t iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp) {
+static iotdata_status_t _iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FILE *fp) {
     const iotdata_variant_def_t *vdef = iotdata_get_variant(dec->variant);
     if (vdef == NULL)
         return IOTDATA_ERR_HDR_VARIANT_UNKNOWN;
 
-    fprintf(fp, "Station %" PRIu16 " seq=%" PRIu16 " var=%" PRIu8 " (%s) [%zu bits, %zu bytes]\n", dec->station, dec->sequence, dec->variant, vdef->name, dec->packed_bits, dec->packed_bytes);
+    fprintf(fp, "Station %" PRIu16 " seq=%" PRIu16 " var=%" PRIu8 " (%s) [%" PRIu32 " bits, %" PRIu32 " bytes]\n", dec->station, dec->sequence, dec->variant, vdef->name, (uint32_t)dec->packed_bits, (uint32_t)dec->packed_bytes);
 
     for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(dec->fields, vdef->fields[si].type))
@@ -4946,20 +4940,9 @@ iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, c
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_PRINT_ALLOC;
-    rc = iotdata_print_decoded_to_file(dec, fp);
+    rc = _iotdata_print_decoded_to_file(dec, fp);
     fclose(fp);
     return rc;
-}
-
-iotdata_status_t iotdata_print_to_file(const uint8_t *buf, size_t len, FILE *fp, iotdata_print_scratch_t *scratch) {
-#if !defined(IOTDATA_NO_CHECKS_STATE)
-    if (!scratch)
-        return IOTDATA_ERR_BUF_NULL;
-#endif
-    iotdata_status_t rc;
-    if ((rc = iotdata_decode(buf, len, &scratch->dec)) != IOTDATA_OK)
-        return rc;
-    return iotdata_print_decoded_to_file(&scratch->dec, fp);
 }
 
 iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, iotdata_print_scratch_t *scratch) {
@@ -4973,7 +4956,7 @@ iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *o
     FILE *fp = fmemopen(out, out_size, "w");
     if (!fp)
         return IOTDATA_ERR_PRINT_ALLOC;
-    rc = iotdata_print_decoded_to_file(&scratch->dec, fp);
+    rc = _iotdata_print_decoded_to_file(&scratch->dec, fp);
     fclose(fp);
     return rc;
 }

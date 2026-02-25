@@ -93,7 +93,7 @@ static void test_soil_sensor_basic(void) {
     ASSERT_OK(iotdata_encode_depth(&enc, 30), "depth");
 
     finish();
-    printf("\n    [soil sensor: %zu bytes] ", pkt_len);
+    printf("\n    [soil sensor: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
     decode_pkt();
 
     ASSERT_EQ(dec.variant, 0, "variant");
@@ -168,7 +168,7 @@ static void test_wind_mast_basic(void) {
     ASSERT_OK(iotdata_encode_link(&enc, -75, 8.0f), "link");
 
     finish();
-    printf("\n    [wind mast: %zu bytes] ", pkt_len);
+    printf("\n    [wind mast: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
     decode_pkt();
 
     ASSERT_EQ(dec.variant, 1, "variant");
@@ -237,7 +237,7 @@ static void test_radiation_monitor_pres0(void) {
     ASSERT_OK(iotdata_encode_humidity(&enc, 55), "humid");
 
     finish();
-    printf("\n    [rad pres0: %zu bytes] ", pkt_len);
+    printf("\n    [rad pres0: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
     decode_pkt();
 
     ASSERT_EQ(dec.variant, 2, "variant");
@@ -269,7 +269,7 @@ static void test_radiation_monitor_full(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 400, 6), "solar");
 
     finish();
-    printf("\n    [rad full: %zu bytes] ", pkt_len);
+    printf("\n    [rad full: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
     decode_pkt();
 
     /* Verify pres0 */

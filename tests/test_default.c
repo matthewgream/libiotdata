@@ -254,7 +254,7 @@ static void test_full_weather_station(void) {
     ASSERT_OK(iotdata_encode_datetime(&enc, 3456000), "dt");
 
     finish();
-    printf("\n    [packed: %zu bytes] ", pkt_len);
+    printf("\n    [packed: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
     decode_pkt();
 
     /* Verify all 13 fields */
@@ -721,7 +721,7 @@ static void test_packet_sizes(void) {
     begin(0, 1, 1);
     ASSERT_OK(iotdata_encode_battery(&enc, 50, false), "bat");
     finish();
-    printf("\n    [battery only: %zu bytes] ", pkt_len);
+    printf("\n    [battery only: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
 
     /* Full pres0 */
     begin(0, 1, 2);
@@ -732,7 +732,7 @@ static void test_packet_sizes(void) {
     ASSERT_OK(iotdata_encode_solar(&enc, 300, 5), "sol");
     ASSERT_OK(iotdata_encode_link(&enc, -80, 0.0f), "link");
     finish();
-    printf("[full pres0: %zu bytes] ", pkt_len);
+    printf("[full pres0: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
 
     /* Full station (all 13) */
     begin(0, 1, 3);
@@ -749,7 +749,7 @@ static void test_packet_sizes(void) {
     ASSERT_OK(iotdata_encode_position(&enc, 51.5, -0.1), "pos");
     ASSERT_OK(iotdata_encode_datetime(&enc, 86400), "dt");
     finish();
-    printf("[full station: %zu bytes] ", pkt_len);
+    printf("[full station: %" PRIu32 " bytes] ", (uint32_t)pkt_len);
 
     PASS();
 }
