@@ -240,6 +240,26 @@ stack-usage:
 
 ################################################################################
 
+example-simulator:
+	$(MAKE) -C examples/simulator
+example-gateway-linux:
+	$(MAKE) -C examples/gateway_linux
+example-esp32:
+	$(MAKE) -C examples/simulator_sensor_lora_esp32
+examples: example-simulator example-gateway-linux example-esp32
+
+example-simulator-clean:
+	$(MAKE) -C examples/simulator clean
+example-gateway-linux-clean:
+	$(MAKE) -C examples/gateway_linux clean
+example-esp32-clean:
+	$(MAKE) -C examples/simulator_sensor_lora_esp32 clean
+examples-clean: example-simulator-clean example-gateway-linux-clean example-esp32-clean
+
+.PHONY: examples example-simulator example-gateway-linux example-esp32 examples-clean example-simulator-clean example-gateway-linux-clean example-esp32-clean
+
+################################################################################
+
 minimal:
 	@echo "--- Complete library (platform) ---"
 	$(CC) $(CFLAGS) -DIOTDATA_VARIANT_MAPS_DEFAULT -c $(LIB_SRC) -o iotdata_platform_full.o

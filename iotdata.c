@@ -35,7 +35,14 @@
 
 #if defined(IOTDATA_VARIANT_MAPS) && defined(IOTDATA_VARIANT_MAPS_COUNT)
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wredundant-decls"
+#endif
 extern const iotdata_variant_def_t IOTDATA_VARIANT_MAPS[];
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant) {
     if (variant < IOTDATA_VARIANT_MAPS_COUNT)
@@ -147,7 +154,8 @@ typedef struct {
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((format(printf, 2, 3)))
 #endif
-static int bprintf(iotdata_buf_t *b, const char *fmt, ...) {
+static int
+bprintf(iotdata_buf_t *b, const char *fmt, ...) {
     if (b->pos >= b->size)
         return 0;
     va_list ap;

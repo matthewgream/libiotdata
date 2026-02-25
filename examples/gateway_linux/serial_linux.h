@@ -37,34 +37,37 @@ typedef struct {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-serial_config_t serial_config;
-
+const serial_config_t *_serial_cfg = NULL;
 int serial_fd = -1;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 bool serial_check(void) {
-    return (access(serial_config.port, F_OK) == 0);
+    if (_serial_cfg == NULL)
+        return false;
+    return (access(_serial_cfg->port, F_OK) == 0);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 bool serial_connect(void) {
-    serial_fd = open(serial_config.port, O_RDWR | O_NOCTTY);
+    if (_serial_cfg == NULL)
+        return false;
+    serial_fd = open(_serial_cfg->port, O_RDWR | O_NOCTTY);
     if (serial_fd < 0) {
-        fprintf(stderr,"serial: error opening port: %s\n", strerror(errno));
+        fprintf(stderr, "serial: error opening port: %s\n", strerror(errno));
         return false;
     }
     struct termios tty;
     memset(&tty, 0, sizeof(tty));
     if (tcgetattr(serial_fd, &tty) != 0) {
-        fprintf(stderr,"serial: error getting port attributes: %s\n", strerror(errno));
+        fprintf(stderr, "serial: error getting port attributes: %s\n", strerror(errno));
         close(serial_fd);
         serial_fd = -1;
         return false;
     }
     speed_t baud;
-    switch (serial_config.rate) {
+    switch (_serial_cfg->rate) {
     case 1200:
         baud = B1200;
         break;
@@ -90,33 +93,33 @@ bool serial_connect(void) {
         baud = B115200;
         break;
     default:
-        fprintf(stderr,"serial: unsupported baud rate: %d\n", serial_config.rate);
+        fprintf(stderr, "serial: unsupported baud rate: %d\n", _serial_cfg->rate);
         close(serial_fd);
         serial_fd = -1;
         return false;
     }
     cfsetispeed(&tty, baud);
     cfsetospeed(&tty, baud);
-    if (serial_config.bits != SERIAL_8N1) {
-        fprintf(stderr,"serial: unsupported bits: %s\n", serial_bits_str(serial_config.bits));
+    if (_serial_cfg->bits != SERIAL_8N1) {
+        fprintf(stderr, "serial: unsupported bits: %s\n", serial_bits_str(_serial_cfg->bits));
         close(serial_fd);
         serial_fd = -1;
         return false;
     }
-    tty.c_cflag |= (tcflag_t) (CLOCAL | CREAD);
-    tty.c_cflag &= (tcflag_t) ~CSIZE;
-    tty.c_cflag |= (tcflag_t) CS8;      // 8-bit characters
-    tty.c_cflag &= (tcflag_t) ~PARENB;  // No parity
-    tty.c_cflag &= (tcflag_t) ~CSTOPB;  // 1 stop bit
-    tty.c_cflag &= (tcflag_t) ~CRTSCTS; // No hardware flow control
+    tty.c_cflag |= (tcflag_t)(CLOCAL | CREAD);
+    tty.c_cflag &= (tcflag_t)~CSIZE;
+    tty.c_cflag |= (tcflag_t)CS8;      // 8-bit characters
+    tty.c_cflag &= (tcflag_t)~PARENB;  // No parity
+    tty.c_cflag &= (tcflag_t)~CSTOPB;  // 1 stop bit
+    tty.c_cflag &= (tcflag_t)~CRTSCTS; // No hardware flow control
     tty.c_lflag &= (tcflag_t) ~(ICANON | ECHO | ECHOE | ISIG);
-    tty.c_oflag &= (tcflag_t) ~OPOST; // Raw output
+    tty.c_oflag &= (tcflag_t)~OPOST; // Raw output
     tty.c_iflag &= (tcflag_t) ~(IXON | IXOFF | IXANY);
     tty.c_iflag &= (tcflag_t) ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
     tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = 10;
     if (tcsetattr(serial_fd, TCSANOW, &tty) != 0) {
-        fprintf(stderr,"serial: error setting port attributes: %s\n", strerror(errno));
+        fprintf(stderr, "serial: error setting port attributes: %s\n", strerror(errno));
         close(serial_fd);
         serial_fd = -1;
         return false;
@@ -172,7 +175,7 @@ int serial_write(const unsigned char *buffer, const int length) {
     if (serial_fd < 0)
         return -1;
     usleep(50 * 1000); // yuck
-    return (int)write(serial_fd, buffer, (size_t) length);
+    return (int)write(serial_fd, buffer, (size_t)length);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -213,7 +216,7 @@ int serial_read(unsigned char *buffer, const int length, const int timeout_ms) {
         buffer[bytes_read++] = byte;
     }
     if (!buffer_complete && bytes_read > length) {
-        fprintf(stderr,"device: buffer_read: buffer too large (max %d bytes, read %d bytes)\n", length, bytes_read);
+        fprintf(stderr, "device: buffer_read: buffer too large (max %d bytes, read %d bytes)\n", length, bytes_read);
         return -1;
     }
     return bytes_read;
@@ -221,8 +224,8 @@ int serial_read(unsigned char *buffer, const int length, const int timeout_ms) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool serial_begin(const serial_config_t *config) {
-    memcpy((void *)&serial_config, config, sizeof(serial_config_t));
+bool serial_begin(const serial_config_t *cfg) {
+    _serial_cfg = cfg;
     return true;
 }
 
@@ -230,6 +233,7 @@ bool serial_begin(const serial_config_t *config) {
 
 void serial_end(void) {
     serial_disconnect();
+    _serial_cfg = NULL;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------

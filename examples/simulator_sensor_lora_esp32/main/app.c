@@ -256,8 +256,8 @@ void app_main(void) {
     ESP_LOGI(TAG, "e22: configured, transfer mode active");
 
     /* --- Simulator init (hardware RNG seed for unique run each boot) --- */
-    uint32_t seed = esp_random();
-    uint32_t t0 = millis();
+    const uint32_t seed = esp_random();
+    const uint32_t t0 = millis();
 
     iotsim_t sim;
     iotsim_init(&sim, seed, t0);
@@ -273,27 +273,22 @@ void app_main(void) {
     int channel_rssi_dbm = -100;
     uint32_t last_status_tx = 0;
 
-    ESP_LOGI(TAG, "entering main loop");
+    ESP_LOGI(TAG, "looping");
 
     for (;;) {
-        uint32_t now = millis();
+        const uint32_t now = millis();
 
-        /* Periodic channel RSSI reading */
         if (now - last_rssi >= RSSI_INTERVAL_MS) {
             last_rssi = now;
             unsigned char rssi_raw;
-            if (device_channel_rssi_read(&rssi_raw)) {
+            if (device_channel_rssi_read(&rssi_raw))
                 channel_rssi_dbm = get_rssi_dbm(rssi_raw);
-            }
         }
 
-        /* Poll simulator — drain all due packets */
         iotsim_packet_t pkt;
-        while (iotsim_poll(&sim, now, &pkt)) {
+        while (iotsim_poll(&sim, now, &pkt))
             transmit_packet(&pkt);
-        }
 
-        /* Periodic status */
         if (tx_count >= last_status_tx + STATUS_EVERY_N_TX) {
             last_status_tx = tx_count;
             ESP_LOGI(TAG, "status: tx=%u errors=%u rssi=%d dBm uptime=%us", (unsigned)tx_count, (unsigned)tx_errors, channel_rssi_dbm, (unsigned)((now - t0) / 1000));

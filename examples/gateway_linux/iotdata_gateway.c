@@ -96,7 +96,7 @@ void printf_stderr_e22900t22u(const char *format, ...) {
 #include "e22xxxtxx.h"
 
 void __sleep_ms(const unsigned long ms) {
-    usleep((unsigned int) ms * 1000);
+    usleep((unsigned int)ms * 1000);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -117,13 +117,13 @@ void __sleep_ms(const unsigned long ms) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define CONFIG_FILE_DEFAULT        "e22900t22utomqtt.cfg"
+#define CONFIG_FILE_DEFAULT        "iotdata_gateway.cfg"
 
 #define SERIAL_PORT_DEFAULT        "/dev/e22900t22u"
 #define SERIAL_RATE_DEFAULT        9600
 #define SERIAL_BITS_DEFAULT        SERIAL_8N1
 
-#define MQTT_CLIENT_DEFAULT        "e22900t22utomqtt"
+#define MQTT_CLIENT_DEFAULT        "iotdata_gateway"
 #define MQTT_SERVER_DEFAULT        "mqtt://localhost"
 #define MQTT_TOPIC_PREFIX_DEFAULT  "iotdata"
 
@@ -187,8 +187,8 @@ void config_populate_e22900t22u(e22900t22_config_t *cfg) {
 
     printf("config: e22900t22u: address=0x%04x, network=0x%02x, channel=%d, packet-size=%d, rssi-channel=%s, "
            "rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%lu, read-timeout-packet=%lu, debug=%s\n",
-           cfg->address, cfg->network, cfg->channel, cfg->packet_maxsize, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command,
-           cfg->read_timeout_packet, cfg->debug ? "on" : "off");
+           cfg->address, cfg->network, cfg->channel, cfg->packet_maxsize, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command, cfg->read_timeout_packet,
+           cfg->debug ? "on" : "off");
 }
 
 void config_populate_mqtt(mqtt_config_t *cfg) {
@@ -202,11 +202,11 @@ void config_populate_mqtt(mqtt_config_t *cfg) {
 
 static struct {
     bool enabled;
-    uint16_t station_id;        /* this gateway's station_id for mesh packets */
-    time_t beacon_interval;     /* seconds between beacon transmissions */
-    uint16_t beacon_generation; /* increments each beacon round */
-    uint16_t mesh_seq;          /* mesh packet sequence counter */
-    time_t beacon_last;         /* last beacon TX time */
+    uint16_t station_id;             /* this gateway's station_id for mesh packets */
+    time_t beacon_interval;          /* seconds between beacon transmissions */
+    uint16_t beacon_generation;      /* increments each beacon round */
+    uint16_t mesh_seq;               /* mesh packet sequence counter */
+    time_t beacon_last;              /* last beacon TX time */
     iotdata_mesh_dedup_ring_t dedup; /* dedup ring */
     /* statistics */
     unsigned long stat_beacons_tx;
@@ -218,7 +218,7 @@ static struct {
     unsigned long stat_mesh_unknown;
 } mesh;
 
-static void mesh_init(void) {
+static void mesh_begin(void) {
     memset(&mesh, 0, sizeof(mesh));
     mesh.enabled = config_get_bool("mesh-enable", false);
     mesh.station_id = (uint16_t)config_get_integer("mesh-station-id", GATEWAY_STATION_ID_DEFAULT);
@@ -418,7 +418,7 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
 
     /* report known variants */
     for (int i = 0; i < IOTDATA_VARIANT_MAPS_COUNT; i++) {
-        const iotdata_variant_def_t *vdef = iotdata_get_variant((uint8_t) i);
+        const iotdata_variant_def_t *vdef = iotdata_get_variant((uint8_t)i);
         printf("read-and-publish: variant[%d] = \"%s\" (pres_bytes=%d) -> %s/%s/<station_id>\n", i, vdef->name, vdef->num_pres_bytes, topic_prefix, vdef->name);
     }
     if (mesh.enabled)
@@ -506,6 +506,7 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
+serial_config_t serial_config;
 e22900t22_config_t e22900t22u_config;
 mqtt_config_t mqtt_config;
 const char *mqtt_topic_prefix;
@@ -576,7 +577,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    mesh_init();
+    mesh_begin();
     read_and_send(&running, mqtt_topic_prefix);
 
     device_disconnect();
