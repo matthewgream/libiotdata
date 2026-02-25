@@ -579,7 +579,7 @@ static void test_json_round_trip(void) {
 
     /* Encode → JSON */
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     /* JSON → binary */

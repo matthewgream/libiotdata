@@ -332,7 +332,7 @@ static void test_json_uses_custom_labels(void) {
     finish();
 
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     /* Verify custom labels appear */
@@ -376,7 +376,7 @@ static void test_json_wind_mast_labels(void) {
     finish();
 
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     if (!strstr(json, "wind_speed")) {

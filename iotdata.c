@@ -170,7 +170,7 @@ typedef void (*iotdata_print_fn)(const iotdata_decoded_t *dec, iotdata_buf_t *bp
 #endif
 
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-typedef void (*iotdata_json_set_fn)(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch);
+typedef void (*iotdata_json_set_fn)(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch);
 #define _IOTDATA_FIELD_OP_JSON_SET iotdata_json_set_fn json_set;
 #define _IOTDATA_OP_JSON_SET(fn)   .json_set = (iotdata_json_set_fn)(fn),
 #else
@@ -468,7 +468,7 @@ static iotdata_status_t json_get_battery(cJSON *root, iotdata_encoder_t *enc, co
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_battery(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_battery(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "level", dec->battery_level);
@@ -600,7 +600,7 @@ static iotdata_status_t json_get_link(cJSON *root, iotdata_encoder_t *enc, const
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_link(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_link(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "rssi", dec->link_rssi);
@@ -727,7 +727,7 @@ static iotdata_status_t json_get_temperature(cJSON *root, iotdata_encoder_t *enc
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_temperature(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_temperature(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->temperature);
 }
@@ -832,7 +832,7 @@ static iotdata_status_t json_get_pressure(cJSON *root, iotdata_encoder_t *enc, c
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_pressure(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_pressure(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->pressure);
 }
@@ -926,7 +926,7 @@ static iotdata_status_t json_get_humidity(cJSON *root, iotdata_encoder_t *enc, c
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_humidity(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_humidity(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->humidity);
 }
@@ -1018,7 +1018,7 @@ static iotdata_status_t json_get_environment(cJSON *root, iotdata_encoder_t *enc
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_environment(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_environment(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     json_set_temperature(obj, dec, "temperature", scratch);
     json_set_pressure(obj, dec, "pressure", scratch);
@@ -1126,7 +1126,7 @@ static iotdata_status_t json_get_wind_speed(cJSON *root, iotdata_encoder_t *enc,
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_wind_speed(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_wind_speed(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->wind_speed);
 }
@@ -1240,7 +1240,7 @@ static iotdata_status_t json_get_wind_direction(cJSON *root, iotdata_encoder_t *
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_wind_direction(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_wind_direction(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->wind_direction);
 }
@@ -1322,7 +1322,7 @@ static iotdata_status_t json_get_wind_gust(cJSON *root, iotdata_encoder_t *enc, 
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_wind_gust(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_wind_gust(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->wind_gust);
 }
@@ -1418,7 +1418,7 @@ static iotdata_status_t json_get_wind(cJSON *root, iotdata_encoder_t *enc, const
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_wind(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_wind(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     json_set_wind_speed(obj, dec, "speed", scratch);
     json_set_wind_direction(obj, dec, "direction", scratch);
@@ -1508,7 +1508,7 @@ static iotdata_status_t json_get_rain_rate(cJSON *root, iotdata_encoder_t *enc, 
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_rain_rate(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_rain_rate(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->rain_rate);
 }
@@ -1600,7 +1600,7 @@ static iotdata_status_t json_get_rain_size(cJSON *root, iotdata_encoder_t *enc, 
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_rain_size(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_rain_size(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->rain_size10);
 }
@@ -1683,7 +1683,7 @@ static iotdata_status_t json_get_rain(cJSON *root, iotdata_encoder_t *enc, const
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_rain(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_rain(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     json_set_rain_rate(obj, dec, "rate", scratch);
     json_set_rain_size(obj, dec, "size", scratch);
@@ -1788,7 +1788,7 @@ static iotdata_status_t json_get_solar(cJSON *root, iotdata_encoder_t *enc, cons
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_solar(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_solar(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "irradiance", dec->solar_irradiance);
@@ -1888,7 +1888,7 @@ static iotdata_status_t json_get_clouds(cJSON *root, iotdata_encoder_t *enc, con
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_clouds(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_clouds(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->clouds);
 }
@@ -1934,7 +1934,9 @@ _IOTDATA_OP_JSON_GET(json_get_clouds)
  * ========================================================================= */
 
 #if defined(IOTDATA_ENABLE_AIR_QUALITY_PM) || defined(IOTDATA_ENABLE_AIR_QUALITY)
+#if !defined(IOTDATA_NO_PRINT) || !defined(IOTDATA_NO_DUMP) || !defined(IOTDATA_NO_JSON)
 static const char *_aq_pm_names[IOTDATA_AIR_QUALITY_PM_COUNT] = { "pm1", "pm25", "pm4", "pm10" };
+#endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static const char *_aq_pm_labels[IOTDATA_AIR_QUALITY_PM_COUNT] = { "PM1", "PM2.5", "PM4", "PM10" };
 #endif
@@ -1955,17 +1957,21 @@ static const uint16_t _aq_gas_max[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
     IOTDATA_AIR_QUALITY_GAS_MAX_HCHO, IOTDATA_AIR_QUALITY_GAS_MAX_O3,  IOTDATA_AIR_QUALITY_GAS_MAX_RSVD6, IOTDATA_AIR_QUALITY_GAS_MAX_RSVD7,
 };
 #endif
+#if !defined(IOTDATA_NO_PRINT) || !defined(IOTDATA_NO_DUMP)
 static const char *_aq_gas_names[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
     "voc", "nox", "co2", "co", "hcho", "o3", "rsvd6", "rsvd7",
 };
+#endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static const char *_aq_gas_labels[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
     "VOC", "NOx", "CO2", "CO", "HCHO", "O3", "rsvd6", "rsvd7",
 };
 #endif
+#if !defined(IOTDATA_NO_PRINT) || !defined(IOTDATA_NO_DUMP)
 static const char *_aq_gas_units[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
     "idx", "idx", "ppm", "ppm", "ppb", "ppb", "", "",
 };
+#endif
 #if !defined(IOTDATA_NO_DUMP)
 static const char *_aq_gas_range[IOTDATA_AIR_QUALITY_GAS_COUNT] = {
     "0..510, 2 idx", "0..510, 2 idx", "0..51150, 50 ppm", "0..1023, 1 ppm", "0..5115, 5 ppb", "0..1023, 1 ppb", "reserved", "reserved",
@@ -2011,7 +2017,7 @@ static bool unpack_aq_index(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_aq_index(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_aq_index(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->aq_index);
 }
@@ -2107,7 +2113,7 @@ static bool unpack_aq_pm(const uint8_t *buf, size_t bb, size_t *bp, iotdata_deco
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_aq_pm(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_aq_pm(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     for (int i = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
@@ -2226,7 +2232,7 @@ static bool unpack_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dec
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_aq_gas(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_aq_gas(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
@@ -2379,7 +2385,7 @@ static iotdata_status_t json_get_air_quality(cJSON *root, iotdata_encoder_t *enc
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_air_quality(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_air_quality(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     json_set_aq_index(obj, dec, "index", scratch);
     json_set_aq_pm(obj, dec, "pm", scratch);
@@ -2471,7 +2477,7 @@ static iotdata_status_t json_get_radiation_cpm(cJSON *root, iotdata_encoder_t *e
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_radiation_cpm(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_radiation_cpm(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->radiation_cpm);
 }
@@ -2576,7 +2582,7 @@ static iotdata_status_t json_get_radiation_dose(cJSON *root, iotdata_encoder_t *
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_radiation_dose(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_radiation_dose(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->radiation_dose);
 }
@@ -2667,7 +2673,7 @@ static iotdata_status_t json_get_radiation(cJSON *root, iotdata_encoder_t *enc, 
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_radiation(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_radiation(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     json_set_radiation_cpm(obj, dec, "cpm", scratch);
     json_set_radiation_dose(obj, dec, "dose", scratch);
@@ -2759,7 +2765,7 @@ static iotdata_status_t json_get_depth(cJSON *root, iotdata_encoder_t *enc, cons
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_depth(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_depth(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->depth);
 }
@@ -2902,7 +2908,7 @@ static iotdata_status_t json_get_position(cJSON *root, iotdata_encoder_t *enc, c
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_position(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_position(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "latitude", dec->position_lat);
@@ -3019,7 +3025,7 @@ static iotdata_status_t json_get_datetime(cJSON *root, iotdata_encoder_t *enc, c
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_datetime(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_datetime(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->datetime_secs);
 }
@@ -3410,11 +3416,13 @@ static bool unpack_image(const uint8_t *buf, size_t bb, size_t *bp, iotdata_deco
     return true;
 }
 #endif
+#if !defined(IOTDATA_NO_JSON) || !defined(IOTDATA_NO_DUMP) || !defined(IOTDATA_NO_PRINT)
 static const char *_image_fmt_names[] = { "bilevel", "grey4", "grey16", "reserved" };
 static const char *_image_size_names[] = { "24x18", "32x24", "48x36", "64x48" };
 static const char *_image_comp_names[] = { "raw", "rle", "heatshrink", "reserved" };
+#endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_image(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_image(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddStringToObject(obj, "format", _image_fmt_names[dec->image_pixel_format & 0x03]);
     cJSON_AddStringToObject(obj, "size", _image_size_names[dec->image_size_tier & 0x03]);
@@ -3572,7 +3580,7 @@ static iotdata_status_t json_get_flags(cJSON *root, iotdata_encoder_t *enc, cons
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void json_set_flags(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_flags(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON_AddNumberToObject(root, label, dec->flags);
 }
@@ -3806,7 +3814,7 @@ static const char *const _tlv_reason_names[] = { "unknown", "power_on", "softwar
 #endif
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-static void _json_set_tlv_data(cJSON *obj, const iotdata_decoded_tlv_t *t, iotdata_decode_from_json_scratch_t *scratch) {
+static void _json_set_tlv_data(cJSON *obj, const iotdata_decoded_tlv_t *t, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON_AddStringToObject(obj, "format", t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw");
     if (t->format == IOTDATA_TLV_FMT_STRING)
         cJSON_AddStringToObject(obj, "data", t->str);
@@ -3814,7 +3822,7 @@ static void _json_set_tlv_data(cJSON *obj, const iotdata_decoded_tlv_t *t, iotda
         cJSON_AddStringToObject(obj, "data", _b64_encode(t->raw, t->length, scratch->tlv.b64));
 }
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
-static void _json_set_tlv_kv(cJSON *obj, const char *str, iotdata_decode_from_json_scratch_t *scratch) {
+static void _json_set_tlv_kv(cJSON *obj, const char *str, iotdata_decode_to_json_scratch_t *scratch) {
     /* Parse space-delimited "KEY1 VALUE1 KEY2 VALUE2" into JSON object */
     cJSON *data = cJSON_AddObjectToObject(obj, "data");
     const char *p = str;
@@ -3846,7 +3854,7 @@ static void _json_set_tlv_kv(cJSON *obj, const char *str, iotdata_decode_from_js
         }
     }
 }
-static void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t *t, iotdata_decode_from_json_scratch_t *scratch) {
+static void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t *t, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *obj = cJSON_CreateObject();
     cJSON_AddNumberToObject(obj, "type", t->type);
     switch (t->type) {
@@ -3916,14 +3924,14 @@ static void _json_set_tlv_global(cJSON *arr, const iotdata_decoded_tlv_t *t, iot
     }
     cJSON_AddItemToArray(arr, obj);
 }
-static void _json_set_tlv_quality(cJSON *arr, const iotdata_decoded_tlv_t *t, iotdata_decode_from_json_scratch_t *scratch) {
+static void _json_set_tlv_quality(cJSON *arr, const iotdata_decoded_tlv_t *t, iotdata_decode_to_json_scratch_t *scratch) {
     /* Reserved for future quality/metadata TLVs (0x10-0x1F) — generic encoding */
     cJSON *obj = cJSON_CreateObject();
     cJSON_AddNumberToObject(obj, "type", t->type);
     _json_set_tlv_data(obj, t, scratch);
     cJSON_AddItemToArray(arr, obj);
 }
-static void _json_set_tlv_user(cJSON *arr, const iotdata_decoded_tlv_t *t, iotdata_decode_from_json_scratch_t *scratch) {
+static void _json_set_tlv_user(cJSON *arr, const iotdata_decoded_tlv_t *t, iotdata_decode_to_json_scratch_t *scratch) {
     /* Application-defined TLVs (0x20+) — generic encoding */
     cJSON *obj = cJSON_CreateObject();
     cJSON_AddNumberToObject(obj, "type", t->type);
@@ -3931,7 +3939,7 @@ static void _json_set_tlv_user(cJSON *arr, const iotdata_decoded_tlv_t *t, iotda
     cJSON_AddItemToArray(arr, obj);
 }
 #endif
-static void json_set_tlv(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void json_set_tlv(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     cJSON *arr = cJSON_AddArrayToObject(root, label);
     for (int i = 0; i < dec->tlv_count; i++) {
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
@@ -4655,13 +4663,13 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
 #if !defined(IOTDATA_NO_JSON)
 #if !defined(IOTDATA_NO_DECODE)
 
-static void _iotdata_decode_to_json_set_field(cJSON *root, const iotdata_decoded_t *dec, iotdata_field_type_t type, const char *label, iotdata_decode_from_json_scratch_t *scratch) {
+static void _iotdata_decode_to_json_set_field(cJSON *root, const iotdata_decoded_t *dec, iotdata_field_type_t type, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->json_set)
         ops->json_set(root, dec, label, scratch);
 }
 
-iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out, iotdata_decode_from_json_scratch_t *scratch) {
+iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out, iotdata_decode_to_json_scratch_t *scratch) {
 #if !defined(IOTDATA_NO_CHECKS_STATE)
     if (!json_out)
         return IOTDATA_ERR_CTX_NULL;

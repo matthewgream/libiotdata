@@ -1198,8 +1198,8 @@ typedef struct {
         iotdata_decode_to_json_scratch_tlv_t tlv;
 #endif
     };
-} iotdata_decode_from_json_scratch_t;
-iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out, iotdata_decode_from_json_scratch_t *scratch);
+} iotdata_decode_to_json_scratch_t;
+iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out, iotdata_decode_to_json_scratch_t *scratch);
 #endif /* !IOTDATA_NO_DECODE */
 #if !defined(IOTDATA_NO_ENCODE)
 typedef struct {

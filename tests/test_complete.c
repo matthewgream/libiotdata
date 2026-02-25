@@ -668,7 +668,7 @@ static void test_json_round_trip_complete(void) {
 
     /* Binary → JSON */
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     /* JSON → binary */
@@ -701,7 +701,7 @@ static void test_json_round_trip_with_tlv(void) {
 
     /* Binary → JSON */
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     /* JSON → binary (zero scratch: iotdata_encode_begin does not reset tlv_count) */
@@ -745,7 +745,7 @@ static void test_json_round_trip_standalone(void) {
     finish();
 
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     uint8_t pkt2[256];

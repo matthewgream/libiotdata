@@ -278,7 +278,7 @@ static void print_to_string(const uint8_t *buf, size_t len) {
 static void print_to_json(const uint8_t *buf, size_t len) {
     iotdata_status_t rc;
     char *json_out;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     if ((rc = iotdata_decode_to_json(buf, len, &json_out, &dec_scratch)) == IOTDATA_OK) {
         printf("\n** JSON:\n\n%s", json_out);
         free(json_out);

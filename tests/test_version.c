@@ -332,7 +332,7 @@ int main(void) {
     {
         char *json = NULL;
         iotdata_status_t rc;
-        iotdata_decode_from_json_scratch_t dec_scratch;
+        iotdata_decode_to_json_scratch_t dec_scratch;
         rc = iotdata_decode_to_json(buf, len, &json, &dec_scratch);
         CHECK(rc == IOTDATA_OK, "decode_to_json");
         CHECK(json != NULL, "json non-null");

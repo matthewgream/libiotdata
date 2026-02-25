@@ -1064,7 +1064,7 @@ static void test_json_negative_round_trip(void) {
     finish();
 
     char *json = NULL;
-    iotdata_decode_from_json_scratch_t dec_scratch;
+    iotdata_decode_to_json_scratch_t dec_scratch;
     ASSERT_OK(iotdata_decode_to_json(pkt, pkt_len, &json, &dec_scratch), "to_json");
 
     uint8_t pkt2[256] = { 0 };
