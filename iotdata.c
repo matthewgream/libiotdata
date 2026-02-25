@@ -17,6 +17,7 @@
 #include "iotdata.h"
 
 #include <string.h>
+#include <inttypes.h>
 
 #if !defined(IOTDATA_NO_FLOATING)
 #include <math.h>
@@ -368,7 +369,7 @@ static const char *_padd(const char *label) {
 }
 #endif
 
-#if !(defined(IOTDATA_NO_DUMP) || defined(IOTDATA_NO_PRINT))
+#if !defined(IOTDATA_NO_DUMP)
 #if defined(IOTDATA_NO_FLOATING)
 static int fmt_scaled(char *buf, size_t sz, int32_t val, int32_t divisor, const char *unit) {
     return snprintf(buf, sz, "%s%d.%01d%s%s", val < 0 ? "-" : "", (int)((val < 0 ? -val : val) / divisor), (int)((val < 0 ? -val : val) % divisor), unit[0] ? " " : "", unit);
@@ -454,7 +455,7 @@ static int dump_battery(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_BATTERY_LEVEL_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u%%", dequantise_battery_level(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 "%%", dequantise_battery_level(r));
     n = dump_add(dump, n, s, IOTDATA_BATTERY_LEVEL_BITS, r, dump->_dec_buf, "0..100%%, 5b quant", "battery_level");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_BATTERY_CHARGE_BITS);
@@ -465,7 +466,7 @@ static int dump_battery(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_battery(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u%% %s\n", label, _padd(label), dec->battery_level, dec->battery_charging ? "(charging)" : "(discharging)");
+    fprintf(fp, "  %s:%s %" PRIu8 "%% %s\n", label, _padd(label), dec->battery_level, dec->battery_charging ? "(charging)" : "(discharging)");
 }
 #endif
 // clang-format off
@@ -706,7 +707,7 @@ static void json_set_temperature(cJSON *root, const iotdata_decoded_t *dec, cons
     cJSON_AddNumberToObject(root, label, dec->temperature);
 }
 #endif
-#if defined(IOTDATA_ENABLE_TEMPERATURE) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_temperature(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
@@ -811,19 +812,19 @@ static void json_set_pressure(cJSON *root, const iotdata_decoded_t *dec, const c
     cJSON_AddNumberToObject(root, label, dec->pressure);
 }
 #endif
-#if defined(IOTDATA_ENABLE_PRESSURE) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_pressure(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_PRESSURE_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u hPa", dequantise_pressure(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " hPa", dequantise_pressure(r));
     n = dump_add(dump, n, s, IOTDATA_PRESSURE_BITS, r, dump->_dec_buf, "850..1105 hPa", "pressure");
     return n;
 }
 #endif
 #if defined(IOTDATA_ENABLE_PRESSURE) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_pressure(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u hPa\n", label, _padd(label), dec->pressure);
+    fprintf(fp, "  %s:%s %" PRIu16 " hPa\n", label, _padd(label), dec->pressure);
 }
 #endif
 // clang-format off
@@ -905,19 +906,19 @@ static void json_set_humidity(cJSON *root, const iotdata_decoded_t *dec, const c
     cJSON_AddNumberToObject(root, label, dec->humidity);
 }
 #endif
-#if defined(IOTDATA_ENABLE_HUMIDITY) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_humidity(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_HUMIDITY_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u%%", dequantise_humidity(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 "%%", dequantise_humidity(r));
     n = dump_add(dump, n, s, IOTDATA_HUMIDITY_BITS, r, dump->_dec_buf, "0..100%%", "humidity");
     return n;
 }
 #endif
 #if defined(IOTDATA_ENABLE_HUMIDITY) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_humidity(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u%%\n", label, _padd(label), dec->humidity);
+    fprintf(fp, "  %s:%s %" PRIu8 "%%\n", label, _padd(label), dec->humidity);
 }
 #endif
 // clang-format off
@@ -1010,10 +1011,10 @@ static int dump_environment(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_environment(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    fprintf(fp, "  %s:%s %.2f C, %u hPa, %u%%\n", label, _padd(label), dec->temperature, dec->pressure, dec->humidity);
+    fprintf(fp, "  %s:%s %.2f C, %" PRIu16 " hPa, %" PRIu8 "%%\n", label, _padd(label), dec->temperature, dec->pressure, dec->humidity);
 #else
     const int32_t ta = dec->temperature < 0 ? -(dec->temperature) : dec->temperature;
-    fprintf(fp, "  %s:%s %s%d.%02d C, %u hPa, %u%%\n", label, _padd(label), dec->temperature < 0 ? "-" : "", ta / 100, ta % 100, dec->pressure, dec->humidity);
+    fprintf(fp, "  %s:%s %s%d.%02d C, %" PRIu16 " hPa, %" PRIu8 "%%\n", label, _padd(label), dec->temperature < 0 ? "-" : "", ta / 100, ta % 100, dec->pressure, dec->humidity);
 #endif
 }
 #endif
@@ -1105,7 +1106,7 @@ static void json_set_wind_speed(cJSON *root, const iotdata_decoded_t *dec, const
     cJSON_AddNumberToObject(root, label, dec->wind_speed);
 }
 #endif
-#if defined(IOTDATA_ENABLE_WIND_SPEED) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_wind_speed(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
@@ -1219,19 +1220,19 @@ static void json_set_wind_direction(cJSON *root, const iotdata_decoded_t *dec, c
     cJSON_AddNumberToObject(root, label, dec->wind_direction);
 }
 #endif
-#if defined(IOTDATA_ENABLE_WIND_DIRECTION) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_wind_direction(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_WIND_DIRECTION_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u deg", dequantise_wind_direction(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " deg", dequantise_wind_direction(r));
     n = dump_add(dump, n, s, IOTDATA_WIND_DIRECTION_BITS, r, dump->_dec_buf, "0..355, ~1.4deg", "wind_direction");
     return n;
 }
 #endif
 #if defined(IOTDATA_ENABLE_WIND_DIRECTION) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_wind_direction(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u deg\n", label, _padd(label), dec->wind_direction);
+    fprintf(fp, "  %s:%s %" PRIu16 " deg\n", label, _padd(label), dec->wind_direction);
 }
 #endif
 // clang-format off
@@ -1301,7 +1302,7 @@ static void json_set_wind_gust(cJSON *root, const iotdata_decoded_t *dec, const 
     cJSON_AddNumberToObject(root, label, dec->wind_gust);
 }
 #endif
-#if defined(IOTDATA_ENABLE_WIND_GUST) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_wind_gust(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
@@ -1410,9 +1411,9 @@ static int dump_wind(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_wind(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    fprintf(fp, "  %s:%s %.1f m/s, %u deg, gust %.1f m/s\n", label, _padd(label), dec->wind_speed, dec->wind_direction, dec->wind_gust);
+    fprintf(fp, "  %s:%s %.1f m/s, %" PRIu16 " deg, gust %.1f m/s\n", label, _padd(label), dec->wind_speed, dec->wind_direction, dec->wind_gust);
 #else
-    fprintf(fp, "  %s:%s %d.%02d m/s, %u deg, gust %d.%02d m/s\n", label, _padd(label), dec->wind_speed / 100, dec->wind_speed % 100, dec->wind_direction, dec->wind_gust / 100, dec->wind_gust % 100);
+    fprintf(fp, "  %s:%s %d.%02d m/s, %" PRIu16 " deg, gust %d.%02d m/s\n", label, _padd(label), dec->wind_speed / 100, dec->wind_speed % 100, dec->wind_direction, dec->wind_gust / 100, dec->wind_gust % 100);
 #endif
 }
 #endif
@@ -1487,19 +1488,19 @@ static void json_set_rain_rate(cJSON *root, const iotdata_decoded_t *dec, const 
     cJSON_AddNumberToObject(root, label, dec->rain_rate);
 }
 #endif
-#if defined(IOTDATA_ENABLE_RAIN_RATE) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_rain_rate(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RAIN_RATE_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u mm/hr", dequantise_rain_rate(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 " mm/hr", dequantise_rain_rate(r));
     n = dump_add(dump, n, s, IOTDATA_RAIN_RATE_BITS, r, dump->_dec_buf, "0..255 mm/hr", "rain_rate");
     return n;
 }
 #endif
 #if defined(IOTDATA_ENABLE_RAIN_RATE) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_rain_rate(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u mm/hr\n", label, _padd(label), dec->rain_rate);
+    fprintf(fp, "  %s:%s %" PRIu8 " mm/hr\n", label, _padd(label), dec->rain_rate);
 }
 #endif
 // clang-format off
@@ -1579,19 +1580,19 @@ static void json_set_rain_size(cJSON *root, const iotdata_decoded_t *dec, const 
     cJSON_AddNumberToObject(root, label, dec->rain_size10);
 }
 #endif
-#if defined(IOTDATA_ENABLE_RAIN_SIZE) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_rain_size(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RAIN_SIZE_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u.%u mm/d", dequantise_rain_size(r) / 10, dequantise_rain_size(r) % 10);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 ".%" PRIu8 " mm/d", dequantise_rain_size(r) / 10, dequantise_rain_size(r) % 10);
     n = dump_add(dump, n, s, IOTDATA_RAIN_SIZE_BITS, r, dump->_dec_buf, "0..6.3 mm/d", "rain_size");
     return n;
 }
 #endif
 #if defined(IOTDATA_ENABLE_RAIN_SIZE) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_rain_size(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u.%u mm/d\n", label, _padd(label), dec->rain_size10 / 10, dec->rain_size10 % 10);
+    fprintf(fp, "  %s:%s %" PRIu8 ".%" PRIu8 " mm/d\n", label, _padd(label), dec->rain_size10 / 10, dec->rain_size10 % 10);
 }
 #endif
 // clang-format off
@@ -1672,7 +1673,7 @@ static int dump_rain(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_rain(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u mm/hr, %u.%u mm/d\n", label, _padd(label), dec->rain_rate, dec->rain_size10 / 10, dec->rain_size10 % 10);
+    fprintf(fp, "  %s:%s %" PRIu8 " mm/hr, %" PRIu8 ".%" PRIu8 " mm/d\n", label, _padd(label), dec->rain_rate, dec->rain_size10 / 10, dec->rain_size10 % 10);
 }
 #endif
 // clang-format off
@@ -1774,18 +1775,18 @@ static int dump_solar(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_SOLAR_IRRADIATION_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u W/m2", dequantise_solar_irradiance(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " W/m2", dequantise_solar_irradiance(r));
     n = dump_add(dump, n, s, IOTDATA_SOLAR_IRRADIATION_BITS, r, dump->_dec_buf, "0..1023 W/m2", "solar_irradiance");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_SOLAR_ULTRAVIOLET_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", dequantise_solar_ultraviolet(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8, dequantise_solar_ultraviolet(r));
     n = dump_add(dump, n, s, IOTDATA_SOLAR_ULTRAVIOLET_BITS, r, dump->_dec_buf, "0..15", "solar_ultraviolet");
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_solar(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u W/m2, UV %u\n", label, _padd(label), dec->solar_irradiance, dec->solar_ultraviolet);
+    fprintf(fp, "  %s:%s %" PRIu16 " W/m2, UV %" PRIu8 "\n", label, _padd(label), dec->solar_irradiance, dec->solar_ultraviolet);
 }
 #endif
 // clang-format off
@@ -1872,14 +1873,14 @@ static int dump_clouds(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_CLOUDS_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u okta", dequantise_clouds(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 " okta", dequantise_clouds(r));
     n = dump_add(dump, n, s, IOTDATA_CLOUDS_BITS, r, dump->_dec_buf, "0..8 okta", "clouds");
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_clouds(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u okta\n", label, _padd(label), dec->clouds);
+    fprintf(fp, "  %s:%s %" PRIu8 " okta\n", label, _padd(label), dec->clouds);
 }
 #endif
 // clang-format off
@@ -2004,14 +2005,14 @@ static int dump_aq_index(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_INDEX_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u AQI", dequantise_aq_index(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " AQI", dequantise_aq_index(r));
     n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_INDEX_BITS, r, dump->_dec_buf, "0..500 AQI", "aq_index");
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_aq_index(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u AQI\n", label, _padd(label), dec->aq_index);
+    fprintf(fp, "  %s:%s %" PRIu16 " AQI\n", label, _padd(label), dec->aq_index);
 }
 #endif
 // clang-format off
@@ -2129,7 +2130,7 @@ static void print_aq_pm(const iotdata_decoded_t *dec, FILE *fp, const char *labe
     fprintf(fp, "  %s:%s", label, _padd(label));
     for (int i = 0, first = 0; i < IOTDATA_AIR_QUALITY_PM_COUNT; i++)
         if (dec->aq_pm_present & (1U << i))
-            fprintf(fp, "%s %s=%u", first++ ? "," : "", _aq_pm_labels[i], dec->aq_pm[i]);
+            fprintf(fp, "%s %s=%" PRIu16, first++ ? "," : "", _aq_pm_labels[i], dec->aq_pm[i]);
     fprintf(fp, "%s\n", dec->aq_pm_present ? " ug/m3" : "");
 }
 #endif
@@ -2237,7 +2238,7 @@ static int dump_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t
         if (present & (1U << i)) {
             s = *bp;
             uint32_t r = bits_read(buf, bb, bp, _aq_gas_bits[i]);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u %s", r * _aq_gas_res[i], _aq_gas_units[i]);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 " %s", r * _aq_gas_res[i], _aq_gas_units[i]);
             n = dump_add(dump, n, s, _aq_gas_bits[i], r, dump->_dec_buf, _aq_gas_range[i], _aq_gas_names[i]);
         }
     }
@@ -2249,7 +2250,7 @@ static void print_aq_gas(const iotdata_decoded_t *dec, FILE *fp, const char *lab
     fprintf(fp, "  %s:%s", label, _padd(label));
     for (int i = 0, first = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
         if (dec->aq_gas_present & (1U << i))
-            fprintf(fp, "%s %s=%u%s%s", first++ ? "," : "", _aq_gas_labels[i], dec->aq_gas[i], _aq_gas_units[i][0] ? " " : "", _aq_gas_units[i][0] ? _aq_gas_units[i] : "");
+            fprintf(fp, "%s %s=%" PRIu16 "%s%s", first++ ? "," : "", _aq_gas_labels[i], dec->aq_gas[i], _aq_gas_units[i][0] ? " " : "", _aq_gas_units[i][0] ? _aq_gas_units[i] : "");
     fprintf(fp, "\n");
 }
 #endif
@@ -2450,19 +2451,19 @@ static void json_set_radiation_cpm(cJSON *root, const iotdata_decoded_t *dec, co
     cJSON_AddNumberToObject(root, label, dec->radiation_cpm);
 }
 #endif
-#if defined(IOTDATA_ENABLE_RADIATION_CPM) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_radiation_cpm(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RADIATION_CPM_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u CPM", dequantise_radiation_cpm(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " CPM", dequantise_radiation_cpm(r));
     n = dump_add(dump, n, s, IOTDATA_RADIATION_CPM_BITS, r, dump->_dec_buf, "0..65535 CPM", "radiation_cpm");
     return n;
 }
 #endif
 #if defined(IOTDATA_ENABLE_RADIATION_CPM) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_radiation_cpm(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u CPM\n", label, _padd(label), dec->radiation_cpm);
+    fprintf(fp, "  %s:%s %" PRIu16 " CPM\n", label, _padd(label), dec->radiation_cpm);
 }
 #endif
 // clang-format off
@@ -2555,7 +2556,7 @@ static void json_set_radiation_dose(cJSON *root, const iotdata_decoded_t *dec, c
     cJSON_AddNumberToObject(root, label, dec->radiation_dose);
 }
 #endif
-#if defined(IOTDATA_ENABLE_RADIATION_DOSE) && !defined(IOTDATA_NO_DUMP)
+#if !defined(IOTDATA_NO_DUMP)
 static int dump_radiation_dose(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     (void)label;
     size_t s = *bp;
@@ -2657,9 +2658,9 @@ static int dump_radiation(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dum
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_radiation(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    fprintf(fp, "  %s:%s %u CPM, %.2f uSv/h\n", label, _padd(label), dec->radiation_cpm, dec->radiation_dose);
+    fprintf(fp, "  %s:%s %" PRIu16 " CPM, %.2f uSv/h\n", label, _padd(label), dec->radiation_cpm, dec->radiation_dose);
 #else
-    fprintf(fp, "  %s:%s %u CPM, %d.%02d uSv/h\n", label, _padd(label), dec->radiation_cpm, dec->radiation_dose / 100, dec->radiation_dose % 100);
+    fprintf(fp, "  %s:%s %" PRIu16 " CPM, %d.%02d uSv/h\n", label, _padd(label), dec->radiation_cpm, dec->radiation_dose / 100, dec->radiation_dose % 100);
 #endif
 }
 #endif
@@ -2742,14 +2743,14 @@ static void json_set_depth(cJSON *root, const iotdata_decoded_t *dec, const char
 static int dump_depth(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_DEPTH_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u cm", dequantise_depth(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " cm", dequantise_depth(r));
     n = dump_add(dump, n, s, IOTDATA_DEPTH_BITS, r, dump->_dec_buf, "0..1023 cm", label);
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_depth(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %u cm\n", label, _padd(label), dec->depth);
+    fprintf(fp, "  %s:%s %" PRIu16 " cm\n", label, _padd(label), dec->depth);
 }
 #endif
 // clang-format off
@@ -3004,14 +3005,15 @@ static int dump_datetime(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_DATETIME_BITS);
     const uint32_t secs = dequantise_datetime(r);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "day %u %02u:%02u:%02u (%us)", secs / 86400, (secs % 86400) / 3600, (secs % 3600) / 60, secs % 60, secs);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "day %" PRIu32 " %02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 " (%" PRIu32 "s)", secs / 86400, (secs % 86400) / 3600, (secs % 3600) / 60, secs % 60, secs);
     n = dump_add(dump, n, s, IOTDATA_DATETIME_BITS, r, dump->_dec_buf, "5s res", "datetime");
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_datetime(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s day %u %02u:%02u:%02u (%us)\n", label, _padd(label), dec->datetime_secs / 86400, (dec->datetime_secs % 86400) / 3600, (dec->datetime_secs % 3600) / 60, dec->datetime_secs % 60, dec->datetime_secs);
+    fprintf(fp, "  %s:%s day %" PRIu32 " %02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 " (%" PRIu32 "s)\n", label, _padd(label), dec->datetime_secs / 86400, (dec->datetime_secs % 86400) / 3600, (dec->datetime_secs % 3600) / 60,
+            dec->datetime_secs % 60, dec->datetime_secs);
 }
 #endif
 // clang-format off
@@ -3449,7 +3451,7 @@ static int dump_image(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
     /* Length byte */
     size_t s = *bp;
     const uint8_t length = (uint8_t)bits_read(buf, bb, bp, 8);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u (%u total)", length, 1 + length);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 " (%" PRIu8 " total)", length, 1 + length);
     n = dump_add(dump, n, s, 8, length, dump->_dec_buf, "1..255", "image_length");
     /* Control byte */
     s = *bp;
@@ -3466,7 +3468,7 @@ static int dump_image(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
             *bp += data_bits;
         else
             *bp = bb;
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u bytes", data_len);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 " bytes", data_len);
         n = dump_add(dump, n, s, data_bits, 0, dump->_dec_buf, "pixel data", "image_pixels");
     }
     return n;
@@ -3474,7 +3476,7 @@ static int dump_image(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_image(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s %s %s %s, %u bytes%s%s\n", label, _padd(label), _image_fmt_names[dec->image_pixel_format & 3], _image_size_names[dec->image_size_tier & 3], _image_comp_names[dec->image_compression & 3], dec->image_data_len,
+    fprintf(fp, "  %s:%s %s %s %s, %" PRIu8 " bytes%s%s\n", label, _padd(label), _image_fmt_names[dec->image_pixel_format & 3], _image_size_names[dec->image_size_tier & 3], _image_comp_names[dec->image_compression & 3], dec->image_data_len,
             (dec->image_flags & IOTDATA_IMAGE_FLAG_FRAGMENT) ? " [fragment]" : "", (dec->image_flags & IOTDATA_IMAGE_FLAG_INVERT) ? " [inverted]" : "");
 }
 #endif
@@ -3555,14 +3557,14 @@ static int dump_flags(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_FLAGS_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02x", r);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIx32, r);
     n = dump_add(dump, n, s, IOTDATA_FLAGS_BITS, r, dump->_dec_buf, "8-bit bitmask", "flags");
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_flags(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s:%s 0x%02x\n", label, _padd(label), dec->flags);
+    fprintf(fp, "  %s:%s 0x%02" PRIx8 "\n", label, _padd(label), dec->flags);
 }
 #endif
 // clang-format off
@@ -4073,7 +4075,7 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
             n = dump_add(dump, n, *bp, 24, life, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].restarts", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", restarts);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16, restarts);
             n = dump_add(dump, n, *bp, 16, restarts, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].reason", tlv_idx);
@@ -4091,15 +4093,15 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
             const uint16_t free_heap = (uint16_t)bits_read(buf, bb, &p, 16);
             const uint16_t active = (uint16_t)bits_read(buf, bb, &p, 16);
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].cpu_temp", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%d°C", cpu_temp);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRId8 "°C", cpu_temp);
             n = dump_add(dump, n, *bp, 8, (uint32_t)(uint8_t)cpu_temp, dump->_dec_buf, "-40..85", dump->_name_buf);
             *bp += 8;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].supply_mv", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%umV", supply_mv);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 "mV", supply_mv);
             n = dump_add(dump, n, *bp, 16, supply_mv, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].free_heap", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", free_heap);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16, free_heap);
             n = dump_add(dump, n, *bp, 16, free_heap, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_active", tlv_idx);
@@ -4146,12 +4148,12 @@ static int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *d
         const uint8_t format = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_FMT_BITS);
         const uint8_t type = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_TYPE_BITS);
         more = bits_read(buf, bb, bp, IOTDATA_TLV_MORE_BITS) != 0;
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=0x%02x more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=0x%02" PRIx8 " more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
         snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].hdr", tlv_idx);
         n = dump_add(dump, n, s, IOTDATA_TLV_FMT_BITS + IOTDATA_TLV_TYPE_BITS + IOTDATA_TLV_MORE_BITS, 0, dump->_dec_buf, "format+type+more", dump->_name_buf);
         s = *bp;
         const uint8_t length = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_LENGTH_BITS);
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", length);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8, length);
         snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].len", tlv_idx);
         n = dump_add(dump, n, s, IOTDATA_TLV_LENGTH_BITS, length, dump->_dec_buf, "0..255", dump->_name_buf);
         if (length > 0) {
@@ -4190,7 +4192,7 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
         if (t->format == IOTDATA_TLV_FMT_STRING)
             _print_tlv_kv(fp, t->str, i, "version");
         else
-            fprintf(fp, "    [%d] version: raw(%u)\n", i, t->length);
+            fprintf(fp, "    [%d] version: raw(%" PRIu8 ")\n", i, t->length);
         break;
     case IOTDATA_TLV_STATUS:
         if (t->format == IOTDATA_TLV_FMT_RAW && t->length == IOTDATA_TLV_STATUS_LENGTH) {
@@ -4199,13 +4201,13 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
             const uint32_t life = ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5];
             const uint16_t restarts = (uint16_t)((b[6] << 8) | b[7]);
             const uint8_t reason = b[8];
-            fprintf(fp, "    [%d] status: session=%lus lifetime=%lus restarts=%u reason=%s", i, (unsigned long)(sess * IOTDATA_TLV_STATUS_TICKS_RES), (unsigned long)(life * IOTDATA_TLV_STATUS_TICKS_RES), restarts,
+            fprintf(fp, "    [%d] status: session=%lus lifetime=%lus restarts=%" PRIu16 " reason=%s", i, (unsigned long)(sess * IOTDATA_TLV_STATUS_TICKS_RES), (unsigned long)(life * IOTDATA_TLV_STATUS_TICKS_RES), restarts,
                     reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
             if (reason >= 0x80)
-                fprintf(fp, "(0x%02x)", reason);
+                fprintf(fp, "(0x%02" PRIx8 ")", reason);
             fprintf(fp, "\n");
         } else {
-            fprintf(fp, "    [%d] status: malformed(%u bytes)\n", i, t->length);
+            fprintf(fp, "    [%d] status: malformed(%" PRIu8 " bytes)\n", i, t->length);
         }
         break;
     case IOTDATA_TLV_HEALTH:
@@ -4217,17 +4219,17 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
             const uint16_t active = (uint16_t)((b[5] << 8) | b[6]);
             fprintf(fp, "    [%d] health:", i);
             if (cpu_temp != IOTDATA_TLV_HEALTH_TEMP_NA)
-                fprintf(fp, " cpu=%d°C", cpu_temp);
-            fprintf(fp, " supply=%umV heap=%u active=%lus\n", supply_mv, free_heap, (unsigned long)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
+                fprintf(fp, " cpu=%" PRId8 "°C", cpu_temp);
+            fprintf(fp, " supply=%" PRIu16 "mV heap=%" PRIu16 " active=%lus\n", supply_mv, free_heap, (unsigned long)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
         } else {
-            fprintf(fp, "    [%d] health: malformed(%u bytes)\n", i, t->length);
+            fprintf(fp, "    [%d] health: malformed(%" PRIu8 " bytes)\n", i, t->length);
         }
         break;
     case IOTDATA_TLV_CONFIG:
         if (t->format == IOTDATA_TLV_FMT_STRING)
             _print_tlv_kv(fp, t->str, i, "config");
         else
-            fprintf(fp, "    [%d] config: raw(%u)\n", i, t->length);
+            fprintf(fp, "    [%d] config: raw(%" PRIu8 ")\n", i, t->length);
         break;
     case IOTDATA_TLV_DIAGNOSTIC:
         fprintf(fp, "    [%d] diagnostic: \"%s\"\n", i, t->format == IOTDATA_TLV_FMT_STRING ? t->str : "(raw)");
@@ -4236,22 +4238,22 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
         fprintf(fp, "    [%d] userdata: \"%s\"\n", i, t->format == IOTDATA_TLV_FMT_STRING ? t->str : "(raw)");
         break;
     default:
-        fprintf(fp, "    [%d] global(0x%02x): %s(%u)\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
+        fprintf(fp, "    [%d] global(0x%02" PRIx8 "): %s(%" PRIu8 ")\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
         break;
     }
 }
 static void _print_tlv_quality(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
     /* Reserved for future quality/metadata TLVs (0x10-0x1F) */
-    fprintf(fp, "    [%d] quality(0x%02x): %s(%u)\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
+    fprintf(fp, "    [%d] quality(0x%02" PRIx8 "): %s(%" PRIu8 ")\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
 }
 static void _print_tlv_user(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
     /* Application-defined TLVs (0x20+) */
     if (t->format == IOTDATA_TLV_FMT_STRING) {
-        fprintf(fp, "    [%d] type=%u str(%u)=\"%s\"\n", i, t->type, t->length, t->str);
+        fprintf(fp, "    [%d] type=%" PRIu8 " str(%" PRIu8 ")=\"%s\"\n", i, t->type, t->length, t->str);
     } else {
-        fprintf(fp, "    [%d] type=%u raw(%u)=", i, t->type, t->length);
+        fprintf(fp, "    [%d] type=%" PRIu8 " raw(%" PRIu8 ")=", i, t->type, t->length);
         for (int j = 0; j < t->length && j < 16; j++)
-            fprintf(fp, "%02x", t->raw[j]);
+            fprintf(fp, "%02" PRIx8, t->raw[j]);
         if (t->length > 16)
             fprintf(fp, "...");
         fprintf(fp, "\n");
@@ -4261,11 +4263,11 @@ static void _print_tlv_user(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
 static void _print_tlv_data(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
     /* Application-defined TLVs (0x20+) */
     if (t->format == IOTDATA_TLV_FMT_STRING) {
-        fprintf(fp, "    [%d] type=%u str(%u)=\"%s\"\n", i, t->type, t->length, t->str);
+        fprintf(fp, "    [%d] type=%" PRIu8 " str(%" PRIu8 ")=\"%s\"\n", i, t->type, t->length, t->str);
     } else {
-        fprintf(fp, "    [%d] type=%u raw(%u)=", i, t->type, t->length);
+        fprintf(fp, "    [%d] type=%" PRIu8 " raw(%" PRIu8 ")=", i, t->type, t->length);
         for (int j = 0; j < t->length && j < 16; j++)
-            fprintf(fp, "%02x", t->raw[j]);
+            fprintf(fp, "%02" PRIx8, t->raw[j]);
         if (t->length > 16)
             fprintf(fp, "...");
         fprintf(fp, "\n");
@@ -4273,7 +4275,7 @@ static void _print_tlv_data(const iotdata_decoded_tlv_t *t, FILE *fp, int i) {
 }
 #endif
 static void print_tlv(const iotdata_decoded_t *dec, FILE *fp, const char *label) {
-    fprintf(fp, "  %s: %u TLV entries\n", label, dec->tlv_count);
+    fprintf(fp, "  %s: %" PRIu8 " TLV entries\n", label, dec->tlv_count);
     for (int i = 0; i < dec->tlv_count; i++)
 #if !defined(IOTDATA_NO_TLV_SPECIFIC)
         if (dec->tlv[i].type <= IOTDATA_TLV_TYPE_GLOBAL_MAX)
@@ -4809,23 +4811,23 @@ static iotdata_status_t _iotdata_dump_build(iotdata_dump_t *dump, const uint8_t 
     /* Header */
     s = bp;
     raw = bits_read(buf, bb, &bp, IOTDATA_VARIANT_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", raw);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32, raw);
     n = dump_add(dump, n, s, IOTDATA_VARIANT_BITS, raw, dump->_dec_buf, "0-14 (15=rsvd)", "variant");
     const uint8_t variant = (uint8_t)raw;
     s = bp;
     raw = bits_read(buf, bb, &bp, IOTDATA_STATION_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", raw);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32, raw);
     n = dump_add(dump, n, s, IOTDATA_STATION_BITS, raw, dump->_dec_buf, "0-4095", "station");
     s = bp;
     raw = bits_read(buf, bb, &bp, IOTDATA_SEQUENCE_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%u", raw);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32, raw);
     n = dump_add(dump, n, s, IOTDATA_SEQUENCE_BITS, raw, dump->_dec_buf, "0-65535", "sequence");
 
     /* Presence */
     uint8_t pres[IOTDATA_PRES_MAXIMUM] = { 0 };
     s = bp;
     pres[0] = (uint8_t)bits_read(buf, bb, &bp, 8);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02x", pres[0]);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIx8, pres[0]);
     n = dump_add(dump, n, s, 8, pres[0], dump->_dec_buf, "ext|tlv|6 fields", "presence[0]");
     int num_pres = 1;
     while (num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb && (pres[num_pres - 1] & IOTDATA_PRES_EXT) != 0) {
@@ -4833,7 +4835,7 @@ static iotdata_status_t _iotdata_dump_build(iotdata_dump_t *dump, const uint8_t 
         pres[num_pres] = (uint8_t)bits_read(buf, bb, &bp, 8);
         char pname[24];
         snprintf(pname, sizeof(pname), "presence[%d]", num_pres);
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02x", pres[num_pres]);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIx8, pres[num_pres]);
         n = dump_add(dump, n, s, 8, pres[num_pres], dump->_dec_buf, "ext|7 fields", pname);
         num_pres++;
     }
@@ -4864,7 +4866,7 @@ static iotdata_status_t _iotdata_dump_decoded_to_file(const iotdata_dump_t *dump
     fprintf(fp, "%12s  %6s  %-24s  %10s  %-28s  %s\n", "------", "---", "-----", "---", "-------", "-----");
     for (size_t i = 0; i < dump->count; i++) {
         const iotdata_dump_entry_t *e = &dump->entries[i];
-        fprintf(fp, "%12zu  %6zu  %-24s  %10u  %-28s  %s\n", e->bit_offset, e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
+        fprintf(fp, "%12zu  %6zu  %-24s  %10" PRIu32 "  %-28s  %s\n", e->bit_offset, e->bit_length, e->field_name, e->raw_value, e->decoded_str, e->range_str);
     }
     fprintf(fp, "\nTotal: %zu bits (%zu bytes)\n", dump->packed_bits, dump->packed_bytes);
     return IOTDATA_OK;
@@ -4925,7 +4927,7 @@ iotdata_status_t iotdata_print_decoded_to_file(const iotdata_decoded_t *dec, FIL
     if (vdef == NULL)
         return IOTDATA_ERR_HDR_VARIANT_UNKNOWN;
 
-    fprintf(fp, "Station %u seq=%u var=%u (%s) [%zu bits, %zu bytes]\n", dec->station, dec->sequence, dec->variant, vdef->name, dec->packed_bits, dec->packed_bytes);
+    fprintf(fp, "Station %" PRIu16 " seq=%" PRIu16 " var=%" PRIu8 " (%s) [%zu bits, %zu bytes]\n", dec->station, dec->sequence, dec->variant, vdef->name, dec->packed_bits, dec->packed_bytes);
 
     for (int si = 0; si < _iotdata_field_count(vdef->num_pres_bytes); si++)
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(dec->fields, vdef->fields[si].type))

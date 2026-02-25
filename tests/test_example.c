@@ -18,6 +18,7 @@
 
 #include "iotdata.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -238,8 +239,8 @@ static void print_pre_encode(const sensor_state_t *s, int full) {
         printf("    air quality: %5d AQI\n", s->air_quality);
         printf("    radation:    %5d CPM, %8.2f µSv/h\n", s->rad_cpm, s->rad_dose);
         printf("    position:    %.6f, %.6f\n", s->pos_lat, s->pos_lon);
-        printf("    datetime:    %u s from year start\n", seconds_from_year_start());
-        printf("    flags:       0x%02X\n", s->flags);
+        printf("    datetime:    %" PRIu32 " s from year start\n", seconds_from_year_start());
+        printf("    flags:       0x%02" PRIX8 "\n", s->flags);
     }
 }
 
@@ -248,7 +249,7 @@ static void print_hex_dump(const uint8_t *buf, size_t len) {
     if (len > 0)
         printf("    ");
     for (size_t i = 0; i < len; i++)
-        printf("%02X %s", buf[i], ((i + 1) % 16 == 0 && i + 1 < len) ? "\n    " : "");
+        printf("%02" PRIX8 " %s", buf[i], ((i + 1) % 16 == 0 && i + 1 < len) ? "\n    " : "");
     printf("\n");
 }
 
@@ -298,7 +299,7 @@ static void encode_and_display(sensor_state_t *s, int full) {
     strftime(ts, sizeof(ts), "%H:%M:%S", localtime(&now));
 
     print_separator();
-    printf("** Packet #%u  [%s]  %s\n", s->sequence, ts, full ? "*** 5-minute report (with position/datetime) ***" : "30-second report");
+    printf("** Packet #%" PRIu16 "  [%s]  %s\n", s->sequence, ts, full ? "*** 5-minute report (with position/datetime) ***" : "30-second report");
     print_separator();
 
     print_pre_encode(s, full);
