@@ -5187,7 +5187,7 @@ data). It represents the most common transmission for a weather station.
 
 ### I.2. Encoding Comparison
 
-#### iotdata (this protocol)
+#### I.2.3. iotdata (this protocol)
 
 Header (32 bits) + Presence Byte 0 (8 bits) + Battery (6) + Link (6) +
 Environment (24) + Wind (22) + Rain (12) + Solar (14) = 124 bits = **16 bytes**
@@ -5198,7 +5198,7 @@ Hex: 00 2A C3 50 FF D5 EB 95 BA 2F 52 8A 35 28 70 00
      [header ] [p][bat+lnk+environment ][wind     ]...
 ```
 
-#### JSON (compact, no whitespace)
+#### I.2.4. JSON (compact, no whitespace)
 
 ```json
 {
@@ -5214,7 +5214,7 @@ Hex: 00 2A C3 50 FF D5 EB 95 BA 2F 52 8A 35 28 70 00
 **261 bytes.** With keys shortened to single characters: ~130 bytes. Even
 aggressively minified JSON is 8× larger than iotdata.
 
-#### CBOR (Concise Binary Object Representation, RFC 8949)
+#### I.2.5. CBOR (Concise Binary Object Representation, RFC 8949)
 
 CBOR encodes the same structure as a map of maps with integer keys. Using
 single-byte integer keys for all fields:
@@ -5226,7 +5226,7 @@ single-byte integer keys for all fields:
 **~66 bytes.** CBOR's self-describing nature adds per-field type tags and
 lengths. It is approximately 4× larger than iotdata for this payload.
 
-#### Protocol Buffers (Protobuf, varint encoding)
+#### I.2.6. Protocol Buffers (Protobuf, varint encoding)
 
 A Protobuf message with field numbers and varint/fixed encoding:
 
@@ -5238,14 +5238,14 @@ A Protobuf message with field numbers and varint/fixed encoding:
 **~52 bytes.** Protobuf is approximately 2.5–3× larger than iotdata. The
 overhead comes from per-field tags and byte-aligned varint encoding.
 
-#### MessagePack
+#### I.2.7. MessagePack
 
 MessagePack with integer keys produces results comparable to CBOR:
 
 **~62 bytes.** Slightly smaller than CBOR due to more compact map headers.
 Approximately 4× larger than iotdata.
 
-#### Raw C struct (packed)
+#### I.2.8. Raw C struct (packed)
 
 ```c
 struct __attribute__((packed)) weather_packet {
