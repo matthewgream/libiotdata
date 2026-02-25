@@ -44,10 +44,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#if !defined(IOTDATA_NO_DUMP) || !defined(IOTDATA_NO_PRINT)
-#include <stdio.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
