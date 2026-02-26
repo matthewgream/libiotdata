@@ -40,12 +40,12 @@ clean:
 	rm -f $(TARGET)
 format:
 	clang-format -i *.[ch]
+
 .PHONY: all clean format
 
 ##
 
 SYSTEMD_DIR = /etc/systemd/system
-UDEVRULES_DIR = /etc/udev/rules.d
 define install_systemd_service
 	-systemctl stop $(1) 2>/dev/null || true
 	-systemctl disable $(1) 2>/dev/null || true
@@ -56,12 +56,8 @@ define install_systemd_service
 endef
 install_systemd_service: $(TARGET).service
 	$(call install_systemd_service,$(TARGET),$(TARGET))
-install_udev_rules: 90-$(TARGET).rules
-	cp 90-$(TARGET).rules $(UDEVRULES_DIR)
-	udevadm control --reload-rules
-	udevadm trigger
-install: install_udev_rules install_systemd_service
+install: install_systemd_service
 restart:
 	systemctl restart $(TARGET)
-.PHONY: install install_systemd_service install_udev_rules
+.PHONY: install install_systemd_service
 

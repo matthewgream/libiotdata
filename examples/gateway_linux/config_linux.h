@@ -51,10 +51,8 @@ int config_get_integer(const char *key, const int default_value) {
             const long val = strtol(config_entries[i].value, &endptr, 0);
             if (*endptr == '\0')
                 return (int)val;
-            else {
-                fprintf(stderr, "config: invalid integer value '%s' for key '%s', using default\n", config_entries[i].value, key);
-                return default_value;
-            }
+            fprintf(stderr, "config: invalid integer value '%s' for key '%s', using default\n", config_entries[i].value, key);
+            return default_value;
         }
     return default_value;
 }
@@ -66,7 +64,7 @@ bool config_get_bool(const char *key, const bool default_value) {
         if (strcmp(config_entries[i].key, key) == 0) {
             if (strcasecmp(config_entries[i].value, "true") == 0 || strcmp(config_entries[i].value, "1") == 0)
                 return true;
-            else if (strcasecmp(config_entries[i].value, "false") == 0 || strcmp(config_entries[i].value, "0") == 0)
+            if (strcasecmp(config_entries[i].value, "false") == 0 || strcmp(config_entries[i].value, "0") == 0)
                 return false;
             fprintf(stderr, "config: invalid boolean value '%s' for key '%s', using default\n", config_entries[i].value, key);
         }
@@ -98,8 +96,7 @@ static void __config_load_file(const char *filename) {
         char *equals = strchr(line, '=');
         if (equals) {
             *equals = '\0';
-            char *key = line;
-            char *value = equals + 1;
+            char *key = line, *value = equals + 1;
             while (*key && isspace(*key))
                 key++;
             char *end = key + strlen(key) - 1;

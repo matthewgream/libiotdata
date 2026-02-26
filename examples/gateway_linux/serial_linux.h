@@ -194,8 +194,8 @@ int serial_read(unsigned char *buffer, const int length, const unsigned long tim
     struct timeval tv;
     FD_ZERO(&rdset);
     FD_SET(serial_fd, &rdset);
-    tv.tv_sec = (time_t) timeout_ms / 1000;
-    tv.tv_usec = (time_t) (timeout_ms % 1000) * 1000;
+    tv.tv_sec = (time_t)timeout_ms / 1000;
+    tv.tv_usec = (time_t)(timeout_ms % 1000) * 1000;
     const int select_result = select(serial_fd + 1, &rdset, NULL, NULL, &tv);
     if (select_result <= 0)
         return select_result; // timeout or error

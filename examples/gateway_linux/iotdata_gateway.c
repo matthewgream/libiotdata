@@ -351,8 +351,9 @@ static unsigned char stat_channel_rssi_ema, stat_packet_rssi_ema;
 static unsigned long stat_packets_okay = 0, stat_packets_drop = 0, stat_packets_decode_err = 0;
 
 static void process_sensor_packet(const unsigned char *buf, int len, unsigned char packet_rssi, const char *topic_prefix, const char *via) {
-    char topic[128];
-    /* peek at iotdata header */
+    if (capture_rssi_packet && packet_rssi > 0)
+        ema_update(packet_rssi, &stat_packet_rssi_ema, &stat_packet_rssi_cnt);
+
     uint8_t variant_id;
     uint16_t station_id, sequence;
     if (!iotdata_mesh_peek_header(buf, len, &variant_id, &station_id, &sequence)) {
@@ -373,22 +374,18 @@ static void process_sensor_packet(const unsigned char *buf, int len, unsigned ch
         stat_packets_drop++;
         return;
     }
-    /* look up variant name for topic */
+    // decode to json and publish
     const iotdata_variant_def_t *vdef = iotdata_get_variant(variant_id);
-    /* decode to JSON */
     char *json = NULL;
     iotdata_decode_to_json_scratch_t scratch;
-    iotdata_status_t rc = iotdata_decode_to_json(buf, (size_t)len, &json, &scratch);
-    if (rc != IOTDATA_OK) {
+    iotdata_status_t rc;
+    if ((rc = iotdata_decode_to_json(buf, (size_t)len, &json, &scratch)) != IOTDATA_OK) {
         fprintf(stderr, "process: decode failed: %s (variant=%u, station=%u, size=%d)\n", iotdata_strerror(rc), variant_id, station_id, len);
         stat_packets_decode_err++;
         return;
     }
-    /* build topic: <prefix>/<variant_name>/<station_id> */
+    char topic[128];
     snprintf(topic, sizeof(topic), "%s/%s/%u", topic_prefix, vdef->name, station_id);
-    /* publish */
-    if (capture_rssi_packet && packet_rssi > 0)
-        ema_update(packet_rssi, &stat_packet_rssi_ema, &stat_packet_rssi_cnt);
     if (mqtt_send(topic, json, (int)strlen(json)))
         stat_packets_okay++;
     else {
@@ -427,16 +424,14 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
     while (*running) {
 
         unsigned char packet_rssi = 0, channel_rssi = 0;
-
         if (device_packet_read(packet_buffer, config.packet_maxsize + 1, &packet_size, &packet_rssi) && *running) {
-
             uint8_t variant_id;
             uint16_t station_id, sequence;
             if (!iotdata_mesh_peek_header(packet_buffer, packet_size, &variant_id, &station_id, &sequence)) {
                 fprintf(stderr, "read-and-publish: packet too short for iotdata header (size=%d)\n", packet_size);
                 stat_packets_drop++;
             } else if (variant_id == IOTDATA_MESH_VARIANT) {
-                uint8_t ctrl_type = iotdata_mesh_peek_ctrl_type(packet_buffer, packet_size);
+                const uint8_t ctrl_type = iotdata_mesh_peek_ctrl_type(packet_buffer, packet_size);
                 mesh.stat_mesh_ctrl_rx++;
                 if (debug_mesh)
                     printf("mesh: rx %s from station=%u seq=%u (%d bytes)\n", iotdata_mesh_ctrl_name(ctrl_type), station_id, sequence, packet_size);
@@ -493,7 +488,6 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
             if (mesh.enabled)
                 printf(", mesh{fwd=%ld, unwrap=%ld, dedup=%ld, beacons=%ld, acks=%ld, ctrl=%ld}", mesh.stat_forwards_rx, mesh.stat_forwards_unwrapped, mesh.stat_duplicates, mesh.stat_beacons_tx, mesh.stat_acks_tx, mesh.stat_mesh_ctrl_rx);
             printf("\n");
-
             if (mesh.enabled) {
                 mesh.stat_forwards_rx = mesh.stat_forwards_unwrapped = 0;
                 mesh.stat_duplicates = mesh.stat_acks_tx = 0;
@@ -526,8 +520,8 @@ bool config_setup(const int argc, char *argv[]) {
     interval_stat = config_get_integer("interval-stat", INTERVAL_STAT_DEFAULT);
     interval_rssi = config_get_integer("interval-rssi", INTERVAL_RSSI_DEFAULT);
 
-    debug_e22900t22u = config_get_integer("debug-e22900t22u", false);
     debug_readandsend = config_get_bool("debug", false);
+    debug_e22900t22u = config_get_integer("debug-e22900t22u", false);
     debug_mesh = config_get_bool("debug-mesh", false);
 
     return true;

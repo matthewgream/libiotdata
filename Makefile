@@ -223,7 +223,7 @@ tests: test-suites test-versions test-example
 ################################################################################
 
 format:
-	clang-format -i *.[ch] tests/*.[ch]
+	clang-format -i *.[ch] tests/*.[ch] examples/*/*.[ch] examples/*/*/*.[ch]
 
 prettier:
 	prettier --write README.md

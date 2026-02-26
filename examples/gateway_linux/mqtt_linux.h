@@ -75,15 +75,14 @@ static bool __mqtt_parse(const char *string, char *host, const int length, int *
     host[0] = '\0';
     *port = 1883;
     *ssl = false;
-    if (strncmp(string, "mqtt://", 7) == 0) {
+    if (strncmp(string, "mqtt://", 7) == 0)
         strncpy(host, string + 7, (size_t)length - 1);
-    } else if (strncmp(string, "mqtts://", 8) == 0) {
+    else if (strncmp(string, "mqtts://", 8) == 0) {
         strncpy(host, string + 8, (size_t)length - 1);
         *ssl = true;
         *port = 8883;
-    } else {
+    } else
         strcpy(host, string);
-    }
     char *port_str = strchr(host, ':');
     if (port_str) {
         *port_str = '\0'; // Terminate host string at colon
