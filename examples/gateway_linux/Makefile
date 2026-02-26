@@ -1,8 +1,9 @@
 
-DIR_IOTDATA=../..
-DIR_E22XXXTXX=../e22xxxtxx
+DIR_IOTDATA=/opt/libiotdata
+DIR_E22XXXTXX=/opt/e22900t22u/include
 DIR_IOTDATA_VARIANT=../iotdata
 
+##
 
 CC=gcc
 CFLAGS_DEFINES=
@@ -21,13 +22,13 @@ CFLAGS_STRICT=-Werror \
     -Wunreachable-code -Wunused \
     -Wwrite-strings
 CFLAGS_OPT=-O6
-CFLAGS_INCLUDES = -I$(DIR_IOTDATA) -I$(DIR_E22XXXTXX) -I$(DIR_IOTDATA_VARIANT)
-CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT) $(CFLAGS_INCLUDES)
-LDFLAGS = -lcjson -lmosquitto -lm
-MAIN = iotdata_gateway.c
-TARGET = iotdata_gateway
+CFLAGS_INCLUDES=-I$(DIR_IOTDATA) -I$(DIR_E22XXXTXX) -I$(DIR_IOTDATA_VARIANT)
+CFLAGS=$(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT) $(CFLAGS_INCLUDES)
+LDFLAGS=-lcjson -lmosquitto -lm
+MAIN=iotdata_gateway.c
+TARGET=iotdata_gateway
 SOURCES=config_linux.h serial_linux.h mqtt_linux.h $(DIR_E22XXXTXX)/e22xxxtxx.h $(DIR_IOTDATA_VARIANT)/iotdata_variant_suite.h
-HOSTNAME = $(shell hostname)
+HOSTNAME=$(shell hostname)
 
 ##
 

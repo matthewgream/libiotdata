@@ -186,7 +186,7 @@ bool serial_write_all(const unsigned char *buffer, const int length) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-int serial_read(unsigned char *buffer, const int length, const int timeout_ms) {
+int serial_read(unsigned char *buffer, const int length, const unsigned long timeout_ms) {
     if (serial_fd < 0)
         return -1;
     usleep(50 * 1000); // yuck
@@ -194,8 +194,8 @@ int serial_read(unsigned char *buffer, const int length, const int timeout_ms) {
     struct timeval tv;
     FD_ZERO(&rdset);
     FD_SET(serial_fd, &rdset);
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    tv.tv_sec = (time_t) timeout_ms / 1000;
+    tv.tv_usec = (time_t) (timeout_ms % 1000) * 1000;
     const int select_result = select(serial_fd + 1, &rdset, NULL, NULL, &tv);
     if (select_result <= 0)
         return select_result; // timeout or error
