@@ -32,6 +32,9 @@ upload:
 debug:
 	$(BUILDER) flash -p $(DEVICE) monitor
 
+monitor:
+	$(BUILDER) -p $(DEVICE) monitor
+
 ###
 
 clean:

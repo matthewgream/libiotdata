@@ -98,7 +98,7 @@ project's GitHub repository.
 - [Appendix F. Example Weather Station Output](#appendix-f-example-weather-station-output)
 - [Appendix G. Mesh Protocol](#appendix-g-mesh-protocol)
 - [Appendix H. System Architecture Considerations](#appendix-h-system-architecture-considerations)
-- [Appendix I. Comparison with Alternative Encodings](#appendix-i-comparison-with-alternative-encodings)
+- [Appendix I. Comparison with Alternative Encodings and Embedded Libraries](#appendix-i-comparison-with-alternative-encodings-and-embedded-libraries)
 - [Appendix J. Known Limitations and Open Issues](#appendix-j-known-limitations-and-open-issues)
 
 ---
@@ -5156,15 +5156,16 @@ continue to be received by the surviving gateway with no data loss. Sensors
 within range of only the failed gateway are lost until the gateway is restored
 or a mesh relay is deployed to bridge the gap.
 
-## Appendix I. Comparison with Alternative Encodings
+## Appendix I. Comparison with Alternative Encodings and Embedded Libraries
 
-This appendix compares the iotdata wire format against commonly used
-serialisation approaches for the same sensor payload. The comparison uses the
-default weather station variant (variant 0) with a representative set of fields.
+This appendix compares the iotdata protocol along two dimensions: first, against
+alternative wire encodings for the same sensor payload; second, against
+established embedded C libraries that share iotdata's cross-platform,
+low-resource design philosophy even though they solve different problems.
 
 ### I.1. Test Payload
 
-The following sensor reading is used for all comparisons:
+The following sensor reading is used for all encoding comparisons:
 
 | Field            | Value    |
 | ---------------- | -------- |
@@ -5186,9 +5187,9 @@ The following sensor reading is used for all comparisons:
 This is a Presence Byte 0 only packet (no position, datetime, radiation, or TLV
 data). It represents the most common transmission for a weather station.
 
-### I.2. Encoding Comparison
+### I.2. Generic Serialisation Formats
 
-#### I.2.3. iotdata (this protocol)
+#### I.2.1. iotdata (this protocol)
 
 Header (32 bits) + Presence Byte 0 (8 bits) + Battery (6) + Link (6) +
 Environment (24) + Wind (22) + Rain (12) + Solar (14) = 124 bits = **16 bytes**
@@ -5199,7 +5200,7 @@ Hex: 00 2A C3 50 FF D5 EB 95 BA 2F 52 8A 35 28 70 00
      [header ] [p][bat+lnk+environment ][wind     ]...
 ```
 
-#### I.2.4. JSON (compact, no whitespace)
+#### I.2.2. JSON (compact, no whitespace)
 
 ```json
 {
@@ -5215,7 +5216,7 @@ Hex: 00 2A C3 50 FF D5 EB 95 BA 2F 52 8A 35 28 70 00
 **261 bytes.** With keys shortened to single characters: ~130 bytes. Even
 aggressively minified JSON is 8× larger than iotdata.
 
-#### I.2.5. CBOR (Concise Binary Object Representation, RFC 8949)
+#### I.2.3. CBOR (Concise Binary Object Representation, RFC 8949)
 
 CBOR encodes the same structure as a map of maps with integer keys. Using
 single-byte integer keys for all fields:
@@ -5227,7 +5228,7 @@ single-byte integer keys for all fields:
 **~66 bytes.** CBOR's self-describing nature adds per-field type tags and
 lengths. It is approximately 4× larger than iotdata for this payload.
 
-#### I.2.6. Protocol Buffers (Protobuf, varint encoding)
+#### I.2.4. Protocol Buffers (Protobuf, varint encoding)
 
 A Protobuf message with field numbers and varint/fixed encoding:
 
@@ -5239,14 +5240,14 @@ A Protobuf message with field numbers and varint/fixed encoding:
 **~52 bytes.** Protobuf is approximately 2.5–3× larger than iotdata. The
 overhead comes from per-field tags and byte-aligned varint encoding.
 
-#### I.2.7. MessagePack
+#### I.2.5. MessagePack
 
 MessagePack with integer keys produces results comparable to CBOR:
 
 **~62 bytes.** Slightly smaller than CBOR due to more compact map headers.
 Approximately 4× larger than iotdata.
 
-#### I.2.8. Raw C struct (packed)
+#### I.2.6. Raw C struct (packed)
 
 ```c
 struct __attribute__((packed)) weather_packet {
@@ -5268,38 +5269,190 @@ struct __attribute__((packed)) weather_packet {
 ```
 
 **20 bytes** (plus typically 4 bytes of header for station ID and sequence, = 24
-bytes total). The packed C struct is the closest competitor in size. However, it
-wastes bits on byte alignment (the boolean charging flag consumes 8 bits instead
-of 1, battery level uses 8 bits instead of 5, etc.) and has no presence flag
-mechanism — all fields are always transmitted regardless of whether they have
-changed or are relevant.
+bytes total). The packed C struct is the closest generic competitor in size.
+However, it wastes bits on byte alignment (the boolean charging flag consumes 8
+bits instead of 1, battery level uses 8 bits instead of 5, etc.) and has no
+presence flag mechanism — all fields are always transmitted regardless of
+whether they have changed or are relevant.
 
-### I.3. Summary
+### I.3. IoT-Specific Encodings
 
-| Encoding       | Bytes | Ratio vs iotdata | Presence flags | Self-describing | Byte-aligned |
-| -------------- | ----: | ---------------: | :------------: | :-------------: | :----------: |
-| **iotdata**    |    16 |             1.0× |       ✓        |        ✗        |      ✗       |
-| Raw C struct   |    24 |             1.5× |       ✗        |        ✗        |      ✓       |
-| Protobuf       |    42 |             2.6× |      ✓\*       |     Partial     |      ✓       |
-| MessagePack    |    62 |             3.9× |       ✗        |        ✓        |      ✓       |
-| CBOR           |    66 |             4.1× |       ✗        |        ✓        |      ✓       |
-| JSON (compact) |   261 |            16.3× |       ✗        |        ✓        |      ✓       |
+The generic formats above (JSON, CBOR, Protobuf) are general-purpose
+serialisation. The following libraries and formats were designed specifically
+for IoT sensor telemetry or for bit-efficient encoding on constrained devices.
+
+#### I.3.1. CayenneLPP
+
+CayenneLPP (Cayenne Low Power Payload) is the de facto standard payload format
+for LoRaWAN sensor devices, natively supported by The Things Network and
+myDevices Cayenne. It uses a byte-aligned TLV structure where each measurement
+is prefixed with a 1-byte channel identifier and a 1-byte IPSO-derived type
+code.
+
+CayenneLPP defines standard types for temperature (2 bytes, 0.1°C), barometric
+pressure (2 bytes, 0.1 hPa), relative humidity (1 byte, 0.5%), luminosity (2
+bytes, 1 lux), and GPS (9 bytes). Fields without a standard type must use the
+generic analog input (2 bytes, 0.01 resolution).
+
+Encoding the test payload:
+
+| Field            | CayenneLPP type   | Bytes (ch+type+data) |
+| ---------------- | ----------------- | -------------------: |
+| Battery level    | Analog Input      |                    4 |
+| Battery charging | Digital Input     |                    3 |
+| Link RSSI        | Analog Input      |                    4 |
+| Link SNR         | Analog Input      |                    4 |
+| Temperature      | Temperature       |                    4 |
+| Pressure         | Barometric Press. |                    4 |
+| Humidity         | Rel. Humidity     |                    3 |
+| Wind speed       | Analog Input      |                    4 |
+| Wind direction   | Analog Input      |                    4 |
+| Wind gust        | Analog Input      |                    4 |
+| Rain rate        | Analog Input      |                    4 |
+| Rain size        | Analog Input      |                    4 |
+| Solar irradiance | Luminosity        |                    4 |
+| UV index         | Analog Input      |                    4 |
+
+**~54 bytes.** No header (station ID and sequencing are provided by LoRaWAN).
+Adding an equivalent 4-byte header for a fair comparison gives ~58 bytes.
+
+CayenneLPP's strengths are its native integration with the LoRaWAN ecosystem
+(The Things Network decodes CayenneLPP payloads automatically, with no custom
+code) and its simplicity (a C++ Arduino library with `lpp.addTemperature()`
+calls). Its weaknesses are the 2-byte overhead per field (channel + type), byte
+alignment that wastes bits, no sub-byte field packing, and reliance on the
+generic analog input type for any measurement not in the IPSO standard set —
+which loses semantic meaning at the gateway.
+
+The CayenneLPP constructor (`CayenneLPP lpp(51)`) uses `malloc` for its internal
+buffer. The library is Arduino/C++ and is not straightforwardly portable to
+bare-metal C on Class 1/2 MCUs.
+
+#### I.3.2. Nanopb (Protocol Buffers for Embedded C)
+
+Nanopb is a widely-used Protocol Buffers implementation targeting embedded
+systems, written in ANSI C. It supports static allocation (no `malloc` at
+runtime when configured with `.options` files), compiles to 2–10 KB ROM and ~300
+bytes–1 KB RAM, and runs on STM32, AVR, ARM Cortex-M, and Linux.
+
+The wire format is standard Protobuf: varint-encoded field tags and byte-aligned
+varint/fixed-width values. For the test payload, the encoding size is identical
+to the generic Protobuf figure:
+
+**~42 bytes** (flattened message), **~52 bytes** (nested messages).
+
+Nanopb's strengths are its maturity (widely deployed, well-tested), its
+interoperability with the broader Protobuf ecosystem (the same `.proto` schema
+can generate code for C, Python, Go, Java, etc.), and its static allocation
+mode. Its weaknesses for this use case are the requirement for a code generator
+(`protoc` plus a Python plugin), byte-aligned encoding (no sub-byte fields), and
+the overhead of per-field tags — which exist to support schema evolution but are
+redundant in a closed deployment where both sides know the schema.
+
+Nanopb is the strongest alternative for deployments that require
+interoperability with cloud services or multi-language environments where the
+Protobuf ecosystem is already established. For closed LoRa deployments where
+every bit matters, the 2.5–3× size overhead relative to iotdata is significant.
+
+#### I.3.3. Bitproto
+
+Bitproto is a bit-level serialisation format with a Protobuf-like schema
+language. It is the closest existing tool to iotdata's approach: fields are
+specified at arbitrary bit widths (`uint3`, `uint5`, `uint11`, etc.), and the
+generated C encoder/decoder uses zero dynamic allocation and copies bits between
+structures and buffers without padding or gaps.
+
+If the test payload were defined in Bitproto with the same bit widths as iotdata
+(5-bit battery, 1-bit charging, 4-bit RSSI, etc.), the data portion would occupy
+a similar number of bits. However, Bitproto adds a 2-byte message size header
+when extensibility is enabled, and does not provide a built-in header (variant,
+station ID, sequence) or presence flags.
+
+Encoding the test payload with equivalent bit widths:
+
+**~14 bytes** (data bits only, no extensibility header), **~16 bytes** (with
+2-byte size header). Adding the equivalent 4-byte iotdata header and a 1-byte
+presence byte gives ~21 bytes — comparable to iotdata's 16 bytes, with the
+difference coming from the lack of presence flags (all fields are always
+transmitted) and the size header.
+
+Bitproto's strengths are its bit-level granularity (identical to iotdata in
+principle), zero dynamic allocation in C, and the availability of a code
+generator for C, Go, and Python. Its limitations for this use case are:
+
+- **Little-endian only.** Bitproto encodes in little-endian byte order,
+  requiring byte-swap logic on big-endian platforms (some PIC configurations,
+  network-order protocols). iotdata is endian-agnostic via explicit bit-by-bit
+  packing.
+- **No presence flags.** Every field defined in the schema is always encoded.
+  There is no mechanism equivalent to iotdata's presence bytes, so a
+  battery-only packet is the same size as a full-telemetry packet.
+- **No variable-length fields.** All types are fixed-width. Bitproto cannot
+  express variable-length constructs such as iotdata's TLV section or the Air
+  Quality PM/Gas fields with per-channel presence masks.
+- **No quantisation.** Bitproto packs raw bit fields; the quantisation (mapping
+  physical values to reduced-bit representations) must be implemented by the
+  application. iotdata defines the quantisation as part of the protocol.
+- **Requires a code generator.** The `bitproto` compiler (Python) must be run to
+  generate C source files from `.bitproto` schema files. iotdata's reference
+  implementation is self-contained C with no code generation step.
+- **No domain awareness.** Bitproto is a generic bit-packing tool. It has no
+  concept of sensor types, field bundles, or variant maps.
+
+#### I.3.4. TinyCBOR and QCBOR
+
+TinyCBOR (developed by Intel) and QCBOR (developed by Qualcomm/Laurence
+Lundblade) are embedded-focused CBOR implementations. Both avoid `malloc` in
+their core encode/decode paths (TinyCBOR operates on caller-provided buffers;
+QCBOR uses a similar model with richer error handling). QCBOR is approximately
+25% larger in code size than TinyCBOR but provides more complete CBOR support.
+
+The wire format is standard CBOR (RFC 8949), so the encoding size for the test
+payload is the same as the generic CBOR figure: **~66 bytes.** The advantage of
+these implementations over generic CBOR libraries is their suitability for
+embedded targets: no heap allocation, bounded stack usage, and small code
+footprint (~4–8 KB for TinyCBOR, ~10–15 KB for QCBOR).
+
+CBOR's self-describing nature (every value carries its type and length) is the
+opposite of iotdata's approach. This makes CBOR ideal for schemaless systems
+where the receiver may not know the sender's data model, but adds 4× overhead
+for the structured, schema-known payloads that iotdata targets.
+
+### I.4. Encoding Summary
+
+| Encoding          | Bytes | Ratio vs iotdata | Presence flags | Self-describing | Byte-aligned | Code gen required |
+| ----------------- | ----: | ---------------: | :------------: | :-------------: | :----------: | :---------------: |
+| **iotdata**       |    16 |             1.0× |       ✓        |        ✗        |      ✗       |         ✗         |
+| Bitproto†         |   ~16 |            ~1.0× |       ✗        |        ✗        |      ✗       |         ✓         |
+| Raw C struct      |    24 |             1.5× |       ✗        |        ✗        |      ✓       |         ✗         |
+| Protobuf / Nanopb |    42 |             2.6× |      ✓\*       |     Partial     |      ✓       |         ✓         |
+| CayenneLPP        |    54 |             3.4× |       ✗        |        ✓        |      ✓       |         ✗         |
+| MessagePack       |    62 |             3.9× |       ✗        |        ✓        |      ✓       |         ✗         |
+| CBOR / TinyCBOR   |    66 |             4.1× |       ✗        |        ✓        |      ✓       |         ✗         |
+| JSON (compact)    |   261 |            16.3× |       ✗        |        ✓        |      ✓       |         ✗         |
 
 \*Protobuf omits default/zero values, which functions as implicit presence for
 non-zero fields.
 
-### I.4. Analysis
+†Bitproto data fields only, with equivalent bit widths. With the addition of an
+iotdata-equivalent header (4 bytes) and extensibility header (2 bytes), the
+total rises to ~22 bytes. Bitproto does not support presence flags, so this
+figure applies to every packet regardless of which fields have changed.
+
+### I.5. Analysis
 
 The size advantage of iotdata comes from three sources:
 
 1. **Sub-byte field packing.** Fields are packed to the exact number of bits
    required. A boolean is 1 bit, a battery level is 5 bits, a wind direction is
-   8 bits. No other format in this comparison operates below byte granularity.
+   8 bits. Only Bitproto matches this capability among the compared formats.
 
 2. **No per-field metadata.** There are no field tags, type indicators, length
    prefixes, or key strings. The field layout is determined entirely by the
-   variant table, which both sides know at compile time. This eliminates the
-   overhead that makes self-describing formats flexible but verbose.
+   variant table, which both sides know at compile time. CayenneLPP's 2-byte
+   per-field overhead (channel + type) and Protobuf's varint field tags exist to
+   support self-description and schema evolution — valuable properties, but
+   expensive when every bit counts.
 
 3. **Quantisation to operational resolution.** Temperature is quantised to
    0.25°C steps, fitting in 9 bits. A Protobuf float or CBOR float uses 32 bits
@@ -5311,31 +5464,201 @@ The trade-off is the loss of self-description. An iotdata packet cannot be
 decoded without prior knowledge of the variant table. For the target use case —
 closed deployments where the operator controls all devices — this is acceptable.
 For open or interoperable systems, a self-describing format like CBOR or
-Protobuf would be more appropriate, at the cost of 3–4× larger payloads.
+Protobuf would be more appropriate, at the cost of 3–4× larger payloads. The
+CayenneLPP format occupies an intermediate position: it is self-describing and
+has LoRaWAN ecosystem support, but at 3.4× the size of iotdata, the cost is
+significant for duty-cycle-constrained deployments.
 
 Alternatively, the specific variant table could be determined from the device's
 VERSION or CONFIG information, as transmitted at startup.
 
-### I.5. Impact on LoRa Airtime and Battery Life
+### I.6. Embedded Library Design Comparison
+
+The preceding sections compare iotdata against alternative _encodings_ — they
+answer "what else could I use to pack sensor telemetry onto a wire?" This
+section addresses a different question: "as an embedded C library designed to
+work from Cortex-M0 to Linux, how does iotdata's architecture compare to the
+best-practice embedded libraries that solve other problems?"
+
+The embedded C ecosystem contains several libraries that are widely regarded as
+exemplars of portable, resource-conscious design. Although they address entirely
+different domains — networking, filesystems, compression, cryptography, parsing
+— they share a set of architectural principles that iotdata also follows. This
+comparison positions iotdata's design choices within that tradition and
+identifies where iotdata conforms to, or deviates from, established practice.
+
+#### I.6.1. Reference Libraries
+
+**lwIP** (lightweight IP) is an open-source TCP/IP stack created by Adam
+Dunkels, targeting embedded systems with tens of kilobytes of RAM. It is used by
+Espressif (ESP32/ESP-IDF), STMicroelectronics, NXP, Xilinx, and many others.
+Code size is approximately 40 KB ROM; RAM usage is 10–30 KB depending on
+configuration. Configuration is via a user-provided `lwipopts.h` header that
+selects protocols, buffer sizes, and API style at compile time.
+
+**littlefs** is a fail-safe filesystem designed for microcontrollers and
+NOR/NAND flash. It provides power-loss resilience, dynamic wear levelling, and
+bad block detection while maintaining strictly bounded RAM and ROM usage. It
+avoids recursion, limits dynamic memory to configurable caller-provided buffers,
+and at no point stores an entire storage block in RAM.
+
+**heatshrink** is an LZSS-based compression library for embedded and real-time
+systems. It operates with as little as 50 bytes of RAM, processes data
+incrementally in arbitrarily small chunks, supports both static and dynamic
+allocation, and separates the encoder and decoder into independently compilable
+units. iotdata already uses heatshrink for image compression (Section 8.27.2).
+
+**Mbed TLS** (formerly PolarSSL) is a C implementation of TLS/DTLS and
+cryptographic primitives. Its minimum TLS stack requires under 60 KB ROM and
+under 64 KB RAM. It is highly modular: individual cryptographic algorithms can
+be used independently of the TLS stack. Feature selection is via a compile-time
+configuration header (`mbedtls_config.h`).
+
+**wolfSSL / wolfCrypt** is an embedded SSL/TLS library written in ANSI C,
+targeting RTOS and resource-constrained environments. With the LeanPSK
+configuration, it compiles to as little as 20 KB. It supports extensive hardware
+cryptographic acceleration and compile-time algorithm selection.
+
+**minmea** is a minimalistic GPS NMEA 0183 parser in pure ISO C99. It consists
+of a single source file and header, uses no dynamic memory allocation, performs
+no floating-point arithmetic in the core library (offering both fixed-point and
+float output), and runs on embedded ARM, Linux, macOS, and Windows.
+
+#### I.6.2. Design Principle Comparison
+
+The following table maps six architectural principles common to high-quality
+embedded C libraries against the reference libraries and iotdata.
+
+| Principle                        | lwIP               | littlefs                  | heatshrink               | Mbed TLS             | minmea               | iotdata                  |
+| -------------------------------- | ------------------ | ------------------------- | ------------------------ | -------------------- | -------------------- | ------------------------ |
+| **Compile-time modularity**      | `lwipopts.h`       | Config struct             | `heatshrink_config.h`    | `mbedtls_config.h`   | Linker GC            | `IOTDATA_ENABLE_*`       |
+| **Zero malloc / caller buffers** | Pool allocator     | Caller-provided           | Static or dynamic        | Caller-provided      | Stack only           | Stack only, no malloc    |
+| **Integer-only capability**      | N/A (networking)   | Yes (all integer)         | Yes (all integer)        | Yes (bignum library) | Core is integer-only | `IOTDATA_NO_FLOATING`    |
+| **Separable components**         | Raw/Netconn/Socket | Single unit               | Encode ≠ Decode          | Crypto ≠ TLS ≠ X.509 | Single unit          | Encode ≠ Decode ≠ JSON   |
+| **Platform abstraction**         | OS emulation layer | Block device API          | None needed              | Platform ALT layer   | Compat headers       | `<stdint.h>` only        |
+| **Bounded resource usage**       | Configurable pools | No recursion, bounded RAM | Incremental, bounded CPU | Configurable buffers | Fixed struct sizes   | Compile-time-known sizes |
+
+**Compile-time modularity.** The ability to include only the features a
+deployment needs, with the compiler eliminating unused code. lwIP pioneered this
+with `lwipopts.h`, a user-created header that overrides defaults for every
+tunable parameter. Mbed TLS uses the same pattern with `mbedtls_config.h`.
+iotdata follows this tradition with `IOTDATA_ENABLE_SELECTIVE` and per-field
+`IOTDATA_ENABLE_*` defines, plus functional subsetting (`IOTDATA_NO_DECODE`,
+`IOTDATA_NO_JSON`, etc.). The result is that a minimal iotdata encoder
+(battery + environment only) compiles to 768 bytes on ESP32-C3 — comparable to
+heatshrink's decoder at ~1 KB on AVR.
+
+**Zero malloc / caller-provided buffers.** Dynamic memory allocation is avoided
+or prohibited because it introduces fragmentation, non-deterministic timing, and
+failure modes that are unacceptable in embedded systems (particularly those
+governed by MISRA C or similar standards). littlefs achieves this by requiring
+the caller to provide a configuration struct with buffer pointers. heatshrink
+supports both modes — static allocation for embedded, dynamic for convenience on
+hosted platforms. iotdata's encode and decode paths perform no `malloc` or
+`free` calls; the `iotdata_encoder_t` context is allocated on the caller's stack
+or as a static variable. The only heap allocation in the library is within the
+JSON conversion functions (`cJSON_CreateObject`), which are gateway-only and
+excluded from embedded builds via `IOTDATA_NO_JSON`.
+
+**Integer-only capability.** Many Class 1 and Class 2 MCUs lack a hardware FPU.
+Software floating-point emulation adds 2–5 KB of code and ~50–100 cycles per
+operation. minmea addresses this by keeping its core parser integer-only, using
+a `struct minmea_float` that stores values as a numerator/denominator pair
+(`int_least32_t`) and offering an explicit `minmea_tocoord()` conversion for
+callers that need floating-point output. iotdata's `IOTDATA_NO_FLOATING` mode
+follows the same philosophy: all values are passed as scaled integers
+(temperature as centidegrees, position as degrees×10⁷), eliminating all
+floating-point dependencies.
+
+**Separable components.** heatshrink's encoder and decoder are independently
+compilable — an embedded device that only compresses data need not include the
+decompressor. Mbed TLS separates into three libraries: `libtfpsacrypto` (raw
+cryptographic primitives), `libmbedx509` (certificate handling), and
+`libmbedtls` (TLS/DTLS protocol). An application that needs only AES encryption
+links against the crypto library alone. iotdata provides the same separation:
+`IOTDATA_NO_DECODE` excludes the decoder, `IOTDATA_NO_JSON` excludes JSON, and
+`IOTDATA_NO_PRINT` / `IOTDATA_NO_DUMP` exclude diagnostic output. An
+encoder-only build for a sensor node includes none of the decoder, print, dump,
+or JSON machinery.
+
+**Platform abstraction without OS dependency.** lwIP defines an operating system
+emulation layer (`sys_arch`) that provides semaphores, mailboxes, and threads,
+with a bare-metal implementation that uses polling. littlefs abstracts storage
+behind a block device API (`lfs_config` with read/prog/erase function pointers).
+iotdata has the lightest abstraction of all: it depends only on `<stdint.h>`,
+`<stdbool.h>`, `<stddef.h>`, and optionally `<math.h>` (for `round()`/`floor()`
+in floating-point mode). No OS services, no file I/O, no timers, no threading.
+The bit-packing core operates on a caller-provided `uint8_t` buffer and a bit
+offset — it is portable to any byte-addressable architecture.
+
+**Bounded, predictable resource usage.** littlefs guarantees that its RAM
+consumption is bounded regardless of filesystem size — it never stores an entire
+flash block in RAM, avoids recursion (which would produce data-dependent stack
+growth), and limits dynamic memory to configurable buffers. heatshrink processes
+data in incremental chunks with bounded CPU time per call, making it suitable
+for hard real-time contexts. iotdata's `encode_end()` function performs a single
+linear pass over the variant field table; its execution time is proportional to
+the number of present fields (maximum ~300 bit operations for all 12 fields),
+with no data-dependent loops except TLV string encoding.
+
+#### I.6.3. Positioning
+
+iotdata sits at an intersection that is unusual in the embedded library
+landscape. Most IoT encoding libraries (CayenneLPP, Nanopb) do not follow all of
+the embedded design principles above — CayenneLPP uses `malloc`, Nanopb requires
+a code generator and an external toolchain dependency. Conversely, most
+libraries that rigorously follow these principles (lwIP, littlefs, heatshrink)
+are not encoding libraries — they solve networking, storage, or compression
+problems.
+
+iotdata applies the architectural discipline of the best embedded C libraries to
+the specific problem of sensor telemetry encoding. The design choices — compile-
+time field selection, caller-provided buffers, integer-only mode, separable
+encode/decode, no OS dependency, bounded resource usage — are individually
+unremarkable (they are standard practice in the embedded ecosystem). Their
+combination in a sensor telemetry protocol is less common, because the IoT
+encoding space has historically been dominated by formats designed for
+flexibility and interoperability (Protobuf, CBOR, CayenneLPP) rather than for
+the architectural constraints that govern embedded library design.
+
+This positioning has costs. iotdata lacks the ecosystem integration of
+CayenneLPP (no native TTN/Cayenne support), the schema evolution guarantees of
+Protobuf (no field tags, no wire-level versioning), the self-description of CBOR
+(packets cannot be decoded without the variant table), and the multi-language
+code generation of Bitproto and Nanopb (the reference implementation is C only).
+These trade-offs are deliberate: they are the price of a library that compiles
+to 768 bytes on a RISC-V MCU and produces 16-byte packets for a full weather
+station reading.
+
+### I.7. Impact on LoRa Airtime and Battery Life
 
 The size difference has direct operational consequences on LoRa:
 
-| Encoding | Bytes | Airtime (SF7/125kHz) | Airtime (SF10/125kHz) | Fits SF12? |
-| -------- | ----: | -------------------: | --------------------: | :--------: |
-| iotdata  |    16 |               ~36 ms |               ~247 ms |     ✓      |
-| C struct |    24 |               ~46 ms |               ~370 ms |     ✓      |
-| Protobuf |    42 |               ~72 ms |               ~617 ms |    ✓\*     |
-| CBOR     |    66 |              ~107 ms |               ~925 ms |     ✗      |
-| JSON     |   261 |              ~369 ms |                     ✗ |     ✗      |
+| Encoding   | Bytes | Airtime (SF7/125kHz) | Airtime (SF10/125kHz) | Fits SF12? |
+| ---------- | ----: | -------------------: | --------------------: | :--------: |
+| iotdata    |    16 |               ~36 ms |               ~247 ms |     ✓      |
+| Bitproto†  |   ~22 |               ~41 ms |               ~289 ms |     ✓      |
+| C struct   |    24 |               ~46 ms |               ~370 ms |     ✓      |
+| Protobuf   |    42 |               ~72 ms |               ~617 ms |    ✓\*     |
+| CayenneLPP |    54 |               ~92 ms |               ~781 ms |     ✗      |
+| CBOR       |    66 |              ~107 ms |               ~925 ms |     ✗      |
+| JSON       |   261 |              ~369 ms |                     ✗ |     ✗      |
 
 \*Protobuf at 42 bytes fits the SF12/125kHz maximum payload of 51 bytes, but
 with minimal room for header overhead.
 
+†Bitproto with iotdata-equivalent header and extensibility header.
+
 At SF10 with a 1% duty cycle, the minimum transmission interval for iotdata is
-25 seconds. For JSON, it is 93 seconds — nearly 4× longer between transmissions
-for the same regulatory budget. For battery-powered sensors where radio
-transmission dominates power consumption, this difference translates directly to
-battery life.
+25 seconds. For CayenneLPP, it is 78 seconds — over 3× longer between
+transmissions for the same regulatory budget. For battery-powered sensors where
+radio transmission dominates power consumption, this difference translates
+directly to battery life.
+
+CayenneLPP's 54-byte payload exceeds the SF12/125kHz maximum of 51 bytes,
+meaning it cannot be used at the highest spreading factor for the test payload
+without dropping fields. iotdata's 16 bytes fit comfortably at all spreading
+factors, with headroom for TLV data even at SF12.
 
 ## Appendix J. Known Limitations and Open Issues
 
@@ -6018,6 +6341,907 @@ Defer generic rate-of-change mechanisms to a future version.
 | ---------------------- | ---- | ---------------------- | ----------- | ------------------- |
 | Temp rate (°C/min)     | 8    | -25.6 to +25.4 °C/min  | 0.2 °C/min  | Fire, frost warning |
 | PM2.5 rate (µg/m³/min) | 8    | -127 to +128 µg/m³/min | 1 µg/m³/min | Smoke detection     |
+
+### J.18. Silent Decode of Corrupted Payloads
+
+**Issue:** The iotdata wire format contains no structural markers — no field
+tags, type indicators, length prefixes, or sentinel values — between data
+fields. The decoder determines field boundaries entirely from the variant table
+and presence bytes. If either the presence bytes or a data field are corrupted
+by a bit error that is not caught by the transport layer, the decoder will
+produce a structurally valid but semantically wrong result with no indication of
+error.
+
+Consider a single bit-flip in Presence Byte 0 that sets the wind bit (S3) when
+wind data was not transmitted. The decoder now attempts to read 22 bits of wind
+data from what is actually the rain, solar, and beginning of any extension byte
+or TLV data. Every field boundary after the corrupted presence byte is shifted,
+and every subsequent decoded value is wrong. The decoder reports success.
+
+**Comparison:** Protobuf and CBOR include per-field type and length information
+that acts as structural redundancy. A corrupted Protobuf field tag will
+typically produce an invalid wire type or an impossibly large field number,
+causing the decoder to reject the packet. CayenneLPP's 2-byte channel+type
+prefix per field provides similar structural checkpoints — a corrupted type byte
+will fail to match any known sensor type. These formats pay a wire-size cost for
+this property, but gain detection of mid-payload corruption that survives the
+transport CRC.
+
+**Impact:** In practice, this risk is low for deployments using LoRa CRC (which
+catches most bit errors) or LoRaWAN MIC (which provides cryptographic
+integrity). The risk is higher for deployments on transports without integrity
+checks, or where the LoRa CRC is disabled for range extension (a practice used
+by some long-range deployments at high spreading factors).
+
+The most dangerous failure mode is a corrupted presence byte, because it shifts
+all subsequent field boundaries and can cause every decoded value to be
+plausible but wrong. A corrupted data field is less dangerous — it affects only
+that field and subsequent fields are still correctly aligned (because the
+corrupt field still occupies its expected bit width).
+
+**Mitigation options:**
+
+1. **Transport-layer CRC (current approach).** Rely on LoRa CRC, LoRaWAN MIC, or
+   equivalent link-layer integrity. This is the protocol's stated design choice
+   (Section 3.7). For most deployments it is sufficient.
+
+2. **Application-layer checksum.** Reserve a TLV type for a packet checksum
+   (e.g. CRC-8 over the header and data fields). The TLV section appears after
+   all data fields, so a checksum TLV allows the receiver to verify the entire
+   data section. Cost: 3 bytes (16-bit TLV header + 8-bit CRC). This is
+   available today using a proprietary TLV type (0x20+) and requires no protocol
+   changes.
+
+3. **Range validation.** The decoder can validate each decoded value against the
+   field's defined range (e.g. humidity must be 0–100, pressure must be
+   850–1105). Out-of-range values indicate corruption. This catches some
+   corruptions but not all — a corrupted temperature of 22.5°C when the true
+   value was 18.0°C passes range validation. The reference implementation does
+   not currently perform post-decode range validation, though Section 11.6
+   identifies this as a non-fatal anomaly.
+
+4. **Statistical anomaly detection.** The gateway can flag decoded values that
+   are statistically inconsistent with recent history for the same station (e.g.
+   a 30°C temperature jump between consecutive transmissions). This is a
+   receiver-side strategy that requires no wire changes but cannot distinguish
+   corruption from genuine rapid change.
+
+**Current position:** The protocol's transport-delegated integrity model
+(option 1) is retained for v1.0. Deployments requiring stronger guarantees
+SHOULD use LoRaWAN MIC or add an application-layer checksum via a proprietary
+TLV. The specification should note this failure mode explicitly in Section 11.6
+as a receiver consideration.
+
+### J.19. No Schema Tooling or Code Generation
+
+**Issue:** Nanopb, Bitproto, and Protobuf all provide code generators that
+produce encoder/decoder source code from a schema definition file (`.proto`,
+`.bitproto`). This ensures that both sides of a communication link use an
+identical, machine-generated interpretation of the data layout. Schema changes
+are made in one place and propagated automatically.
+
+iotdata's variant tables are hand-coded C arrays. The reference implementation
+defines them as `iotdata_variant_def_t` structs with manually specified field
+types, labels, and presence byte counts. Custom variants are created by writing
+C code (Section 7, "Custom Variant Maps"). There is no schema definition
+language, no code generator, and no tooling to verify that a transmitter's
+variant table matches a receiver's.
+
+**Impact:** In a small deployment (5–20 sensors, one operator), this is
+manageable — the operator compiles the same variant definition into both sensor
+and gateway firmware. In larger deployments, or deployments with separate teams
+responsible for sensor and gateway software, the risk of variant table mismatch
+increases. A mismatch produces silently wrong data (compounded by J.18 — there
+are no structural markers to detect the misalignment).
+
+The absence of a schema language also means there is no machine-readable variant
+definition that could be used to auto-generate decoders in other languages
+(Python, JavaScript, Go), to validate variant definitions for consistency, or to
+produce documentation from the schema.
+
+**Comparison:** Nanopb's workflow is: edit `.proto` file → run `protoc` with the
+nanopb plugin → get `.pb.c` and `.pb.h` → compile into both sensor and gateway.
+The schema file is the single source of truth. Bitproto follows an identical
+pattern. iotdata's workflow is: edit C source on both sensor and gateway,
+manually ensuring consistency.
+
+**Options under consideration:**
+
+1. **Schema definition file.** Define a simple text format for variant tables
+   (field type, label, presence byte assignment) and write a generator that
+   produces C source for the reference implementation. This could also generate
+   Python/JavaScript decoders for gateway use. The schema file becomes the
+   single source of truth for the variant definition.
+
+2. **Variant table in VERSION TLV.** Encode a compact representation of the
+   variant table in the VERSION TLV (Section 9.5.1), transmitted at boot. The
+   gateway auto-discovers the field layout from the first packet. This adds wire
+   overhead but eliminates the need for pre-shared variant definitions. See also
+   J.22.
+
+3. **Accept the limitation.** The protocol explicitly disclaims global
+   interoperability (Section 3.8). For closed deployments where one build system
+   compiles both sensor and gateway, the risk of mismatch is low. A shared C
+   header included by both sides achieves consistency without a separate
+   toolchain.
+
+**Recommendation:** Option 1 (a lightweight schema tool) is the most practical
+improvement and would also enable option 3 of J.22 (variant advertisement).
+Option 3 (accept the limitation) is the appropriate baseline for v1.0, with a
+shared C header as a documented best practice for multi-target builds. A schema
+tool is deferred to post-v1.0 tooling.
+
+### J.20. C-Only Reference Implementation
+
+**Issue:** The reference implementation is written in C11 and provides a static
+library (`libiotdata.a`). There are no bindings, ports, or reference
+implementations in other languages. A gateway or server written in Python, Go,
+JavaScript, or Rust must reimplement the decoder from the specification document
+(this README), using the C code as an informal reference.
+
+**Comparison:** Nanopb generates C code, but the `.proto` schema it consumes is
+shared with the wider Protobuf ecosystem — any Protobuf library in any language
+can decode a Nanopb-encoded message. Bitproto generates C, Go, and Python from a
+single schema. CayenneLPP has implementations in C++ (Arduino), Python, and
+JavaScript, and is natively decoded by The Things Network and ChirpStack without
+any user code.
+
+**Impact:** For an all-C deployment (ESP32 sensor + Raspberry Pi gateway using
+the same `libiotdata.a`), this is not a limitation. For deployments where the
+gateway or backend is written in Python, Go, or JavaScript — which is the common
+case for cloud-connected IoT platforms — the absence of a reference decoder in
+those languages is a significant adoption barrier. Reimplementing the
+bit-packing, quantisation, variant dispatch, and TLV parsing is non-trivial and
+error-prone, particularly for the variable-length fields (Air Quality, Image)
+and the 6-bit packed string format.
+
+**Options:**
+
+1. **Python reference decoder.** A Python implementation of the decoder would
+   cover the most common gateway/server language and could also serve as a test
+   oracle for the C implementation. The bit-packing logic is straightforward in
+   Python; the primary work is replicating the variant table dispatch and
+   quantisation formulae.
+
+2. **JavaScript/TypeScript decoder.** For LoRaWAN deployments, a JavaScript
+   decoder function is directly usable as a TTN/ChirpStack payload formatter,
+   addressing J.21 simultaneously.
+
+3. **Generated decoders.** If a schema tool is developed (J.19), it could
+   generate decoders in multiple languages from the variant definition.
+
+**Recommendation:** A Python reference decoder and a JavaScript payload
+formatter are identified as high-value post-v1.0 deliverables. The C
+implementation remains the normative reference.
+
+### J.21. No LoRaWAN Ecosystem Integration
+
+**Issue:** CayenneLPP's primary competitive advantage is not its wire efficiency
+(it is 3.4× larger than iotdata for the test payload) but its zero-
+configuration integration with the LoRaWAN ecosystem. The Things Network,
+ChirpStack, and myDevices Cayenne all decode CayenneLPP payloads automatically —
+the operator selects "CayenneLPP" as the payload formatter and sensor data
+appears in the dashboard with correct field names, units, and types. No custom
+code is required.
+
+iotdata has no equivalent integration. An operator deploying iotdata on a
+LoRaWAN network server must write a custom payload formatter (typically in
+JavaScript) that reimplements the decoder for their specific variant. This
+formatter must be maintained alongside the sensor firmware and updated whenever
+the variant definition changes.
+
+**Impact:** For operators already invested in the LoRaWAN ecosystem and using
+TTN or ChirpStack with Cayenne dashboards, CayenneLPP's ecosystem integration
+may outweigh iotdata's wire efficiency advantage. The 3.4× payload size
+difference matters most at high spreading factors and under tight duty cycle
+budgets; at SF7 with modest duty cycle pressure, the operational impact of
+larger payloads is tolerable, and the operational simplicity of CayenneLPP
+becomes the dominant factor.
+
+For operators using custom gateway software (direct LoRa, non-LoRaWAN),
+iotdata's wire efficiency advantage applies fully and CayenneLPP's ecosystem
+integration is irrelevant.
+
+**Options:**
+
+1. **TTN/ChirpStack payload formatter.** Provide a JavaScript decoder function
+   that can be pasted into the TTN or ChirpStack payload formatter
+   configuration. This would need to be parameterised by variant (either a
+   generic decoder that reads the variant from the header and looks up a
+   JavaScript variant table, or a generated per-variant formatter). See also
+   J.20 option 2.
+
+2. **MQTT auto-decode.** For gateways that forward raw packets via MQTT, provide
+   a lightweight MQTT-to-JSON bridge (Python or Node.js) that subscribes to raw
+   packet topics, decodes iotdata, and republishes as JSON. This is
+   architecturally equivalent to CayenneLPP's network server integration but
+   operates at the application layer.
+
+3. **Accept the limitation.** iotdata's design philosophy prioritises wire
+   efficiency for constrained links over ecosystem convenience. Operators
+   choosing iotdata accept the cost of custom integration in exchange for
+   smaller payloads and longer battery life.
+
+**Recommendation:** A reference JavaScript payload formatter for TTN/ChirpStack
+is identified as a high-value deliverable that would substantially reduce the
+adoption barrier for LoRaWAN deployments, and could be produced as a companion
+artifact alongside a Python decoder (J.20). The protocol itself requires no
+changes.
+
+### J.22. No Variant Table Discovery or Advertisement
+
+**Issue:** An iotdata packet is not self-describing. The receiver must possess
+the transmitter's variant table before it can decode any data fields. If a
+receiver encounters a packet from a station whose variant definition it does not
+have, it cannot determine the field types, field widths, or field order. The
+packet is opaque.
+
+This is a deliberate design choice (Section 3.8: "it is expressly not a goal to
+support interoperability between implementations"). However, the absence of any
+mechanism for a receiver to discover a transmitter's variant definition creates
+operational friction in several scenarios:
+
+- **New sensor deployment.** When a new sensor is added to an existing
+  deployment, the gateway must be reconfigured with the sensor's variant
+  definition before it can decode the sensor's data.
+
+- **Multi-operator environments.** If two operators share a gateway or mesh
+  infrastructure, each must ensure the gateway has variant definitions for all
+  sensors from both operators.
+
+- **Diagnostic and debugging.** A technician with a generic LoRa receiver cannot
+  inspect packets from an unknown deployment without obtaining the variant
+  definition out-of-band.
+
+- **Mesh relay transparency.** Mesh relays (Appendix G) forward sensor packets
+  as opaque blobs, but gateways must decode them. If a relay forwards a packet
+  from a sensor using an unknown variant, the gateway cannot decode it.
+
+**Comparison:** CayenneLPP payloads are fully self-describing — every field
+carries its channel and type. CBOR and Protobuf carry structural metadata that
+enables generic tools to display the data structure even without a schema (e.g.
+`protoc --decode_raw`). Nanopb-encoded data can be decoded by any Protobuf
+library with the `.proto` schema — and the schema is a portable text file, not
+compiled into a specific target.
+
+**Options under consideration:**
+
+1. **Accept the limitation (current position).** For closed deployments where
+   one operator controls all devices, the variant table is a compile-time
+   artefact shared between sensor and gateway firmware. No wire-level discovery
+   is needed.
+
+2. **Variant definition in VERSION TLV.** The existing VERSION TLV (type 0x01,
+   string format) carries firmware and hardware identification. A compact
+   encoding of the variant table could be added — either as additional key-value
+   pairs in the VERSION TLV (e.g. `V0 BAT LNK ENV WND RAN SOL`) using short
+   field type mnemonics, or as a new dedicated TLV type in the reserved
+   0x10–0x1F range.
+
+   The variant definition is static per firmware build, so it would be
+   transmitted once at boot alongside the VERSION TLV. The gateway caches it per
+   station_id and uses it to decode subsequent packets. Cost: approximately
+   20–40 bytes once per boot cycle — negligible amortised across thousands of
+   subsequent data packets.
+
+3. **Schema file distribution.** If a schema definition language is developed
+   (J.19), variant definitions could be distributed as files (alongside firmware
+   images, via OTA manifest, or published to a repository). The gateway loads
+   schema files for the variants it expects to encounter. This is an out-of-band
+   mechanism that requires no wire changes.
+
+4. **Well-known variant registry.** Publish a set of standardised variant
+   definitions (weather station, soil sensor, water quality, snow depth) with
+   assigned variant IDs. Receivers that implement the registry can decode any
+   sensor using a registered variant without per-deployment configuration. This
+   conflicts with the current non-interoperability stance (Section 3.8) but
+   could be offered as an optional extension for operators who want
+   plug-and-play behaviour.
+
+**Recommendation:** Option 1 (accept the limitation) is appropriate for v1.0,
+consistent with the protocol's design philosophy. Option 2 (variant definition
+in a TLV) is the most promising future mechanism because it requires no
+out-of-band coordination and leverages existing protocol features. The design of
+a compact variant table encoding is deferred to post-v1.0 but is noted as a
+prerequisite for any future interoperability work. Option 4 (registered
+variants) may be revisited if the protocol achieves adoption beyond single-
+operator deployments.
+
+### J.23. Relationship to ASN.1 Packed Encoding Rules (UPER)
+
+**Issue:** ASN.1 with Unaligned Packed Encoding Rules (UPER, ITU-T X.691) is a
+standardised bit-packing encoding that operates on the same principle as
+iotdata's core encoding: constrained integer ranges are mapped to
+minimum-bit-width representations, fields are not byte-aligned, and optional
+fields are indicated by a presence bitmap at the start of the SEQUENCE. UPER is
+deployed at scale in 3GPP signalling (LTE RRC, 5G NR), aviation (ADS-B uses a
+fixed-layout bit-packed format with the same philosophy), automotive V2X
+(CAM/DENM messages), and space telemetry (ESA's Packet Utilisation Standard via
+ASN1SCC). An informed reviewer of iotdata will immediately ask: "why not define
+an ASN.1 schema and use UPER?"
+
+**Comparison:** An ASN.1 schema for the iotdata test payload would look
+approximately like:
+
+```asn1
+WeatherStation ::= SEQUENCE {
+    battery       INTEGER (0..100)   OPTIONAL,  -- 7 bits
+    linkQuality   INTEGER (0..100)   OPTIONAL,  -- 7 bits
+    temperature   INTEGER (-400..850) OPTIONAL,  -- 11 bits (range 1251)
+    humidity      INTEGER (0..100)   OPTIONAL,  -- 7 bits
+    pressure      INTEGER (8500..11050) OPTIONAL, -- 9 bits (range 2551)
+    ...
+}
+```
+
+UPER would encode constrained integers in minimum bits (identical to iotdata),
+prefix the SEQUENCE with a presence bitmap (identical to iotdata's presence
+bytes), and pack fields without byte alignment. The wire encoding of the data
+fields would be nearly identical in size — UPER's encoding of this schema would
+produce a payload within 1–2 bits of iotdata's 16-byte test payload.
+
+**Why iotdata does not use ASN.1 UPER:**
+
+1. **Toolchain weight.** ASN.1 compilers are substantial tools. The open-source
+   ASN1SCC (ESA) generates C and SPARK/Ada from ASN.1 grammars with zero-malloc
+   guarantees and is suitable for embedded targets. However, ASN1SCC itself
+   requires .NET 9 and Java JRE to run, and the generated code includes a
+   runtime library (asn1crt.c, encoding helpers) that adds several KB of ROM.
+   Commercial ASN.1 compilers (OSS Nokalva, Objective Systems) are expensive and
+   typically licensed per-seat. The Python `asn1tools` package can generate UPER
+   C source but supports only a subset of ASN.1. For a project targeting
+   ESP32-C3 with 400 KB flash, the toolchain overhead and generated code size
+   are non-trivial compared to iotdata's single .c/.h with no external
+   dependencies.
+
+2. **No domain-specific quantisation.** UPER encodes constrained integers in
+   minimum bits, but the constraint must be expressed as an integer range. To
+   encode temperature as 0.1°C resolution over -40.0°C to +85.0°C, the ASN.1
+   schema must define the field as `INTEGER (-400..850)` and the application
+   must perform the ×10 scaling on both sides. UPER provides the bit-packing but
+   not the semantic quantisation — the schema does not express "this field is a
+   temperature in °C with 0.1 resolution." iotdata's field type system encodes
+   the physical meaning, resolution, and range as a single declaration, and the
+   reference implementation performs quantisation and dequantisation
+   automatically.
+
+3. **No presence-byte-driven variable layout.** UPER's OPTIONAL bitmap is fixed
+   at schema definition time — every OPTIONAL field in the SEQUENCE gets a bit
+   in the preamble, always. iotdata's variant system allows different
+   deployments to define different field sets (variants) with different presence
+   byte layouts, and the presence bytes serve double duty as both optional-field
+   indicators and variant-specific field selectors. ASN.1 would require a
+   separate schema (or CHOICE type) per variant, and the decoder would need to
+   know which schema to apply — reintroducing the variant-selection problem at
+   the ASN.1 level.
+
+4. **No TLV extension mechanism.** iotdata's TLV section (Section 9.5) allows
+   arbitrary typed extensions (firmware version, GPS coordinates, text labels,
+   image data) to be appended to any packet without schema changes. ASN.1
+   supports extensibility via the `...` extension marker, but extending a
+   UPER-encoded SEQUENCE requires the extension to be defined in the schema and
+   recompiled. iotdata's TLV section is deliberately schema-free.
+
+5. **Specification complexity.** The ASN.1 standard spans ITU-T X.680–X.683
+   (notation) and X.690–X.696 (encoding rules). UPER alone (X.691) is a 107-page
+   specification with complex rules for fragmentation, length determinants, and
+   constraint visibility. iotdata's encoding rules fit in a single README
+   section and can be implemented from scratch in an afternoon. For a
+   single-purpose IoT sensor protocol, the full generality of ASN.1 is
+   unnecessary overhead.
+
+**What ASN.1 UPER does better:**
+
+- Formal schema language with decades of tooling, validation, and
+  interoperability testing.
+- Automatic code generation for C, Ada, Python, Java, Go, and Rust.
+- Proven at enormous scale (every LTE/5G device on earth uses UPER for RRC).
+- Schema evolution via extension markers — forward and backward compatibility is
+  a solved problem.
+- Interface Control Document (ICD) generation from the schema.
+
+**Position:** iotdata's encoding is philosophically identical to ASN.1 UPER but
+trades generality for simplicity, domain awareness, and minimal toolchain
+dependency. For deployments where ASN.1 tooling is already available (e.g. space
+systems, automotive V2X), UPER is the superior choice. For bare-metal IoT
+sensors where the entire firmware fits in 256 KB and the developer does not have
+access to (or budget for) an ASN.1 compiler, iotdata provides the same wire
+efficiency with a fraction of the toolchain complexity.
+
+The existence of ASN1SCC (open-source, zero-malloc, ESA-funded) narrows this gap
+considerably. A future version of iotdata could offer an ASN.1 schema as an
+alternative interface to the same wire format, allowing ASN.1-equipped teams to
+use their preferred toolchain while remaining wire-compatible with the C
+reference implementation.
+
+### J.24. Relationship to SenML and LwM2M
+
+**Issue:** SenML (Sensor Measurement Lists, IETF RFC 8428) and LwM2M
+(Lightweight M2M, OMA SpecWorks) are the IETF/OMA standards for IoT sensor data
+representation and device management respectively. CayenneLPP's type codes are
+derived from LwM2M/IPSO Smart Object IDs. Any IoT data format should be
+positioned relative to these standards.
+
+**SenML overview:** SenML defines a data model for sensor measurements as a list
+of records, each containing a name, value, unit, and optional timestamp. It
+supports JSON, CBOR, XML, and EXI representations. The CBOR representation uses
+integer keys for compactness (e.g. key -2 for Base Name, key 2 for Value). A
+minimal SenML+CBOR record for one temperature reading is approximately 15–20
+bytes (CBOR map with name string, unit string, and double-precision value). A
+full weather station payload (6 sensor readings) would be approximately 90–120
+bytes in SenML+CBOR — 6–7× larger than iotdata's 16-byte encoding.
+
+**LwM2M overview:** LwM2M defines a device management and service enablement
+protocol built on CoAP. It uses an object/resource model where standardised
+Object IDs (e.g. 3303 = Temperature, 3304 = Humidity, 3323 = Pressure) identify
+sensor types. LwM2M operates over CoAP/UDP with DTLS security and requires a
+LwM2M server. It is designed for bidirectional device management (firmware
+update, configuration, observation) rather than unidirectional sensor data
+streaming.
+
+**Why iotdata does not use SenML or LwM2M:**
+
+1. **Wire overhead.** SenML's self-describing records carry field names, units,
+   and full-precision values per reading. Even in CBOR, this is 6–7× larger than
+   iotdata. For LoRa at SF12 (51-byte maximum payload), a SenML+CBOR weather
+   station payload would not fit in a single packet.
+
+2. **Protocol weight.** LwM2M requires CoAP, DTLS, and a server-side LwM2M
+   implementation. This is a full application-layer stack unsuitable for
+   bare-metal LoRa devices with no IP connectivity. SenML as a data format is
+   lighter but still assumes a transport capable of carrying its CBOR/JSON
+   payloads.
+
+3. **Unidirectional design.** iotdata is designed for fire-and-forget sensor
+   telemetry on unidirectional or asymmetric links. LwM2M's observation model
+   (where the server subscribes to resources and receives notifications) assumes
+   bidirectional connectivity.
+
+**What SenML/LwM2M do better:**
+
+- Standardised sensor type identifiers (IPSO Object IDs) with IANA-registered
+  units — a solved namespace problem.
+- Self-describing payloads with no out-of-band schema requirement.
+- Ecosystem integration with IoT platforms (AWS IoT, Azure IoT Hub, Thingsboard)
+  that natively parse SenML.
+- Formal extensibility through IANA registries.
+
+**Relevance to iotdata:** If iotdata adopts global field type IDs (see J.27),
+aligning those IDs with IPSO/LwM2M Object IDs where possible would provide
+semantic interoperability without wire overhead. A gateway decoding iotdata
+could map field type 0x03 (IOTDATA_FIELD_ENVIRONMENT) to LwM2M Objects 3303
+(Temperature) + 3304 (Humidity) + 3315 (Barometer), enabling integration with
+LwM2M-aware platforms at the application layer.
+
+### J.25. Energy and Battery Life Impact
+
+**Issue:** Appendix I.7 presents airtime comparisons across encoding formats and
+spreading factors, but does not translate these into the operational metric that
+matters most for battery-powered deployments: projected battery life.
+
+**Worked example:** Consider a solar-powered weather station transmitting the
+test payload (Section I.1) every 60 seconds using an SX1262 transceiver at +14
+dBm on EU868 (125 kHz bandwidth).
+
+Key parameters from the SX1262 datasheet:
+
+- TX current at +14 dBm (DC-DC): ~45 mA
+- RX current: 4.2 mA
+- Sleep current (warm start, RTC running): 1.2 µA
+- MCU (ESP32-C3) deep sleep: ~5 µA
+- Total sleep current: ~6.2 µA
+
+For each transmission cycle, the energy cost is dominated by the TX duration.
+Using airtime values from Appendix I.7:
+
+**At SF7 (short range, high data rate):**
+
+| Format     | Payload | Airtime  | TX charge per cycle | TX charge/day |
+| ---------- | ------- | -------- | ------------------- | ------------- |
+| iotdata    | 16 B    | 46.3 ms  | 0.579 µAh           | 0.834 mAh     |
+| Bitproto   | 20 B    | 51.5 ms  | 0.644 µAh           | 0.927 mAh     |
+| CayenneLPP | 54 B    | 97.5 ms  | 1.219 µAh           | 1.755 mAh     |
+| Protobuf   | 42 B    | 82.2 ms  | 1.028 µAh           | 1.480 mAh     |
+| CBOR       | 66 B    | 113.2 ms | 1.415 µAh           | 2.037 mAh     |
+| JSON       | 177 B   | 256.0 ms | 3.200 µAh           | 4.608 mAh     |
+
+At SF7, the differences are small in absolute terms — all formats consume <5
+mAh/day on TX alone. Sleep current (~0.149 mAh/day) and MCU active time
+dominate. Battery life differences are negligible at this spreading factor.
+
+**At SF12 (long range, low data rate):**
+
+| Format     | Payload | Airtime    | TX charge per cycle | TX charge/day |
+| ---------- | ------- | ---------- | ------------------- | ------------- |
+| iotdata    | 16 B    | 1,482 ms   | 18.5 µAh            | 26.7 mAh      |
+| CayenneLPP | 54 B    | 3,121 ms\* | 39.0 µAh            | 56.2 mAh      |
+| JSON       | 177 B   | —\*\*      | —                   | —             |
+
+\* CayenneLPP's 54 bytes exceeds the SF12 maximum payload of 51 bytes. The value
+shown assumes the DR0 maximum is relaxed or the payload is split across two
+packets (doubling actual TX cost).
+
+\*\* JSON's 177 bytes far exceeds the SF12 maximum payload. Multiple packets
+required.
+
+On a 3000 mAh battery (e.g. 18650 LiPo), assuming 80% usable capacity (2400
+mAh), with sleep current of ~0.149 mAh/day:
+
+| Format     | SF7 battery life        | SF12 battery life       |
+| ---------- | ----------------------- | ----------------------- |
+| iotdata    | ~2,440 days (6.7 years) | ~89 days (2.9 months)   |
+| CayenneLPP | ~2,410 days (6.6 years) | ~42 days\* (1.4 months) |
+
+\* Assumes two-packet transmission to fit SF12.
+
+**Analysis:** At SF7, encoding efficiency has minimal impact on battery life
+because sleep current dominates. At SF12 — which is the regime where encoding
+efficiency matters most — iotdata's 16-byte payload delivers roughly 2× the
+battery life of CayenneLPP. For solar-powered deployments with marginal winter
+charging, this difference can be the margin between continuous operation and
+data gaps.
+
+The battery life advantage scales with transmission frequency. A sensor
+transmitting every 30 seconds at SF12 would halve all battery life figures,
+making the encoding efficiency difference more pronounced.
+
+**Limitation of this analysis:** These figures account only for TX energy. In
+practice, MCU wake time (sensor reading, encoding, SPI transfer), RX windows
+(for LoRaWAN Class A), and DC-DC converter efficiency also contribute. TX energy
+is typically 60–80% of per-cycle energy at SF10+, making the airtime comparison
+a reasonable proxy for total energy at high spreading factors.
+
+### J.26. Delta and Differential Encoding
+
+**Issue:** iotdata encodes every field as an absolute value on every
+transmission. For sensor data with high temporal correlation (temperature
+changes <0.5°C per minute, pressure changes <0.5 hPa per minute), this transmits
+substantial redundant information. A 9-bit absolute temperature (0.1°C over -40
+to +85°C) could often be replaced by a 4-bit signed delta (±0.7°C), reducing the
+per-field cost from 9 bits to 4 bits for ~95% of consecutive readings.
+
+**Information-theoretic context:** This observation connects to J.9
+(information-theoretic encoding efficiency). iotdata's quantisation optimises
+the per-field encoding to the minimum bits required for the field's static
+range. Delta encoding would optimise for the dynamic range of consecutive
+readings — the temporal entropy rather than the static entropy. For slowly
+changing environmental data, temporal entropy is substantially lower than static
+entropy.
+
+**Comparison:** No existing IoT payload format in the comparison set
+(CayenneLPP, Nanopb, Bitproto, TinyCBOR, SenML) implements delta encoding. This
+is not a gap relative to competitors but an opportunity for iotdata to extend
+its efficiency advantage.
+
+Delta encoding is well-established in other domains: video codecs (I-frames vs
+P-frames), audio codecs (ADPCM), GPS track compression (delta-of-deltas), and
+time-series databases (Gorilla compression). The pattern is always the same:
+transmit a full keyframe periodically and deltas between keyframes.
+
+**Design sketch:**
+
+A delta-capable iotdata variant would operate as follows:
+
+1. Every N-th packet (e.g. N=10) is a **keyframe** — encoded identically to the
+   current absolute format. The keyframe establishes the reference values for
+   all fields.
+
+2. Intermediate packets are **delta frames**. Each present field is encoded as a
+   signed delta from the previous keyframe value, using a smaller bit width
+   defined per field type:
+
+   | Field          | Absolute bits | Delta bits | Delta range |
+   | -------------- | ------------- | ---------- | ----------- |
+   | Temperature    | 9             | 5          | ±1.5°C      |
+   | Humidity       | 7             | 4          | ±7%         |
+   | Pressure       | 9             | 5          | ±1.5 hPa    |
+   | Wind speed     | 8             | 5          | ±1.5 m/s    |
+   | Wind direction | 9             | 5          | ±15°        |
+   | Rain           | 5             | 3          | ±0.3 mm     |
+   | Solar          | 10            | 5          | ±15 W/m²    |
+
+3. If a delta exceeds the representable range, the field falls back to absolute
+   encoding for that packet (indicated by a flag bit, or by transmitting a
+   keyframe).
+
+**Estimated savings:** For the test payload at steady-state (6 sensor fields
+present), absolute encoding uses ~55 data bits. Delta encoding would use ~27
+data bits — approximately 50% reduction in the data section, saving ~3.5 bytes
+per packet. Over a 10-packet keyframe cycle, 9 delta frames save ~31.5 bytes
+total, at the cost of added decoder complexity and keyframe synchronisation
+requirements.
+
+**Challenges:**
+
+1. **Keyframe synchronisation.** A receiver that misses the keyframe cannot
+   decode subsequent delta frames. This is the same problem as joining a video
+   stream mid-GOP. Mitigations: periodic keyframes at a rate faster than the
+   expected packet loss rate; transmitting the keyframe index in the header so
+   the receiver knows when to expect the next one; or a "request keyframe"
+   mechanism for bidirectional links.
+
+2. **Compounded by J.18.** A corrupted delta value produces a wrong reference
+   for subsequent deltas, causing error accumulation until the next keyframe.
+   This is strictly worse than absolute encoding's corruption behaviour (where
+   each packet is independent).
+
+3. **Complexity.** Both encoder and decoder must maintain per-field state across
+   packets. The encoder must track the last keyframe values; the decoder must
+   reconstruct absolute values from deltas. This adds RAM (one
+   `iotdata_reading_t` per tracked station) and code complexity.
+
+4. **Variant table expansion.** Delta bit widths would need to be defined per
+   field type, adding another dimension to the variant table.
+
+**Recommendation:** Delta encoding is deferred beyond v1.0. The complexity and
+synchronisation challenges outweigh the 3–4 byte savings for most deployments.
+However, for deployments transmitting at SF12 where every byte matters (see
+J.25), delta encoding could reduce a 16-byte payload to ~12 bytes, potentially
+allowing a lower spreading factor and substantially reducing airtime. The design
+sketch above is preserved for future consideration. If implemented, it should be
+a variant-level option (e.g. `IOTDATA_VARIANT_FLAG_DELTA`) rather than a
+protocol-level change, keeping backward compatibility with absolute-only
+decoders.
+
+### J.27. Variant Map Transmission and Global Field Type Identifiers
+
+**Issue:** J.22 identifies the lack of variant table discovery as a limitation.
+J.19 identifies the absence of schema tooling. This item proposes a concrete
+mechanism that addresses both: transmitting the variant map from the device as a
+compact TLV, enabling any receiver to decode subsequent packets without
+pre-shared configuration.
+
+The core analogy is dictionary-based compression: zstd can transmit a dictionary
+once and reference it for all subsequent frames. Similarly, iotdata could
+transmit the variant definition once at boot (or periodically) and every
+subsequent packet is decoded against the cached variant map.
+
+**Prerequisite — Global Field Type Identifiers:**
+
+For the variant map to be meaningful to any receiver, field types must have
+globally unique, stable identifiers. Currently, field types
+(`IOTDATA_FIELD_BATTERY`, `IOTDATA_FIELD_ENVIRONMENT`, etc.) are
+implementation-internal enum values in the C reference implementation. Their
+numeric values are not part of the specification and could change between
+releases.
+
+Promoting these to **protocol-level identifiers** means:
+
+- Each field type is assigned a permanent numeric ID in the specification.
+- The ID encodes the field's data layout (bit widths, quantisation, sub-field
+  structure) — a decoder that knows ID 0x03 can decode an ENVIRONMENT field
+  without any additional information.
+- IDs are never reassigned or reused. New field types receive new IDs.
+- The ID space is partitioned: 0x00–0x3F for specification-defined types,
+  0x40–0x7F for user-defined types (with locally-scoped semantics).
+
+A suggested initial assignment (illustrative, subject to specification review):
+
+| ID   | Field Type     | Sub-fields                             |
+| ---- | -------------- | -------------------------------------- |
+| 0x01 | BATTERY        | voltage_pct (7 bits)                   |
+| 0x02 | LINK_QUALITY   | rssi_pct (7 bits)                      |
+| 0x03 | ENVIRONMENT    | temp (9) + humidity (7) + pressure (9) |
+| 0x04 | WIND           | speed (8) + direction (9) + gust (5)   |
+| 0x05 | RAIN           | accumulation (5 bits)                  |
+| 0x06 | SOLAR          | irradiance (10 bits)                   |
+| 0x07 | UV_INDEX       | uv (4 bits)                            |
+| 0x08 | SOIL           | moisture (7) + temp (9)                |
+| 0x09 | AIR_QUALITY    | pm2.5 (10) + pm10 (10) + aqi (8)       |
+| 0x0A | WATER_QUALITY  | tds (10) + ph (7) + temp (9)           |
+| 0x0B | SNOW_DEPTH     | depth (10 bits)                        |
+| 0x0C | LEAF_WETNESS   | wetness (7 bits)                       |
+| ...  | ...            | ...                                    |
+| 0x40 | USER_DEFINED_0 | (layout defined by variant map)        |
+
+**Variant Map TLV Design:**
+
+A new TLV type (proposed: 0x10, within the reserved 0x10–0x1F sensor metadata
+range) carries the variant definition:
+
+```text
+TLV Header:  [0x10][length]          -- 2 bytes (standard 6+10 bit TLV header)
+Payload:     [num_presence_bytes:3]  -- 3 bits: number of presence bytes (1-7)
+             [num_fields:5]          -- 5 bits: number of fields in variant (1-31)
+             [field_0_id:7]          -- 7 bits per field: global field type ID
+             [field_1_id:7]
+             ...
+             [field_N_id:7]
+```
+
+For the weather station test variant (2 presence bytes, 6 fields):
+
+```text
+Presence count: 2       →  010        (3 bits)
+Field count:    6       →  00110      (5 bits)
+Field IDs:      BATTERY →  0000001   (7 bits)
+                LINK    →  0000010   (7 bits)
+                ENV     →  0000011   (7 bits)
+                WIND    →  0000100   (7 bits)
+                RAIN    →  0000101   (7 bits)
+                SOLAR   →  0000110   (7 bits)
+```
+
+Total: 3 + 5 + (6 × 7) = 50 bits = 7 bytes payload + 2 bytes TLV header = **9
+bytes**. Transmitted once at boot alongside the VERSION TLV, then cached by the
+gateway per station_id.
+
+**Operational model:**
+
+1. **Boot:** Sensor transmits a VERSION TLV (type 0x01) and a VARIANT MAP TLV
+   (type 0x10) in the first packet after power-on or reset.
+
+2. **Periodic refresh:** The variant map TLV is retransmitted every N packets
+   (e.g. N=100, or once per hour) to handle gateway restarts and new receivers
+   joining the network.
+
+3. **Gateway caching:** The gateway maintains a map of
+   `station_id → variant_definition`. When a variant map TLV is received, the
+   gateway stores or updates the entry. Subsequent data packets from that
+   station_id are decoded using the cached variant.
+
+4. **Unknown station:** If a data packet arrives from a station_id with no
+   cached variant, the gateway buffers the raw packet and waits for the next
+   variant map TLV. Alternatively, the gateway can request a retransmission on
+   bidirectional links.
+
+**Relationship to IPSO/LwM2M:** If global field type IDs are aligned with IPSO
+Smart Object IDs where possible (J.24), the variant map TLV provides enough
+information for a gateway to not only decode the packet but also map each field
+to a standardised semantic type — bridging iotdata's compact wire format to the
+broader IoT standards ecosystem.
+
+**Relationship to other J items:**
+
+- J.19 (schema tooling): The global field type ID registry IS the schema. A
+  schema tool generates variant tables from a list of field type IDs.
+- J.20 (multi-language decoders): A decoder that knows the global field type
+  registry can decode any variant map TLV and then decode any subsequent packet
+  — no per-variant code generation needed.
+- J.21 (LoRaWAN integration): A generic JavaScript payload formatter that parses
+  the variant map TLV can decode any iotdata variant on TTN/ChirpStack without
+  per-deployment configuration.
+- J.22 (variant discovery): This item IS the concrete mechanism for variant
+  discovery.
+
+**Recommendation:** Global field type identifiers should be defined in the v1.0
+specification even if the variant map TLV is deferred to a future version.
+Locking the IDs now ensures forward compatibility — any variant tables created
+today will be expressible as variant map TLVs in the future. The variant map TLV
+itself is a low-risk addition (it uses the existing TLV mechanism, adds no
+overhead to data packets, and is entirely optional) and could be included in
+v1.0 as an OPTIONAL feature.
+
+### J.28. Mesh Protocol Comparison
+
+**Issue:** Appendix G defines a mesh relay protocol for multi-hop iotdata
+delivery. This protocol should be compared against established mesh routing
+approaches for low-power wireless networks to contextualise its design choices
+and identify trade-offs.
+
+**Comparison targets:**
+
+**RPL (RFC 6550) — IPv6 Routing Protocol for Low-Power and Lossy Networks:**
+
+RPL is the IETF standard for mesh routing in constrained networks. It builds a
+Destination-Oriented Directed Acyclic Graph (DODAG) rooted at a border router,
+using periodic DIO (DODAG Information Object) messages to construct and maintain
+the topology. Key characteristics:
+
+- **Full IP stack required.** RPL operates on 6LoWPAN/IPv6, requiring a 6LoWPAN
+  adaptation layer, IPv6, ICMPv6, and the RPL control protocol. The Contiki-NG
+  implementation uses approximately 30–50 KB ROM and 10–20 KB RAM.
+- **Proactive routing.** Routes are maintained continuously via DIO/DIS/DAO
+  control messages, even when no data is being sent. The Trickle timer reduces
+  control traffic in stable topologies but still consumes airtime and energy.
+- **Bidirectional.** Supports multipoint-to-point (sensor→gateway),
+  point-to-multipoint (gateway→sensors), and point-to-point (sensor→sensor).
+- **Topology-aware.** RPL maintains a routing table and selects routes based on
+  an Objective Function (e.g. minimise hop count, maximise path ETX).
+- **Target environment.** IEEE 802.15.4 networks (Zigbee-class), typically
+  sub-100m range, hundreds to thousands of nodes, 250 kbps data rate.
+
+**Meshtastic — LoRa Mesh Protocol:**
+
+Meshtastic is an open-source LoRa mesh protocol designed for off-grid text
+messaging. It uses managed flood routing (since v2.6) with distinct strategies
+for broadcast and direct messages. Key characteristics:
+
+- **Managed flooding.** Broadcast messages are rebroadcast by all receiving
+  nodes (up to a configurable hop limit, default 3, max 7). Nodes use a
+  rebroadcast scoring heuristic based on SNR, hop count, and role to decide
+  whether to relay — nodes unlikely to improve coverage suppress their
+  rebroadcast.
+- **No routing tables.** Nodes do not maintain routes. Each packet carries a hop
+  limit and nodes make independent forwarding decisions. This eliminates
+  control-plane overhead entirely.
+- **Protocol Buffers payload.** The packet header is raw bytes (for hardware
+  filtering efficiency) but the payload is Protobuf-encoded. This adds encoding
+  overhead but enables cross-vendor interoperability.
+- **High duty cycle.** Nodes must listen continuously (or near-continuously) to
+  participate in mesh relaying. This fundamentally conflicts with
+  battery-powered sensor operation — Meshtastic nodes typically require USB
+  power or frequent charging.
+- **Target environment.** LoRa P2P at 868/915 MHz, 1–20 km range per hop, tens
+  to hundreds of nodes, text messaging and telemetry.
+- **Scalability concerns.** Flooding-based routing generates O(N) transmissions
+  per message in an N-node network. Community experience suggests congestion
+  issues beyond ~100 nodes in a single mesh, particularly on the default
+  LONG_FAST preset with 10% EU duty cycle.
+
+**Thread (IEEE 802.15.4 / 6LoWPAN):**
+
+Thread is a low-power mesh networking protocol for home automation. It uses
+6LoWPAN over IEEE 802.15.4 with RPL for routing and MLE (Mesh Link
+Establishment) for network management. Thread is a full networking stack
+(IP-based, with DTLS security, DNS-SD service discovery, and border router
+integration) designed for always-powered or mains-powered devices. Its resource
+requirements (64 KB ROM, 32 KB RAM minimum) and always-on radio make it
+unsuitable for battery-powered LoRa sensors.
+
+**Zigbee Mesh:**
+
+Zigbee uses a hybrid routing approach (AODV reactive routing + tree routing)
+over IEEE 802.15.4. Like Thread, it requires substantial stack resources and an
+always-on radio for routing nodes. Zigbee's mesh is designed for dense,
+short-range networks (10–100m) with mains-powered routers and battery-powered
+end devices that do not participate in routing.
+
+**iotdata Appendix G mesh — design positioning:**
+
+| Dimension              | RPL              | Meshtastic      | Thread/Zigbee      | iotdata G        |
+| ---------------------- | ---------------- | --------------- | ------------------ | ---------------- |
+| Routing strategy       | Proactive DODAG  | Managed flood   | Proactive/reactive | Simple relay     |
+| Control overhead       | DIO/DAO periodic | None (flooding) | MLE + RPL          | None             |
+| Routing table          | Yes (per-node)   | No              | Yes                | No               |
+| IP stack required      | Yes (6LoWPAN)    | No              | Yes                | No               |
+| RAM for routing        | 10–20 KB         | ~1 KB           | 32+ KB             | ~100 bytes       |
+| Payload awareness      | No (opaque)      | Protobuf        | No (opaque)        | iotdata-native   |
+| Relay duty cycle       | Always-on        | Always-on       | Always-on          | Duty-cycled      |
+| Battery-powered relays | Impractical      | Impractical     | Impractical        | Designed for     |
+| Max hops (practical)   | 10+              | 3–7             | 10+                | 3–5              |
+| Node scale             | 1000+            | ~100            | 250+               | 10–50            |
+| Bidirectional          | Yes              | Yes             | Yes                | No (uplink only) |
+
+**Key trade-offs in iotdata's approach:**
+
+1. **Simplicity over optimality.** iotdata's mesh relay is a simple
+   store-and-forward mechanism: a relay node receives a sensor packet, stores
+   it, and retransmits it in a subsequent TX window. There is no route
+   discovery, no topology management, and no routing table. This is viable
+   because iotdata assumes a sparse, mostly-static topology with a small number
+   of relay hops between sensor and gateway.
+
+2. **Duty-cycled relays.** Unlike RPL, Meshtastic, Thread, and Zigbee — all of
+   which require routing nodes to listen continuously — iotdata relays can
+   operate on duty-cycled schedules. A relay wakes for a brief RX window,
+   buffers any received packets, and retransmits them in the next TX window.
+   This enables solar-powered or battery-powered relay nodes in locations
+   without mains power.
+
+3. **Uplink-only.** iotdata's mesh supports only sensor→gateway traffic. There
+   is no downlink path (gateway→sensor) through the mesh. This eliminates the
+   complexity of bidirectional routing but means that remote sensors cannot
+   receive configuration updates, firmware, or acknowledgements via the mesh.
+
+4. **Payload-native.** Relay nodes can optionally inspect and filter iotdata
+   packets (e.g. suppress duplicate readings, aggregate multiple sensors into a
+   single relay packet). RPL and Thread treat payloads as opaque IP packets.
+
+5. **No scalability beyond sparse topologies.** The simple relay approach does
+   not handle network congestion, route selection, or topology changes. For
+   dense deployments (>50 nodes) or dynamic topologies (mobile sensors), RPL or
+   a managed-flooding approach would be necessary.
+
+**Recommendation:** iotdata's mesh relay is appropriate for its target use case:
+sparse, static sensor networks with 3–5 hops where relay nodes must operate on
+limited power budgets. For deployments requiring larger scale, bidirectional
+communication, or dynamic topologies, an IP-based mesh (RPL over 6LoWPAN) or a
+flooding-based mesh (Meshtastic-style) should be used as the transport layer,
+with iotdata as the payload format within that transport. The two concerns (mesh
+routing and payload encoding) are orthogonal — iotdata packets can be carried
+over any transport, and Appendix G's relay protocol is an optional convenience
+for deployments that do not need or cannot afford a full mesh networking stack.
 
 ---
 
