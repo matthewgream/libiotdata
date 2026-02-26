@@ -3598,14 +3598,14 @@ static int dump_flags(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_FLAGS_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIx32, r);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIX32, r);
     n = dump_add(dump, n, s, IOTDATA_FLAGS_BITS, r, dump->_dec_buf, "8-bit bitmask", "flags");
     return n;
 }
 #endif
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_flags(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
-    bprintf(bp, "  %s:%s 0x%02" PRIx8 "\n", label, _padd(label), dec->flags);
+    bprintf(bp, "  %s:%s 0x%02" PRIX8 "\n", label, _padd(label), dec->flags);
 }
 #endif
 // clang-format off
@@ -4189,7 +4189,7 @@ static int dump_tlv(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *d
         const uint8_t format = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_FMT_BITS);
         const uint8_t type = (uint8_t)bits_read(buf, bb, bp, IOTDATA_TLV_TYPE_BITS);
         more = bits_read(buf, bb, bp, IOTDATA_TLV_MORE_BITS) != 0;
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=0x%02" PRIx8 " more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s type=0x%02" PRIX8 " more=%d", format == IOTDATA_TLV_FMT_STRING ? "str" : "raw", type, more ? 1 : 0);
         snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].hdr", tlv_idx);
         n = dump_add(dump, n, s, IOTDATA_TLV_FMT_BITS + IOTDATA_TLV_TYPE_BITS + IOTDATA_TLV_MORE_BITS, 0, dump->_dec_buf, "format+type+more", dump->_name_buf);
         s = *bp;
@@ -4245,7 +4245,7 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, iotdata_buf_t *bp,
             bprintf(bp, "    [%d] status: session=%" PRIu32 "s lifetime=%" PRIu32 "s restarts=%" PRIu16 " reason=%s", i, (uint32_t)(sess * IOTDATA_TLV_STATUS_TICKS_RES), (uint32_t)(life * IOTDATA_TLV_STATUS_TICKS_RES), restarts,
                     reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
             if (reason >= 0x80)
-                bprintf(bp, "(0x%02" PRIx8 ")", reason);
+                bprintf(bp, "(0x%02" PRIX8 ")", reason);
             bprintf(bp, "\n");
         } else {
             bprintf(bp, "    [%d] status: malformed(%" PRIu8 " bytes)\n", i, t->length);
@@ -4279,13 +4279,13 @@ static void _print_tlv_global(const iotdata_decoded_tlv_t *t, iotdata_buf_t *bp,
         bprintf(bp, "    [%d] userdata: \"%s\"\n", i, t->format == IOTDATA_TLV_FMT_STRING ? t->str : "(raw)");
         break;
     default:
-        bprintf(bp, "    [%d] global(0x%02" PRIx8 "): %s(%" PRIu8 ")\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
+        bprintf(bp, "    [%d] global(0x%02" PRIX8 "): %s(%" PRIu8 ")\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
         break;
     }
 }
 static void _print_tlv_quality(const iotdata_decoded_tlv_t *t, iotdata_buf_t *bp, int i) {
     /* Reserved for future quality/metadata TLVs (0x10-0x1F) */
-    bprintf(bp, "    [%d] quality(0x%02" PRIx8 "): %s(%" PRIu8 ")\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
+    bprintf(bp, "    [%d] quality(0x%02" PRIX8 "): %s(%" PRIu8 ")\n", i, t->type, t->format == IOTDATA_TLV_FMT_STRING ? "string" : "raw", t->length);
 }
 static void _print_tlv_user(const iotdata_decoded_tlv_t *t, iotdata_buf_t *bp, int i) {
     /* Application-defined TLVs (0x20+) */
@@ -4294,7 +4294,7 @@ static void _print_tlv_user(const iotdata_decoded_tlv_t *t, iotdata_buf_t *bp, i
     } else {
         bprintf(bp, "    [%d] type=%" PRIu8 " raw(%" PRIu8 ")=", i, t->type, t->length);
         for (int j = 0; j < t->length && j < 16; j++)
-            bprintf(bp, "%02" PRIx8, t->raw[j]);
+            bprintf(bp, "%02" PRIX8, t->raw[j]);
         if (t->length > 16)
             bprintf(bp, "...");
         bprintf(bp, "\n");
@@ -4308,7 +4308,7 @@ static void _print_tlv_data(const iotdata_decoded_tlv_t *t, iotdata_buf_t *bp, i
     } else {
         bprintf(bp, "    [%d] type=%" PRIu8 " raw(%" PRIu8 ")=", i, t->type, t->length);
         for (int j = 0; j < t->length && j < 16; j++)
-            bprintf(bp, "%02" PRIx8, t->raw[j]);
+            bprintf(bp, "%02" PRIX8, t->raw[j]);
         if (t->length > 16)
             bprintf(bp, "...");
         bprintf(bp, "\n");
@@ -4868,7 +4868,7 @@ static iotdata_status_t _iotdata_dump_build(iotdata_dump_t *dump, const uint8_t 
     uint8_t pres[IOTDATA_PRES_MAXIMUM] = { 0 };
     s = bp;
     pres[0] = (uint8_t)bits_read(buf, bb, &bp, 8);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIx8, pres[0]);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIX8, pres[0]);
     n = dump_add(dump, n, s, 8, pres[0], dump->_dec_buf, "ext|tlv|6 fields", "presence[0]");
     int num_pres = 1;
     while (num_pres < IOTDATA_PRES_MAXIMUM && bp + 8 <= bb && (pres[num_pres - 1] & IOTDATA_PRES_EXT) != 0) {
@@ -4876,7 +4876,7 @@ static iotdata_status_t _iotdata_dump_build(iotdata_dump_t *dump, const uint8_t 
         pres[num_pres] = (uint8_t)bits_read(buf, bb, &bp, 8);
         char pname[24];
         snprintf(pname, sizeof(pname), "presence[%d]", num_pres);
-        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIx8, pres[num_pres]);
+        snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIX8, pres[num_pres]);
         n = dump_add(dump, n, s, 8, pres[num_pres], dump->_dec_buf, "ext|7 fields", pname);
         num_pres++;
     }

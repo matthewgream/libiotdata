@@ -29,6 +29,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,8 +57,8 @@ time_t intervalable(const time_t interval, time_t *last) {
 }
 
 #define EMA_ALPHA 0.2f
-void ema_update(unsigned char value, unsigned char *value_ema, unsigned long *value_cnt) {
-    *value_ema = (*value_cnt)++ == 0 ? value : (unsigned char)((EMA_ALPHA * (float)value) + ((1.0f - EMA_ALPHA) * (*value_ema)));
+void ema_update(uint8_t value, uint8_t *value_ema, uint32_t *value_cnt) {
+    *value_ema = (*value_cnt)++ == 0 ? value : (uint8_t)((EMA_ALPHA * (float)value) + ((1.0f - EMA_ALPHA) * (*value_ema)));
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -96,8 +97,8 @@ void printf_stderr_e22900t22u(const char *format, ...) {
 #define E22900T22_SUPPORT_MODULE_USB
 #include "e22xxxtxx.h"
 
-void __sleep_ms(const unsigned long ms) {
-    usleep((unsigned int)ms * 1000);
+void __sleep_ms(const uint32_t ms) {
+    usleep((useconds_t)ms * 1000);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -178,19 +179,19 @@ void config_populate_serial(serial_config_t *cfg) {
 }
 
 void config_populate_e22900t22u(e22900t22_config_t *cfg) {
-    cfg->address = (unsigned short)config_get_integer("address", CONFIG_ADDRESS_DEFAULT);
-    cfg->network = (unsigned char)config_get_integer("network", CONFIG_NETWORK_DEFAULT);
-    cfg->channel = (unsigned char)config_get_integer("channel", CONFIG_CHANNEL_DEFAULT);
-    cfg->packet_maxsize = (unsigned char)config_get_integer("packet-size", CONFIG_PACKET_MAXSIZE_DEFAULT);
-    cfg->listen_before_transmit = config_get_bool("listen-before-transmit", CONFIG_LISTEN_BEFORE_TRANSMIT);
-    cfg->rssi_packet = config_get_bool("rssi-packet", CONFIG_RSSI_PACKET_DEFAULT);
-    cfg->rssi_channel = config_get_bool("rssi-channel", CONFIG_RSSI_CHANNEL_DEFAULT);
-    cfg->read_timeout_command = (unsigned long)config_get_integer("read-timeout-command", CONFIG_READ_TIMEOUT_COMMAND_DEFAULT);
-    cfg->read_timeout_packet = (unsigned long)config_get_integer("read-timeout-packet", CONFIG_READ_TIMEOUT_PACKET_DEFAULT);
+    cfg->address = (uint16_t)config_get_integer("address", E22900T22_CONFIG_ADDRESS_DEFAULT);
+    cfg->network = (uint8_t)config_get_integer("network", E22900T22_CONFIG_NETWORK_DEFAULT);
+    cfg->channel = (uint8_t)config_get_integer("channel", E22900T22_CONFIG_CHANNEL_DEFAULT);
+    cfg->packet_maxsize = (uint8_t)config_get_integer("packet-size", E22900T22_CONFIG_PACKET_MAXSIZE_DEFAULT);
+    cfg->listen_before_transmit = config_get_bool("listen-before-transmit", E22900T22_CONFIG_LISTEN_BEFORE_TRANSMIT);
+    cfg->rssi_packet = config_get_bool("rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT);
+    cfg->rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
+    cfg->read_timeout_command = (uint32_t)config_get_integer("read-timeout-command", E22900T22_CONFIG_READ_TIMEOUT_COMMAND_DEFAULT);
+    cfg->read_timeout_packet = (uint32_t)config_get_integer("read-timeout-packet", E22900T22_CONFIG_READ_TIMEOUT_PACKET_DEFAULT);
     cfg->debug = config_get_bool("debug", false);
 
-    printf("config: e22900t22u: address=0x%04x, network=0x%02x, channel=%d, packet-size=%d, rssi-channel=%s, "
-           "rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%lu, read-timeout-packet=%lu, debug=%s\n",
+    printf("config: e22900t22u: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%" PRIu8 ", packet-size=%" PRIu8 ", rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
+           ", read-timeout-packet=%" PRIu32 ", debug=%s\n",
            cfg->address, cfg->network, cfg->channel, cfg->packet_maxsize, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command, cfg->read_timeout_packet,
            cfg->debug ? "on" : "off");
 }
@@ -214,13 +215,13 @@ static struct {
     time_t beacon_last;              /* last beacon TX time */
     iotdata_mesh_dedup_ring_t dedup; /* dedup ring */
     /* statistics */
-    unsigned long stat_beacons_tx;
-    unsigned long stat_forwards_rx;
-    unsigned long stat_forwards_unwrapped;
-    unsigned long stat_duplicates;
-    unsigned long stat_acks_tx;
-    unsigned long stat_mesh_ctrl_rx;
-    unsigned long stat_mesh_unknown;
+    uint32_t stat_beacons_tx;
+    uint32_t stat_forwards_rx;
+    uint32_t stat_forwards_unwrapped;
+    uint32_t stat_duplicates;
+    uint32_t stat_acks_tx;
+    uint32_t stat_mesh_ctrl_rx;
+    uint32_t stat_mesh_unknown;
 } mesh;
 
 static void mesh_begin(void) {
@@ -230,7 +231,7 @@ static void mesh_begin(void) {
     mesh.beacon_interval = config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
     iotdata_mesh_dedup_init(&mesh.dedup);
     if (mesh.enabled)
-        printf("mesh: enabled, gateway station_id=%u, beacon interval=%lds\n", mesh.station_id, mesh.beacon_interval);
+        printf("mesh: enabled, gateway station_id=%" PRIu16 ", beacon interval=%" PRIu32 "s\n", mesh.station_id, (uint32_t)mesh.beacon_interval);
     else
         printf("mesh: disabled\n");
 }
@@ -251,7 +252,7 @@ static void mesh_beacon_send(void) {
     mesh.beacon_generation &= (IOTDATA_MESH_GENERATION_MOD - 1);
     iotdata_mesh_pack_beacon(buf, &beacon);
     if (debug_mesh)
-        printf("mesh: tx BEACON gen=%u station=%u\n", beacon.generation, beacon.sender_station);
+        printf("mesh: tx BEACON gen=%" PRIu16 " station=%" PRIu16 "\n", beacon.generation, beacon.sender_station);
     if (device_packet_write(buf, IOTDATA_MESH_BEACON_SIZE))
         mesh.stat_beacons_tx++;
     else
@@ -268,7 +269,7 @@ static void mesh_ack_send(uint16_t fwd_station, uint16_t fwd_seq) {
     };
     iotdata_mesh_pack_ack(buf, &ack);
     if (debug_mesh)
-        printf("mesh: tx ACK to station=%u seq=%u\n", fwd_station, fwd_seq);
+        printf("mesh: tx ACK to station=%" PRIu16 " seq=%" PRIu16 "\n", fwd_station, fwd_seq);
     if (device_packet_write(buf, IOTDATA_MESH_ACK_SIZE))
         mesh.stat_acks_tx++;
     else
@@ -278,7 +279,7 @@ static void mesh_ack_send(uint16_t fwd_station, uint16_t fwd_seq) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool mesh_handle_forward(const unsigned char *buf, int len, const unsigned char **inner, int *inner_len) {
+static bool mesh_handle_forward(const uint8_t *buf, int len, const uint8_t **inner, int *inner_len) {
     iotdata_mesh_forward_t fwd;
     if (!iotdata_mesh_unpack_forward(buf, len, &fwd)) {
         fprintf(stderr, "mesh: FORWARD unpack failed (len=%d)\n", len);
@@ -286,12 +287,13 @@ static bool mesh_handle_forward(const unsigned char *buf, int len, const unsigne
     }
     mesh.stat_forwards_rx++;
     if (debug_mesh)
-        printf("mesh: rx FORWARD from station=%u seq=%u ttl=%u origin={station=%u, seq=%u} inner=%d B\n", fwd.sender_station, fwd.sender_seq, fwd.ttl, fwd.origin_station, fwd.origin_sequence, fwd.inner_len);
+        printf("mesh: rx FORWARD from station=%" PRIu16 " seq=%" PRIu16 " ttl=%" PRIu8 " origin={station=%" PRIu16 ", seq=%" PRIu16 "} inner=%d B\n", fwd.sender_station, fwd.sender_seq, fwd.ttl, fwd.origin_station, fwd.origin_sequence,
+               fwd.inner_len);
     /* duplicate suppression on the ORIGINAL sensor packet */
     if (!iotdata_mesh_dedup_check_and_add(&mesh.dedup, fwd.origin_station, fwd.origin_sequence)) {
         mesh.stat_duplicates++;
         if (debug_mesh)
-            printf("mesh: FORWARD duplicate suppressed (origin station=%u seq=%u)\n", fwd.origin_station, fwd.origin_sequence);
+            printf("mesh: FORWARD duplicate suppressed (origin station=%" PRIu16 " seq=%" PRIu16 ")\n", fwd.origin_station, fwd.origin_sequence);
         /* still ACK to prevent the forwarder from retrying */
         if (mesh.enabled)
             mesh_ack_send(fwd.sender_station, fwd.sender_seq);
@@ -306,35 +308,35 @@ static bool mesh_handle_forward(const unsigned char *buf, int len, const unsigne
     return true;
 }
 
-static void mesh_handle_beacon(const unsigned char *buf, int len) {
+static void mesh_handle_beacon(const uint8_t *buf, int len) {
     /* gateway receiving another gateway's beacon — log for multi-gateway awareness */
     iotdata_mesh_beacon_t b;
     if (iotdata_mesh_unpack_beacon(buf, len, &b))
         if (debug_mesh)
-            printf("mesh: rx BEACON from gateway=%u gen=%u cost=%u flags=0x%x\n", b.gateway_id, b.generation, b.cost, b.flags);
+            printf("mesh: rx BEACON from gateway=%" PRIu16 " gen=%" PRIu16 " cost=%" PRIu8 " flags=0x%" PRIX8 "\n", b.gateway_id, b.generation, b.cost, b.flags);
 }
 
-static void mesh_handle_route_error(const unsigned char *buf, int len) {
+static void mesh_handle_route_error(const uint8_t *buf, int len) {
     iotdata_mesh_route_error_t err;
     if (iotdata_mesh_unpack_route_error(buf, len, &err))
-        printf("mesh: rx ROUTE_ERROR from station=%u reason=%s\n", err.sender_station, iotdata_mesh_reason_name(err.reason));
+        printf("mesh: rx ROUTE_ERROR from station=%" PRIu16 " reason=%s\n", err.sender_station, iotdata_mesh_reason_name(err.reason));
 }
 
-static void mesh_handle_neighbour_report(const unsigned char *buf, int len) {
+static void mesh_handle_neighbour_report(const uint8_t *buf, int len) {
     /* full topology aggregation is future work — log receipt for now */
     uint8_t variant;
     uint16_t station_id, sequence;
     iotdata_mesh_peek_header(buf, len, &variant, &station_id, &sequence);
-    printf("mesh rx NEIGHBOUR_REPORT from station=%u (%d bytes)\n", station_id, len);
+    printf("mesh rx NEIGHBOUR_REPORT from station=%" PRIu16 " (%d bytes)\n", station_id, len);
     (void)variant;
     (void)sequence;
 }
 
-static void mesh_handle_pong(const unsigned char *buf, int len) {
+static void mesh_handle_pong(const uint8_t *buf, int len) {
     uint8_t variant;
     uint16_t station_id, sequence;
     iotdata_mesh_peek_header(buf, len, &variant, &station_id, &sequence);
-    printf("mesh: rx PONG from station=%u (%d bytes)\n", station_id, len);
+    printf("mesh: rx PONG from station=%" PRIu16 " (%d bytes)\n", station_id, len);
     (void)variant;
     (void)sequence;
 }
@@ -351,11 +353,11 @@ static void mesh_handle_pong(const unsigned char *buf, int len) {
  */
 
 static bool capture_rssi_packet = false, capture_rssi_channel = false;
-static unsigned long stat_channel_rssi_cnt = 0, stat_packet_rssi_cnt = 0;
-static unsigned char stat_channel_rssi_ema, stat_packet_rssi_ema;
-static unsigned long stat_packets_okay = 0, stat_packets_drop = 0, stat_packets_decode_err = 0;
+static uint32_t stat_channel_rssi_cnt = 0, stat_packet_rssi_cnt = 0;
+static uint8_t stat_channel_rssi_ema, stat_packet_rssi_ema;
+static uint32_t stat_packets_okay = 0, stat_packets_drop = 0, stat_packets_decode_err = 0;
 
-static void process_sensor_packet(const unsigned char *buf, int len, unsigned char packet_rssi, const char *topic_prefix, const char *via) {
+static void process_sensor_packet(const uint8_t *buf, int len, uint8_t packet_rssi, const char *topic_prefix, const char *via) {
     if (capture_rssi_packet && packet_rssi > 0)
         ema_update(packet_rssi, &stat_packet_rssi_ema, &stat_packet_rssi_cnt);
 
@@ -371,11 +373,11 @@ static void process_sensor_packet(const unsigned char *buf, int len, unsigned ch
         if (!iotdata_mesh_dedup_check_and_add(&mesh.dedup, station_id, sequence)) {
             mesh.stat_duplicates++;
             if (debug_mesh)
-                printf("mesh: direct packet duplicate suppressed (station=%u seq=%u)\n", station_id, sequence);
+                printf("mesh: direct packet duplicate suppressed (station=%" PRIu16 " seq=%" PRIu16 ")\n", station_id, sequence);
             return;
         }
     if (variant_id >= IOTDATA_VARIANT_MAPS_COUNT) {
-        fprintf(stderr, "process: unknown variant %u (station=%u, size=%d)\n", variant_id, station_id, len);
+        fprintf(stderr, "process: unknown variant %" PRIu8 " (station=%" PRIu16 ", size=%d)\n", variant_id, station_id, len);
         stat_packets_drop++;
         return;
     }
@@ -385,12 +387,12 @@ static void process_sensor_packet(const unsigned char *buf, int len, unsigned ch
     iotdata_decode_to_json_scratch_t scratch;
     iotdata_status_t rc;
     if ((rc = iotdata_decode_to_json(buf, (size_t)len, &json, &scratch)) != IOTDATA_OK) {
-        fprintf(stderr, "process: decode failed: %s (variant=%u, station=%u, size=%d)\n", iotdata_strerror(rc), variant_id, station_id, len);
+        fprintf(stderr, "process: decode failed: %s (variant=%" PRIu8 ", station=%" PRIu16 ", size=%d)\n", iotdata_strerror(rc), variant_id, station_id, len);
         stat_packets_decode_err++;
         return;
     }
     char topic[255];
-    snprintf(topic, sizeof(topic), "%s/%s/%u", topic_prefix, vdef->name, station_id);
+    snprintf(topic, sizeof(topic), "%s/%s/%" PRIu16, topic_prefix, vdef->name, station_id);
     if (mqtt_send(topic, json, (int)strlen(json)))
         stat_packets_okay++;
     else {
@@ -410,26 +412,27 @@ static time_t interval_rssi = 0, interval_rssi_last = 0;
 
 void read_and_send(volatile bool *running, const char *topic_prefix) {
 
-    unsigned char packet_buffer[E22900T22_PACKET_MAXSIZE + 1]; /* +1 for RSSI byte */
+    uint8_t packet_buffer[E22900T22_PACKET_MAXSIZE + 1]; /* +1 for RSSI byte */
     int packet_size;
 
-    printf("read-and-publish: iotdata gateway (stat=%lds, rssi=%lds [packets=%c, channel=%c], topic-prefix=%s", interval_stat, interval_rssi, capture_rssi_packet ? 'y' : 'n', capture_rssi_channel ? 'y' : 'n', topic_prefix);
+    printf("read-and-publish: iotdata gateway (stat=%" PRIu32 "s, rssi=%" PRIu32 "s [packets=%c, channel=%c], topic-prefix=%s", (uint32_t)interval_stat, (uint32_t)interval_rssi, capture_rssi_packet ? 'y' : 'n',
+           capture_rssi_channel ? 'y' : 'n', topic_prefix);
     if (mesh.enabled)
-        printf(", mesh=on, beacon=%lds", mesh.beacon_interval);
+        printf(", mesh=on, beacon=%" PRIu32 "s", (uint32_t)mesh.beacon_interval);
     printf(")\n");
 
     /* report known variants */
     for (int i = 0; i < IOTDATA_VARIANT_MAPS_COUNT; i++) {
         const iotdata_variant_def_t *vdef = iotdata_get_variant((uint8_t)i);
-        printf("read-and-publish: variant[%d] = \"%s\" (pres_bytes=%d) -> %s/%s/<station_id>\n", i, vdef->name, vdef->num_pres_bytes, topic_prefix, vdef->name);
+        printf("read-and-publish: variant[%d] = \"%s\" (pres_bytes=%" PRIu8 ") -> %s/%s/<station_id>\n", i, vdef->name, vdef->num_pres_bytes, topic_prefix, vdef->name);
     }
     if (mesh.enabled)
-        printf("read-and-publish: variant[15] = mesh control (gateway station_id=%u)\n", mesh.station_id);
+        printf("read-and-publish: variant[15] = mesh control (gateway station_id=%" PRIu16 ")\n", mesh.station_id);
 
     while (*running) {
 
-        unsigned char packet_rssi = 0, channel_rssi = 0;
-        if (device_packet_read(packet_buffer, config.packet_maxsize + 1, &packet_size, &packet_rssi) && *running) {
+        uint8_t packet_rssi = 0, channel_rssi = 0;
+        if (device_packet_read(packet_buffer, sizeof(packet_buffer), &packet_size, &packet_rssi) && *running) {
             uint8_t variant_id;
             uint16_t station_id, sequence;
             if (!iotdata_mesh_peek_header(packet_buffer, packet_size, &variant_id, &station_id, &sequence)) {
@@ -439,10 +442,10 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
                 const uint8_t ctrl_type = iotdata_mesh_peek_ctrl_type(packet_buffer, packet_size);
                 mesh.stat_mesh_ctrl_rx++;
                 if (debug_mesh)
-                    printf("mesh: rx %s from station=%u seq=%u (%d bytes)\n", iotdata_mesh_ctrl_name(ctrl_type), station_id, sequence, packet_size);
+                    printf("mesh: rx %s from station=%" PRIu16 " seq=%" PRIu16 " (%d bytes)\n", iotdata_mesh_ctrl_name(ctrl_type), station_id, sequence, packet_size);
                 switch (ctrl_type) {
                 case IOTDATA_MESH_CTRL_FORWARD: {
-                    const unsigned char *inner;
+                    const uint8_t *inner;
                     int inner_len;
                     if (mesh_handle_forward(packet_buffer, packet_size, &inner, &inner_len))
                         process_sensor_packet(inner, inner_len, 0, topic_prefix, "mesh");
@@ -453,7 +456,7 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
                     break;
                 case IOTDATA_MESH_CTRL_ACK:
                     if (debug_mesh)
-                        printf("mesh: rx unexpected ACK from station=%u\n", station_id);
+                        printf("mesh: rx unexpected ACK from station=%" PRIu16 "\n", station_id);
                     break;
                 case IOTDATA_MESH_CTRL_ROUTE_ERROR:
                     mesh_handle_route_error(packet_buffer, packet_size);
@@ -467,7 +470,7 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
                 default:
                     mesh.stat_mesh_unknown++;
                     if (debug_mesh)
-                        printf("mesh: rx unknown ctrl_type=0x%X from station=%u\n", ctrl_type, station_id);
+                        printf("mesh: rx unknown ctrl_type=0x%" PRIX8 " from station=%" PRIu16 "\n", ctrl_type, station_id);
                     break;
                 }
             } else {
@@ -484,14 +487,15 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
 
         time_t period_stat;
         if (*running && (period_stat = intervalable(interval_stat, &interval_stat_last))) {
-            printf("packets-okay=%ld (%.2f/min), packets-drop=%ld, decode-err=%ld", stat_packets_okay, ((float)stat_packets_okay / ((float)period_stat / 60.0f)), stat_packets_drop, stat_packets_decode_err);
+            printf("packets-okay=%" PRIu32 " (%.2f/min), packets-drop=%" PRIu32 ", decode-err=%" PRIu32, stat_packets_okay, ((float)stat_packets_okay / ((float)period_stat / 60.0f)), stat_packets_drop, stat_packets_decode_err);
             stat_packets_okay = stat_packets_drop = stat_packets_decode_err = 0;
             if (capture_rssi_channel)
-                printf(", channel-rssi=%d dBm (%ld)", get_rssi_dbm(stat_channel_rssi_ema), stat_channel_rssi_cnt);
+                printf(", channel-rssi=%d dBm (%" PRIu32 ")", get_rssi_dbm(stat_channel_rssi_ema), stat_channel_rssi_cnt);
             if (capture_rssi_packet)
-                printf(", packet-rssi=%d dBm (%ld)", get_rssi_dbm(stat_packet_rssi_ema), stat_packet_rssi_cnt);
+                printf(", packet-rssi=%d dBm (%" PRIu32 ")", get_rssi_dbm(stat_packet_rssi_ema), stat_packet_rssi_cnt);
             if (mesh.enabled)
-                printf(", mesh{fwd=%ld, unwrap=%ld, dedup=%ld, beacons=%ld, acks=%ld, ctrl=%ld}", mesh.stat_forwards_rx, mesh.stat_forwards_unwrapped, mesh.stat_duplicates, mesh.stat_beacons_tx, mesh.stat_acks_tx, mesh.stat_mesh_ctrl_rx);
+                printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", mesh.stat_forwards_rx, mesh.stat_forwards_unwrapped, mesh.stat_duplicates,
+                       mesh.stat_beacons_tx, mesh.stat_acks_tx, mesh.stat_mesh_ctrl_rx);
             printf("\n");
             if (mesh.enabled) {
                 mesh.stat_forwards_rx = mesh.stat_forwards_unwrapped = 0;
@@ -520,8 +524,8 @@ bool config_setup(const int argc, char *argv[]) {
     config_populate_mqtt(&mqtt_config);
 
     mqtt_topic_prefix = config_get_string("mqtt-topic-prefix", MQTT_TOPIC_PREFIX_DEFAULT);
-    capture_rssi_packet = config_get_bool("rssi-packet", CONFIG_RSSI_PACKET_DEFAULT);
-    capture_rssi_channel = config_get_bool("rssi-channel", CONFIG_RSSI_CHANNEL_DEFAULT);
+    capture_rssi_packet = config_get_bool("rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT);
+    capture_rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
     interval_stat = config_get_integer("interval-stat", INTERVAL_STAT_DEFAULT);
     interval_rssi = config_get_integer("interval-rssi", INTERVAL_RSSI_DEFAULT);
 

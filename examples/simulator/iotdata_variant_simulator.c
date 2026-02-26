@@ -14,6 +14,7 @@
 #include "iotdata_variant_simulator.h"
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -512,62 +513,62 @@ const iotsim_sensor_t *iotsim_sensor(const iotsim_t *sim, int index) {
 static void _print_decoded(const iotdata_decoded_t *d, uint8_t variant) {
     /* Common fields */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_BATTERY))
-        printf("  bat=%u%%%s", d->battery_level, d->battery_charging ? "(chg)" : "");
+        printf("  bat=%" PRIu8 "%%%s", d->battery_level, d->battery_charging ? "(chg)" : "");
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_LINK))
-        printf("  rssi=%d snr=%.0f", d->link_rssi, (double)d->link_snr);
+        printf("  rssi=%" PRId16 " snr=%.0f", d->link_rssi, (double)d->link_snr);
 
     /* Environment */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_ENVIRONMENT))
-        printf("  T=%.2f P=%u H=%u", (double)d->temperature, d->pressure, d->humidity);
+        printf("  T=%.2f P=%" PRIu16 " H=%" PRIu8, (double)d->temperature, d->pressure, d->humidity);
     else if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_TEMPERATURE))
         printf("  T=%.2f", (double)d->temperature);
 
     /* Wind */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_WIND))
-        printf("  W=%.1f/%u/%.1f", (double)d->wind_speed, d->wind_direction, (double)d->wind_gust);
+        printf("  W=%.1f/%" PRIu16 "/%.1f", (double)d->wind_speed, d->wind_direction, (double)d->wind_gust);
 
     /* Rain */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_RAIN))
-        printf("  R=%u/%u", d->rain_rate, d->rain_size10);
+        printf("  R=%" PRIu8 "/%" PRIu8, d->rain_rate, d->rain_size10);
 
     /* Solar */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_SOLAR))
-        printf("  S=%u/UV%u", d->solar_irradiance, d->solar_ultraviolet);
+        printf("  S=%" PRIu16 "/UV%" PRIu8, d->solar_irradiance, d->solar_ultraviolet);
 
     /* Depth */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_DEPTH))
-        printf("  D=%u", d->depth);
+        printf("  D=%" PRIu16, d->depth);
 
     /* Humidity standalone (soil moisture) */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_HUMIDITY))
-        printf("  H=%u%%", d->humidity);
+        printf("  H=%" PRIu8 "%%", d->humidity);
 
     /* Air quality */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_AIR_QUALITY)) {
-        printf("  AQ=%u", d->aq_index);
+        printf("  AQ=%" PRIu16, d->aq_index);
         if (d->aq_pm_present)
-            printf(" PM[%u/%u/%u/%u]", d->aq_pm[0], d->aq_pm[1], d->aq_pm[2], d->aq_pm[3]);
+            printf(" PM[%" PRIu16 "/%" PRIu16 "/%" PRIu16 "/%" PRIu16 "]", d->aq_pm[0], d->aq_pm[1], d->aq_pm[2], d->aq_pm[3]);
         if (d->aq_gas_present & 0x01)
-            printf(" VOC=%u", d->aq_gas[0]);
+            printf(" VOC=%" PRIu16, d->aq_gas[0]);
         if (d->aq_gas_present & 0x02)
-            printf(" NOx=%u", d->aq_gas[1]);
+            printf(" NOx=%" PRIu16, d->aq_gas[1]);
         if (d->aq_gas_present & 0x04)
-            printf(" CO2=%u", d->aq_gas[2]);
+            printf(" CO2=%" PRIu16, d->aq_gas[2]);
     } else if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_AIR_QUALITY_INDEX)) {
-        printf("  AQI=%u", d->aq_index);
+        printf("  AQI=%" PRIu16, d->aq_index);
     }
 
     /* Radiation */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_RADIATION))
-        printf("  rad=%u/%.2f", d->radiation_cpm, (double)d->radiation_dose);
+        printf("  rad=%" PRIu16 "/%.2f", d->radiation_cpm, (double)d->radiation_dose);
 
     /* Clouds */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_CLOUDS))
-        printf("  C=%u", d->clouds);
+        printf("  C=%" PRIu8, d->clouds);
 
     /* Flags */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_FLAGS))
-        printf("  F=%u", d->flags);
+        printf("  F=%" PRIu8, d->flags);
 
     (void)variant;
 }
@@ -584,12 +585,12 @@ int main(int argc, char *argv[]) {
     iotsim_init(&sim, seed, 0);
 
     /* Print sensor allocation */
-    printf("=== Simulator: %d sensors, seed=%u ===\n\n", IOTSIM_NUM_SENSORS, seed);
+    printf("=== Simulator: %d sensors, seed=%" PRIu32 " ===\n\n", IOTSIM_NUM_SENSORS, seed);
     printf("  ID  Variant             Station\n");
     printf("  --  ------------------  -------\n");
     for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
         const iotsim_sensor_t *s = iotsim_sensor(&sim, i);
-        printf("  %2d  %-18s  %u\n", i, iotdata_vsuite_name(s->variant), s->station_id);
+        printf("  %2d  %-18s  %" PRIu16 "\n", i, iotdata_vsuite_name(s->variant), s->station_id);
     }
     printf("\n");
 
@@ -603,7 +604,7 @@ int main(int argc, char *argv[]) {
             packets++;
             iotdata_decoded_t dec;
             iotdata_status_t rc = iotdata_decode(pkt.buf, pkt.len, &dec);
-            printf("[%5u.%us] #%-3d stn=%2u %-18s seq=%-3u %2zu B", t / 1000, (t % 1000) / 100, packets, pkt.station_id, iotdata_vsuite_name(pkt.variant), pkt.sequence, pkt.len);
+            printf("[%5" PRIu32 ".%" PRIu32 "s] #%-3d stn=%2" PRIu16 " %-18s seq=%-3" PRIu16 " %2zu B", t / 1000, (t % 1000) / 100, packets, pkt.station_id, iotdata_vsuite_name(pkt.variant), pkt.sequence, pkt.len);
             if (rc == IOTDATA_OK) {
                 _print_decoded(&dec, pkt.variant);
                 printf("\n");
@@ -623,7 +624,7 @@ int main(int argc, char *argv[]) {
     printf("  --  ------------------  ---  ----  --------\n");
     for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
         const iotsim_sensor_t *s = iotsim_sensor(&sim, i);
-        printf("  %2d  %-18s  %3u  %3u%%  %u\n", i, iotdata_vsuite_name(s->variant), s->tx_count, s->battery, s->sequence);
+        printf("  %2d  %-18s  %3" PRIu32 "  %3" PRIu8 "%%  %" PRIu16 "\n", i, iotdata_vsuite_name(s->variant), s->tx_count, s->battery, s->sequence);
     }
 
     return 0;

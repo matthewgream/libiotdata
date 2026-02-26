@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,7 @@ static bool debug_e22 = false;
 #define PRINTF_INFO  printf
 #define PRINTF_ERROR printf
 
-inline void __sleep_ms(const unsigned long ms) {
+inline void __sleep_ms(const uint32_t ms) {
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
@@ -127,12 +128,12 @@ void serial_flush(void) {
     uart_flush(E22_UART);
 }
 
-int serial_write(const unsigned char *buffer, const int length) {
+int serial_write(const uint8_t *buffer, const int length) {
     vTaskDelay(pdMS_TO_TICKS(50));
     return uart_write_bytes(E22_UART, buffer, (size_t)length);
 }
 
-int serial_read(unsigned char *buffer, const int length, const unsigned long timeout_ms) {
+int serial_read(uint8_t *buffer, const int length, const uint32_t timeout_ms) {
     vTaskDelay(pdMS_TO_TICKS(50));
     return uart_read_bytes(E22_UART, buffer, (size_t)length, pdMS_TO_TICKS(timeout_ms));
 }
@@ -167,12 +168,12 @@ static e22900t22_config_t e22_config = {
     .address = 0x0008,
     .network = 0x00,
     .channel = 0x17, /* 850.125 + 23 = 873.125 MHz */
-    .packet_maxsize = CONFIG_PACKET_MAXSIZE_DEFAULT,
+    .packet_maxsize = E22900T22_CONFIG_PACKET_MAXSIZE_DEFAULT,
     .listen_before_transmit = true,
     .rssi_packet = true,
     .rssi_channel = true,
-    .read_timeout_command = CONFIG_READ_TIMEOUT_COMMAND_DEFAULT,
-    .read_timeout_packet = CONFIG_READ_TIMEOUT_PACKET_DEFAULT,
+    .read_timeout_command = E22900T22_CONFIG_READ_TIMEOUT_COMMAND_DEFAULT,
+    .read_timeout_packet = E22900T22_CONFIG_READ_TIMEOUT_PACKET_DEFAULT,
     .set_pin_mx = e22_set_pin_mx,
     .get_pin_aux = e22_get_pin_aux,
     .debug = false,
@@ -210,16 +211,16 @@ static uint32_t tx_count = 0, tx_errors = 0;
 
 static void transmit_packet(const iotsim_packet_t *pkt) {
 
-    printf("device: e22 tx #%06u: stn=%-4u %-18s seq=%06u bytes=%-2u  hex:", (unsigned)tx_count, pkt->station_id, iotdata_vsuite_name(pkt->variant), pkt->sequence, (unsigned)pkt->len);
+    printf("device: e22 tx #%06" PRIu32 ": stn=%-4" PRIu16 " %-18s seq=%06" PRIu16 " bytes=%-2" PRIu32 "  hex:", tx_count, pkt->station_id, iotdata_vsuite_name(pkt->variant), pkt->sequence, (uint32_t)pkt->len);
     for (size_t i = 0; i < pkt->len; i++)
-        printf(" %02X", pkt->buf[i]);
+        printf(" %02" PRIX8, pkt->buf[i]);
     printf("\n");
 
     if (device_packet_write((const unsigned char *)pkt->buf, (int)pkt->len))
         tx_count++;
     else {
         tx_errors++;
-        ESP_LOGE(TAG, "device: e22 tx device_packet_write failed (errors=%u)", (unsigned)tx_errors);
+        ESP_LOGE(TAG, "device: e22 tx device_packet_write failed (errors=%" PRIu32 ")", tx_errors);
     }
 }
 
@@ -263,10 +264,10 @@ void app_main(void) {
     static iotsim_t sim; // too large for stack
     iotsim_init(&sim, seed, t0);
 
-    ESP_LOGI(TAG, "simulator: %d sensors, seed=0x%08X", IOTSIM_NUM_SENSORS, (unsigned)seed);
+    ESP_LOGI(TAG, "simulator: %d sensors, seed=0x%08" PRIX32, IOTSIM_NUM_SENSORS, seed);
     for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
         const iotsim_sensor_t *s = iotsim_sensor(&sim, i);
-        ESP_LOGI(TAG, "  [%2d] %-18s stn=%-4u bat=%u%%", i, iotdata_vsuite_name(s->variant), s->station_id, s->battery);
+        ESP_LOGI(TAG, "  [%2d] %-18s stn=%-4" PRIu16 " bat=%" PRIu8 "%%", i, iotdata_vsuite_name(s->variant), s->station_id, s->battery);
     }
 
     /* --- Main loop — poll simulator, transmit when ready --- */
@@ -290,7 +291,7 @@ void app_main(void) {
 
         if (tx_count >= last_status_tx + STATUS_EVERY_N_TX) {
             last_status_tx = tx_count;
-            ESP_LOGI(TAG, "status: tx=%u errors=%u rssi=%d dBm uptime=%us", (unsigned)tx_count, (unsigned)tx_errors, rssi_channel_dbm, (unsigned)((now - t0) / 1000));
+            ESP_LOGI(TAG, "status: tx=%" PRIu32 " errors=%" PRIu32 " rssi=%d dBm uptime=%" PRIu32 "s", tx_count, tx_errors, rssi_channel_dbm, (now - t0) / 1000);
         }
 
         vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
