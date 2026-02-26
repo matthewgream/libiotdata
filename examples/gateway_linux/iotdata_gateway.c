@@ -56,9 +56,14 @@ time_t intervalable(const time_t interval, time_t *last) {
     return 0;
 }
 
-#define EMA_ALPHA 0.2f
+// 0.2 ≈ 51/256, 0.8 ≈ 205/256
+#define EMA_ALPHA_NUM   51
+#define EMA_ALPHA_DENOM 256
 void ema_update(uint8_t value, uint8_t *value_ema, uint32_t *value_cnt) {
-    *value_ema = (*value_cnt)++ == 0 ? value : (uint8_t)((EMA_ALPHA * (float)value) + ((1.0f - EMA_ALPHA) * (*value_ema)));
+    if ((*value_cnt)++ == 0)
+        *value_ema = value;
+    else
+        *value_ema = (uint8_t)((EMA_ALPHA_NUM * (uint16_t)value + (EMA_ALPHA_DENOM - EMA_ALPHA_NUM) * (uint16_t)(*value_ema)) / EMA_ALPHA_DENOM);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -493,7 +498,9 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
 
         time_t period_stat;
         if (*running && (period_stat = intervalable(interval_stat, &interval_stat_last))) {
-            printf("packets-okay=%" PRIu32 " (%.2f/min), packets-drop=%" PRIu32 ", decode-err=%" PRIu32, stat_packets_okay, ((float)stat_packets_okay / ((float)period_stat / 60.0f)), stat_packets_drop, stat_packets_decode_err);
+            const uint32_t rate_okay = (stat_packets_okay * 6000) / (uint32_t)period_stat, rate_drop = (stat_packets_drop * 6000) / (uint32_t)period_stat;
+            printf("packets-okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), packets-drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)", stat_packets_okay, rate_okay / 100, rate_okay % 100, stat_packets_drop, rate_drop / 100,
+                   rate_drop % 100);
             stat_packets_okay = stat_packets_drop = stat_packets_decode_err = 0;
             if (capture_rssi_channel)
                 printf(", channel-rssi=%d dBm (%" PRIu32 ")", get_rssi_dbm(stat_channel_rssi_ema), stat_channel_rssi_cnt);

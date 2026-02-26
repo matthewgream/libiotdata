@@ -83,10 +83,6 @@ static bool debug_e22 = false;
 #define PRINTF_INFO  printf
 #define PRINTF_ERROR printf
 
-inline void __sleep_ms(const uint32_t ms) {
-    vTaskDelay(pdMS_TO_TICKS(ms));
-}
-
 static bool serial_installed = false;
 
 bool serial_connect(void) {
@@ -145,6 +141,9 @@ int serial_read(uint8_t *buffer, const int length, const uint32_t timeout_ms) {
 #define E22900T22_SUPPORT_MODULE_DIP
 #undef E22900T22_SUPPORT_MODULE_USB
 #include "e22xxxtxx.h"
+inline void __sleep_ms(const uint32_t ms) {
+    vTaskDelay(pdMS_TO_TICKS(ms));
+}
 
 static void e22_gpio_init(void) {
     gpio_set_direction(PIN_E22_M0, GPIO_MODE_OUTPUT);
