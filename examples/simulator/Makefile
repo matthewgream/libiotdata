@@ -6,7 +6,7 @@ DIR_SIMULATOR=.
 CC=gcc
 CFLAGS_DEFINES=
 CFLAGS_COMMON=-Wall -Wextra -Wpedantic
-CFLAGS_STRICT=-Werror -Wcast-align -Wcast-qual \
+CFLAGS_STRICT=-Werror \
     -Wstrict-prototypes \
     -Wold-style-definition \
     -Wcast-align -Wcast-qual -Wconversion \
@@ -26,8 +26,6 @@ CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT) $(CF
 LDFLAGS =
 LIBS      = -lm
 
-.PHONY: all clean
-
 SIMULATOR=simulator
 SIMULATOR_SRC=$(DIR_SIMULATOR)/iotdata_variant_simulator.c $(DIR_SIMULATOR)/iotdata_variant_simulator.h \
 	$(DIR_IOTDATA_VARIANT)/iotdata_variant_suite.h \
@@ -40,4 +38,6 @@ $(SIMULATOR): $(SIMULATOR_SRC)
 
 clean:
 	rm -f $(SIMULATOR)
+
+.PHONY: all clean
 

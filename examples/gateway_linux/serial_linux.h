@@ -4,9 +4,11 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include <termios.h>
 #include <unistd.h>
@@ -190,34 +192,19 @@ int serial_read(unsigned char *buffer, const int length, const unsigned long tim
     if (serial_fd < 0)
         return -1;
     usleep(50 * 1000); // yuck
-    fd_set rdset;
-    struct timeval tv;
-    FD_ZERO(&rdset);
-    FD_SET(serial_fd, &rdset);
-    tv.tv_sec = (time_t)timeout_ms / 1000;
-    tv.tv_usec = (time_t)(timeout_ms % 1000) * 1000;
-    const int select_result = select(serial_fd + 1, &rdset, NULL, NULL, &tv);
-    if (select_result <= 0)
-        return select_result; // timeout or error
+    struct pollfd pfd = { .fd = serial_fd, .events = POLLIN };
+    int poll_result = poll(&pfd, 1, (int)(timeout_ms > (unsigned long)INT_MAX ? INT_MAX : timeout_ms));
+    if (poll_result <= 0)
+        return poll_result; // timeout or error
     int bytes_read = 0;
     unsigned char byte;
-    bool buffer_complete = false;
     while (bytes_read < length) {
-        FD_ZERO(&rdset);
-        FD_SET(serial_fd, &rdset);
-        tv.tv_sec = 0;
-        tv.tv_usec = 100000;
-        if (select(serial_fd + 1, &rdset, NULL, NULL, &tv) <= 0) {
-            buffer_complete = true;
+        pfd.revents = 0;
+        if (poll(&pfd, 1, 100) <= 0)
             break;
-        }
         if (read(serial_fd, &byte, 1) != 1)
             break;
         buffer[bytes_read++] = byte;
-    }
-    if (!buffer_complete && bytes_read > length) {
-        fprintf(stderr, "device: buffer_read: buffer too large (max %d bytes, read %d bytes)\n", length, bytes_read);
-        return -1;
     }
     return bytes_read;
 }

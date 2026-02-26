@@ -50,7 +50,7 @@ typedef struct {
     /* Timing */
     uint32_t next_tx_ms;     /* next scheduled transmission     */
     uint32_t tx_interval_ms; /* current interval                */
-    uint16_t tx_count;       /* transmissions so far            */
+    uint32_t tx_count;       /* transmissions so far            */
 
     /* Simulated readings (physical units, pre-quantisation) */
     int16_t temperature;    /* centi-degrees: 2150 = 21.50°C  */
@@ -84,6 +84,7 @@ typedef struct {
     iotsim_sensor_t sensors[IOTSIM_NUM_SENSORS];
     uint32_t rng_state; /* xorshift32 state */
     uint32_t time_base; /* sim start time for diurnal */
+    int poll_next;      /* round-robin start index for iotsim_poll */
 } iotsim_t;
 
 /* ---------------------------------------------------------------------------

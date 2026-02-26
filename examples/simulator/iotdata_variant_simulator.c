@@ -30,12 +30,17 @@ static inline uint32_t _rng(iotsim_t *sim) {
     return x;
 }
 
-/* Uniform in [lo, hi] inclusive */
+/* Uniform in [lo, hi] inclusive (rejection sampling to eliminate modulo bias) */
 static inline int32_t _rng_range(iotsim_t *sim, int32_t lo, int32_t hi) {
     if (lo >= hi)
         return lo;
     uint32_t range = (uint32_t)(hi - lo + 1);
-    return lo + (int32_t)(_rng(sim) % range);
+    uint32_t limit = (UINT32_MAX / range) * range;
+    uint32_t r;
+    do {
+        r = _rng(sim);
+    } while (r >= limit);
+    return lo + (int32_t)(r % range);
 }
 
 /* Small signed jitter in [-mag, +mag] */
@@ -116,7 +121,7 @@ static void _init_sensor(iotsim_t *sim, iotsim_sensor_t *s) {
         s->humidity = (uint8_t)_rng_range(sim, 30, 80);
         s->wind_speed = (uint16_t)_rng_range(sim, 0, 1500); /* 0-15 m/s */
         s->wind_dir = (uint16_t)_rng_range(sim, 0, 355);
-        s->wind_gust = s->wind_speed + (uint16_t)_rng_range(sim, 100, 500);
+        s->wind_gust = (uint16_t)_clamp(s->wind_speed + _rng_range(sim, 100, 500), 0, 6350);
         s->rain_rate = (_rng(sim) % 4 == 0) ? (uint8_t)_rng_range(sim, 1, 20) : 0;
         s->rain_size = s->rain_rate ? (uint8_t)_rng_range(sim, 2, 8) : 0;
         s->solar_irr = (uint16_t)_rng_range(sim, 0, 800);
@@ -177,7 +182,7 @@ static void _init_sensor(iotsim_t *sim, iotsim_sensor_t *s) {
     case IOTDATA_VSUITE_WIND_STATION:
         s->wind_speed = (uint16_t)_rng_range(sim, 0, 2000);
         s->wind_dir = (uint16_t)_rng_range(sim, 0, 355);
-        s->wind_gust = s->wind_speed + (uint16_t)_rng_range(sim, 100, 800);
+        s->wind_gust = (uint16_t)_clamp(s->wind_speed + _rng_range(sim, 100, 800), 0, 6350);
         s->solar_irr = (uint16_t)_rng_range(sim, 0, 700);
         s->solar_uv = (uint8_t)_rng_range(sim, 0, 10);
         break;
@@ -459,9 +464,10 @@ void iotsim_init(iotsim_t *sim, uint32_t seed, uint32_t time_now_ms) {
 }
 
 bool iotsim_poll(iotsim_t *sim, uint32_t time_now_ms, iotsim_packet_t *out) {
-    for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
+    for (int n = 0; n < IOTSIM_NUM_SENSORS; n++) {
+        int i = (sim->poll_next + n) % IOTSIM_NUM_SENSORS;
         iotsim_sensor_t *s = &sim->sensors[i];
-        if (time_now_ms < s->next_tx_ms)
+        if ((int32_t)(time_now_ms - s->next_tx_ms) < 0)
             continue;
 
         _drift_sensor(sim, s);
@@ -476,6 +482,7 @@ bool iotsim_poll(iotsim_t *sim, uint32_t time_now_ms, iotsim_packet_t *out) {
         s->tx_interval_ms = (uint32_t)_rng_range(sim, IOTSIM_TX_MIN_MS, IOTSIM_TX_MAX_MS);
         s->next_tx_ms = time_now_ms + s->tx_interval_ms;
 
+        sim->poll_next = (i + 1) % IOTSIM_NUM_SENSORS;
         return true;
     }
     return false;

@@ -10,6 +10,7 @@ typedef struct {
     const char *server;
     const char *client;
     bool use_synchronous;
+    bool tls_insecure;
 } mqtt_config_t;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -82,7 +83,7 @@ static bool __mqtt_parse(const char *string, char *host, const int length, int *
         *ssl = true;
         *port = 8883;
     } else
-        strcpy(host, string);
+        strncpy(host, string, (size_t)length - 1);
     char *port_str = strchr(host, ':');
     if (port_str) {
         *port_str = '\0'; // Terminate host string at colon
@@ -113,7 +114,7 @@ void mqtt_loop(const int timeout_ms) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 bool mqtt_begin(const mqtt_config_t *cfg) {
-    char host[255];
+    char host[256];
     int port;
     bool ssl;
     if (!__mqtt_parse(cfg->server, host, sizeof(host), &port, &ssl)) {
@@ -122,15 +123,20 @@ bool mqtt_begin(const mqtt_config_t *cfg) {
     }
     printf("mqtt: connecting (host='%s', port=%d, ssl=%s, client='%s')\n", host, port, ssl ? "true" : "false", cfg->client);
     char client_id[24];
-    sprintf(client_id, "%s-%06X", cfg->client ? cfg->client : "mqtt-linux", rand() & 0xFFFFFF);
+    snprintf(client_id, sizeof(client_id), "%s-%06X", cfg->client ? cfg->client : "mqtt-linux", (unsigned int)(time(NULL) ^ getpid()) & 0xFFFFFF);
     mosquitto_lib_init();
     mosq = mosquitto_new(client_id, true, NULL);
     if (!mosq) {
         fprintf(stderr, "mqtt: error creating client instance\n");
         return false;
     }
-    if (ssl)
-        mosquitto_tls_insecure_set(mosq, true); // Skip certificate validation
+    if (ssl) {
+        mosquitto_tls_set(mosq, NULL, NULL, NULL, NULL, NULL);
+        if (cfg->tls_insecure) {
+            mosquitto_tls_insecure_set(mosq, true);
+            printf("mqtt: WARNING tls certificate validation disabled\n");
+        }
+    }
     mosquitto_connect_callback_set(mosq, __mqtt_connect_callback);
     mosquitto_message_callback_set(mosq, __mqtt_message_callback_wrapper);
     int result;

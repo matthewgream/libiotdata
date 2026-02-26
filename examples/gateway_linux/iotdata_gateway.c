@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <time.h>
 
 bool debug_readandsend = false;
@@ -125,6 +126,8 @@ void __sleep_ms(const unsigned long ms) {
 
 #define MQTT_CLIENT_DEFAULT        "iotdata_gateway"
 #define MQTT_SERVER_DEFAULT        "mqtt://localhost"
+#define MQTT_TLS_DEFAULT           false
+#define MQTT_SYNCHRONOUS_DEFAULT   false
 #define MQTT_TOPIC_PREFIX_DEFAULT  "iotdata"
 
 #define INTERVAL_STAT_DEFAULT      (5 * 60)
@@ -161,6 +164,7 @@ const struct option config_options [] = {
     {"debug-e22900t22u",      required_argument, 0, 0},
     {"debug-mesh",            required_argument, 0, 0},
     {"debug",                 required_argument, 0, 0},
+    {"mqtt-tls-insecure",     required_argument, 0, 0},
     {0, 0, 0, 0}
 };
 // clang-format on
@@ -194,7 +198,8 @@ void config_populate_e22900t22u(e22900t22_config_t *cfg) {
 void config_populate_mqtt(mqtt_config_t *cfg) {
     cfg->client = config_get_string("mqtt-client", MQTT_CLIENT_DEFAULT);
     cfg->server = config_get_string("mqtt-server", MQTT_SERVER_DEFAULT);
-    cfg->use_synchronous = false;
+    cfg->tls_insecure = config_get_bool("mqtt-tls-insecure", MQTT_TLS_DEFAULT);
+    cfg->use_synchronous = MQTT_SYNCHRONOUS_DEFAULT;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -384,7 +389,7 @@ static void process_sensor_packet(const unsigned char *buf, int len, unsigned ch
         stat_packets_decode_err++;
         return;
     }
-    char topic[128];
+    char topic[255];
     snprintf(topic, sizeof(topic), "%s/%s/%u", topic_prefix, vdef->name, station_id);
     if (mqtt_send(topic, json, (int)strlen(json)))
         stat_packets_okay++;
@@ -521,7 +526,7 @@ bool config_setup(const int argc, char *argv[]) {
     interval_rssi = config_get_integer("interval-rssi", INTERVAL_RSSI_DEFAULT);
 
     debug_readandsend = config_get_bool("debug", false);
-    debug_e22900t22u = config_get_integer("debug-e22900t22u", false);
+    debug_e22900t22u = config_get_bool("debug-e22900t22u", false);
     debug_mesh = config_get_bool("debug-mesh", false);
 
     return true;

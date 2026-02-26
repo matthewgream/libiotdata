@@ -105,10 +105,12 @@ bool serial_connect(void) {
     serial_installed = true;
     if ((err = uart_param_config(E22_UART, &uart_config)) != ESP_OK) {
         ESP_LOGE(TAG, "uart_param_config: %s", esp_err_to_name(err));
+        uart_driver_delete(E22_UART);
         return false;
     }
     if ((err = uart_set_pin(E22_UART, PIN_E22_RXD, PIN_E22_TXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE)) != ESP_OK) {
         ESP_LOGE(TAG, "uart_set_pin: %s", esp_err_to_name(err));
+        uart_driver_delete(E22_UART);
         return false;
     }
     return true;
@@ -208,7 +210,7 @@ static uint32_t tx_count = 0, tx_errors = 0;
 
 static void transmit_packet(const iotsim_packet_t *pkt) {
 
-    printf("device: e22 tx #%06u: stn=%-4u %-18s seq=%06u bytes=%-2u  hex:", (unsigned)tx_count, pkt->station_id, iotdata_vsuite_name(pkt->variant), pkt->sequence, pkt->len);
+    printf("device: e22 tx #%06u: stn=%-4u %-18s seq=%06u bytes=%-2u  hex:", (unsigned)tx_count, pkt->station_id, iotdata_vsuite_name(pkt->variant), pkt->sequence, (unsigned)pkt->len);
     for (size_t i = 0; i < pkt->len; i++)
         printf(" %02X", pkt->buf[i]);
     printf("\n");
