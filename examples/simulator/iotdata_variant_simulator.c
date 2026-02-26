@@ -604,7 +604,11 @@ int main(int argc, char *argv[]) {
             packets++;
             iotdata_decoded_t dec;
             iotdata_status_t rc = iotdata_decode(pkt.buf, pkt.len, &dec);
-            printf("[%5" PRIu32 ".%" PRIu32 "s] #%-3d stn=%2" PRIu16 " %-18s seq=%-3" PRIu16 " %2zu B", t / 1000, (t % 1000) / 100, packets, pkt.station_id, iotdata_vsuite_name(pkt.variant), pkt.sequence, pkt.len);
+            printf("[%5" PRIu32 ".%" PRIu32 "s] #%-4d stn=%3" PRIu16 " %-18s seq=%-3" PRIu16 " bytes=%-2" PRIu32 " [", t / 1000, (t % 1000) / 100, packets, pkt.station_id, iotdata_vsuite_name(pkt.variant), pkt.sequence, (uint32_t)pkt.len);
+            for (size_t i = 0; i < pkt.len; i++)
+                printf("%02" PRIX8, pkt.buf[i]);
+            printf("]: ");
+
             if (rc == IOTDATA_OK) {
                 _print_decoded(&dec, pkt.variant);
                 printf("\n");
