@@ -9,6 +9,7 @@ idf_component_register(
         "../../simulator"               # simulator
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE
+    -march=rv32imc_zicsr -mabi=ilp32
     -Wdouble-promotion
     -Werror=double-promotion
     -Wfloat-conversion
