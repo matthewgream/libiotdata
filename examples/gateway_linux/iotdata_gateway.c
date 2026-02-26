@@ -119,23 +119,25 @@ void __sleep_ms(const uint32_t ms) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define CONFIG_FILE_DEFAULT        "iotdata_gateway.cfg"
+#define CONFIG_FILE_DEFAULT              "iotdata_gateway.cfg"
 
-#define SERIAL_PORT_DEFAULT        "/dev/e22900t22u"
-#define SERIAL_RATE_DEFAULT        9600
-#define SERIAL_BITS_DEFAULT        SERIAL_8N1
+#define SERIAL_PORT_DEFAULT              "/dev/e22900t22u"
+#define SERIAL_RATE_DEFAULT              9600
+#define SERIAL_BITS_DEFAULT              SERIAL_8N1
 
-#define MQTT_CLIENT_DEFAULT        "iotdata_gateway"
-#define MQTT_SERVER_DEFAULT        "mqtt://localhost"
-#define MQTT_TLS_DEFAULT           false
-#define MQTT_SYNCHRONOUS_DEFAULT   false
-#define MQTT_TOPIC_PREFIX_DEFAULT  "iotdata"
+#define MQTT_CLIENT_DEFAULT              "iotdata_gateway"
+#define MQTT_SERVER_DEFAULT              "mqtt://localhost"
+#define MQTT_TLS_DEFAULT                 false
+#define MQTT_SYNCHRONOUS_DEFAULT         false
+#define MQTT_TOPIC_PREFIX_DEFAULT        "iotdata"
+#define MQTT_RECONNECT_DELAY_DEFAULT     5
+#define MQTT_RECONNECT_DELAY_MAX_DEFAULT 60
 
-#define INTERVAL_STAT_DEFAULT      (5 * 60)
-#define INTERVAL_RSSI_DEFAULT      (1 * 60)
-#define INTERVAL_BEACON_DEFAULT    60 /* seconds */
+#define INTERVAL_STAT_DEFAULT            (5 * 60)
+#define INTERVAL_RSSI_DEFAULT            (1 * 60)
+#define INTERVAL_BEACON_DEFAULT          60 /* seconds */
 
-#define GATEWAY_STATION_ID_DEFAULT 1
+#define GATEWAY_STATION_ID_DEFAULT       1
 
 #include "config_linux.h"
 
@@ -166,6 +168,8 @@ const struct option config_options [] = {
     {"debug-mesh",            required_argument, 0, 0},
     {"debug",                 required_argument, 0, 0},
     {"mqtt-tls-insecure",     required_argument, 0, 0},
+    {"mqtt-reconnect-delay",  required_argument, 0, 0},
+    {"mqtt-reconnect-delay-max", required_argument, 0, 0},
     {0, 0, 0, 0}
 };
 // clang-format on
@@ -201,6 +205,8 @@ void config_populate_mqtt(mqtt_config_t *cfg) {
     cfg->server = config_get_string("mqtt-server", MQTT_SERVER_DEFAULT);
     cfg->tls_insecure = config_get_bool("mqtt-tls-insecure", MQTT_TLS_DEFAULT);
     cfg->use_synchronous = MQTT_SYNCHRONOUS_DEFAULT;
+    cfg->reconnect_delay = (unsigned int)config_get_integer("mqtt-reconnect-delay", MQTT_RECONNECT_DELAY_DEFAULT);
+    cfg->reconnect_delay_max = (unsigned int)config_get_integer("mqtt-reconnect-delay-max", MQTT_RECONNECT_DELAY_MAX_DEFAULT);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -496,6 +502,7 @@ void read_and_send(volatile bool *running, const char *topic_prefix) {
             if (mesh.enabled)
                 printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", mesh.stat_forwards_rx, mesh.stat_forwards_unwrapped, mesh.stat_duplicates,
                        mesh.stat_beacons_tx, mesh.stat_acks_tx, mesh.stat_mesh_ctrl_rx);
+            printf(", mqtt=%s (disconnects=%" PRIu32 ")", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
             printf("\n");
             if (mesh.enabled) {
                 mesh.stat_forwards_rx = mesh.stat_forwards_unwrapped = 0;
