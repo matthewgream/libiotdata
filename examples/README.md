@@ -370,7 +370,8 @@ device: e22 tx #000060: stn=11   radiation_monitor  seq=000004 bytes=13  hex: 80
 A Linux gateway that receives iotdata packets from an EBYTE E22-900T22U module
 (USB variant), decodes them to JSON, and publishes to MQTT. The variant byte in
 each packet header determines the MQTT topic automatically:
-`<prefix>/<variant_name>/<station_id>`.
+`<prefix>/<variant_name>/<station_id>` (where station_id is the 4-digit 0-padded
+hex encoded 16-bit station identifier).
 
 Features:
 

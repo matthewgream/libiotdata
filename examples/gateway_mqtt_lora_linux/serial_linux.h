@@ -2,11 +2,11 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
+#include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
@@ -41,14 +41,6 @@ typedef struct {
 
 const serial_config_t *_serial_cfg = NULL;
 int serial_fd = -1;
-
-// -----------------------------------------------------------------------------------------------------------------------------------------
-
-bool serial_check(void) {
-    if (_serial_cfg == NULL)
-        return false;
-    return (access(_serial_cfg->port, F_OK) == 0);
-}
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -141,30 +133,6 @@ void serial_disconnect(void) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool serial_connected(void) {
-    return serial_fd >= 0;
-}
-
-// -----------------------------------------------------------------------------------------------------------------------------------------
-
-bool serial_connect_wait(volatile bool *r) {
-    int counter = 0;
-    while (*r) {
-        if (serial_check()) {
-            if (!serial_connect())
-                return false;
-            printf("serial: connected\n");
-            return true;
-        }
-        if (counter++ % (SERIAL_CONNECT_CHECK_PRINT / SERIAL_CONNECT_CHECK_PERIOD) == 0)
-            printf("serial: connection pending\n");
-        sleep(SERIAL_CONNECT_CHECK_PERIOD);
-    }
-    return false;
-}
-
-// -----------------------------------------------------------------------------------------------------------------------------------------
-
 void serial_flush(void) {
     if (serial_fd < 0)
         return;
@@ -178,12 +146,6 @@ int serial_write(const unsigned char *buffer, const int length) {
         return -1;
     usleep(50 * 1000); // yuck
     return (int)write(serial_fd, buffer, (size_t)length);
-}
-
-// -----------------------------------------------------------------------------------------------------------------------------------------
-
-bool serial_write_all(const unsigned char *buffer, const int length) {
-    return serial_write(buffer, length) == length;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------

@@ -30,7 +30,8 @@ LIBS=-lm
 ##
 
 TARGET=simulator
-SOURCES=$(DIR_SIMULATOR)/iotdata_variant_simulator.c $(DIR_SIMULATOR)/iotdata_variant_simulator.h \
+MAIN=$(DIR_SIMULATOR)/iotdata_variant_simulator.c
+SOURCES=$(DIR_SIMULATOR)/iotdata_variant_simulator.h \
 	$(DIR_IOTDATA_VARIANT)/iotdata_variant_suite.h \
 	$(DIR_IOTDATA)/iotdata.h $(DIR_IOTDATA)/iotdata.c
 
@@ -38,13 +39,13 @@ SOURCES=$(DIR_SIMULATOR)/iotdata_variant_simulator.c $(DIR_SIMULATOR)/iotdata_va
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES)
-	$(CC) $(CFLAGS) -DTEST_MAIN -o $@ $< $(LDFLAGS) $(LIBS)
+$(TARGET): $(MAIN) $(SOURCES)
+	$(CC) $(CFLAGS) -DTEST_MAIN -o $(TARGET) $(MAIN) $(LDFLAGS) $(LIBS)
 
 clean:
 	rm -f $(TARGET)
 format:
-	clang-format -i $(SOURCES)
+	clang-format -i $(MAIN) $(SOURCES)
 
 .PHONY: all clean
 

@@ -46,7 +46,7 @@ $(TARGET): $(MAIN) $(SOURCES)
 clean:
 	rm -f $(TARGET)
 format:
-	clang-format -i $(SOURCES)
+	clang-format -i $(MAIN) $(SOURCES)
 
 .PHONY: all clean format
 
