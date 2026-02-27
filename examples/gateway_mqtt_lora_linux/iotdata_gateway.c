@@ -2,7 +2,10 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 /*
- * E22-900T22U to MQTT — iotdata gateway
+ * IoT Sensor Telemetry Protocol
+ * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
+ *
+ * iotdata_gateway.c - E22-900T22U to MQTT gateway
  *
  * Receives iotdata binary frames from E22-900T22U radio, decodes to JSON,
  * and publishes to MQTT topic: <prefix>/<variant_name>/<station_id>
@@ -19,7 +22,14 @@
  *   - ACK transmission to FORWARD senders (stub, ready for implementation).
  *   - All mesh control packets are logged for diagnostics.
  *
- * See: APPENDIX_MESH.md for the full mesh relay protocol specification.
+ * Dedup support:
+ *   - allow incoming, and establish outgoing, UDP streams to specified
+ *     other gateways to synchronise station_id/sequence pairs for edge
+ *     de-duplication before publishing to MQTT. Operates indepemdently of
+ *     Mesh protocol.
+ *
+ * Depends upon EBYTE E22 connector
+ * https://github.com/matthewgream/e22900t22u
  */
 
 // -----------------------------------------------------------------------------------------------------------------------------------------

@@ -17,7 +17,8 @@
 #   minimal-esp32 - Build and show full versus minimal build sizes (esp32 cross)
 #   lib           - Build static library
 #   clean         - Remove build artifacts
-#   format        - Run clang-format across the code
+#   format        - Run clang-format across the code (*.c/*.h)
+#   prettier      - Run prettier across the documentation (*.md)
 #
 # Compile-time options (pass via EXTRA=):
 #   IOTDATA_VARIANT_MAPS_DEFAULT   Default variant maps (weather station)
@@ -223,10 +224,10 @@ tests: test-suites test-versions test-example
 ################################################################################
 
 format:
-	clang-format -i *.[ch] tests/*.[ch] examples/*/*.[ch] examples/*/*/*.[ch]
+	clang-format --verbose -i $$(find . -name build -prune -o \( -name '*.c' -o -name '*.h' \) -print)
 
 prettier:
-	prettier --write README.md examples/README.md tests/README.md
+	prettier --write $$(find . -name build -prune -o \( -name '*.md' \) -print)
 
 clean:
 	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
@@ -243,20 +244,20 @@ stack-usage:
 example-simulator:
 	$(MAKE) -C examples/simulator
 example-gateway-linux:
-	$(MAKE) -C examples/gateway_linux
-example-esp32:
+	$(MAKE) -C examples/gateway_mqtt_lora_linux
+example-sensor-esp32:
 	$(MAKE) -C examples/simulator_sensor_lora_esp32
-examples: example-simulator example-gateway-linux example-esp32
+examples: example-simulator example-gateway-linux example-sensor-esp32
 
 example-simulator-clean:
 	$(MAKE) -C examples/simulator clean
 example-gateway-linux-clean:
-	$(MAKE) -C examples/gateway_linux clean
-example-esp32-clean:
+	$(MAKE) -C examples/gateway_mqtt_lora_linux clean
+example-sensor-esp32-clean:
 	$(MAKE) -C examples/simulator_sensor_lora_esp32 clean
-examples-clean: example-simulator-clean example-gateway-linux-clean example-esp32-clean
+examples-clean: example-simulator-clean example-gateway-linux-clean example-sensor-esp32-clean
 
-.PHONY: examples example-simulator example-gateway-linux example-esp32 examples-clean example-simulator-clean example-gateway-linux-clean example-esp32-clean
+.PHONY: examples example-simulator example-gateway-linux example-sensor-esp32 examples-clean example-simulator-clean example-gateway-linux-clean example-sensor-esp32-clean
 
 ################################################################################
 

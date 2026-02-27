@@ -79,12 +79,13 @@ Build and flash:
 
 ```
 cd simulator_sensor_lora_esp32
+. ${IDF_PATH}/export.sh
 idf.py set-target esp32c3
 idf.py build
 idf.py flash -p /dev/ttyACM0 monitor
 ```
 
-## gateway_linux/ — Linux LoRa-to-MQTT Gateway
+## gateway_mqtt_lora_linux/ — Linux LoRa-to-MQTT Gateway
 
 A Linux gateway that receives iotdata packets from an EBYTE E22-900T22U module
 (USB variant), decodes them to JSON, and publishes to MQTT. The variant byte in
@@ -112,7 +113,7 @@ Also requires `libmosquitto` and `libcjson`.
 Build and run:
 
 ```
-cd gateway_linux
+cd gateway_mqtt_lora_linux
 make
 ./iotdata_gateway --config iotdata_gateway.cfg
 ```

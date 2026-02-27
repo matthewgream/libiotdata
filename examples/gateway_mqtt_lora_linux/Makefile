@@ -1,7 +1,7 @@
 
 DIR_IOTDATA=/opt/libiotdata
-DIR_E22XXXTXX=/opt/e22900t22u/include
 DIR_IOTDATA_VARIANT=../iotdata
+DIR_E22XXXTXX=/opt/e22900t22u/include
 
 ##
 
@@ -24,32 +24,39 @@ CFLAGS_STRICT=-Werror \
 CFLAGS_OPT=-O3
 CFLAGS_INCLUDES=-I$(DIR_IOTDATA) -I$(DIR_E22XXXTXX) -I$(DIR_IOTDATA_VARIANT)
 CFLAGS=$(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT) $(CFLAGS_INCLUDES)
-LDFLAGS=-lcjson -lmosquitto -lm -lpthread
-MAIN=iotdata_gateway.c
+LDFLAGS=
+LIBS=-lcjson -lmosquitto -lm -lpthread
+
+##
+
 TARGET=iotdata_gateway
-SOURCES=config_linux.h serial_linux.h mqtt_linux.h $(DIR_E22XXXTXX)/e22xxxtxx.h $(DIR_IOTDATA_VARIANT)/iotdata_variant_suite.h $(DIR_IOTDATA)/iotdata.h $(DIR_IOTDATA)/iotdata.c
-HOSTNAME=$(shell hostname)
+MAIN=iotdata_gateway.c
+SOURCES=config_linux.h serial_linux.h mqtt_linux.h \
+    $(DIR_E22XXXTXX)/e22xxxtxx.h \
+    $(DIR_IOTDATA_VARIANT)/iotdata_variant_suite.h \
+    $(DIR_IOTDATA)/iotdata.h $(DIR_IOTDATA)/iotdata.c
 
 ##
 
 all: $(TARGET)
 
 $(TARGET): $(MAIN) $(SOURCES)
-	$(CC) $(CFLAGS) -o $(TARGET) $(MAIN) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(MAIN) $(LDFLAGS) $(LIBS)
+
 clean:
 	rm -f $(TARGET)
 format:
-	clang-format -i *.[ch]
+	clang-format -i $(SOURCES)
 
 .PHONY: all clean format
 
 ##
 
-SYSTEMD_DIR = /etc/systemd/system
+DIR_SYSTEMD = /etc/systemd/system
 define install_systemd_service
 	-systemctl stop $(1) 2>/dev/null || true
 	-systemctl disable $(1) 2>/dev/null || true
-	cp $(2).service $(SYSTEMD_DIR)/$(1).service
+	cp $(2).service $(DIR_SYSTEMD)/$(1).service
 	systemctl daemon-reload
 	systemctl enable $(1)
 	systemctl start $(1) || echo "Warning: Failed to start $(1)"
@@ -60,4 +67,6 @@ install: install_systemd_service
 restart:
 	systemctl restart $(TARGET)
 .PHONY: install install_systemd_service
+
+##
 

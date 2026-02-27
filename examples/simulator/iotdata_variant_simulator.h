@@ -2,11 +2,12 @@
  * IoT Sensor Telemetry Protocol
  * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
  *
- * iotdata_simulator.h - multi-sensor simulator
+ * iotdata_variant_simulator.h - multi-sensor simulator
  *
- * Simulates 16 sensors across the variant suite, each producing
- * realistic readings with random walk, diurnal patterns, and
- * battery drain.  Poll-based: call iotsim_poll() in a loop.
+ * Simulates multiple sensors across the variant suite, each
+ * producingrealistic readings with random walk, diurnal
+ * patterns, and battery drain.  Poll-based: call
+ * iotsim_poll() in a loop.
  *
  * Usage:
  *   iotsim_t sim;

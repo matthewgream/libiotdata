@@ -2,13 +2,13 @@
  * IoT Sensor Telemetry Protocol
  * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
  *
- * iotdata_simulator.c - multi-sensor simulator implementation
+ * iotdata_variant_simulator.c - multi-sensor simulator implementation
  *
  * Internal state uses integer representations for clean RNG-based drift.
  * Converted to iotdata_float_t at the encoder boundary.
  *
- * Compile standalone test:
- *   gcc -DTEST_MAIN -Wall -Wextra -o test_sim iotdata_simulator.c -lm
+ * May be utilised as a library, or build as a standalone tool (using
+ * -DTEST_MAIN).
  */
 
 #include "iotdata_variant_simulator.h"

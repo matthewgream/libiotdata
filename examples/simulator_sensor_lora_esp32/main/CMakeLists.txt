@@ -4,12 +4,11 @@ idf_component_register(
     INCLUDE_DIRS
         "."
         "/opt/libiotdata"               # iotdata.c/h
-        "/opt/e22900t22u/include"       # e22xxxtxx.h
         "../../iotdata"                 # iotdata_variant_suite.h
+        "/opt/e22900t22u/include"       # e22xxxtxx.h
         "../../simulator"               # simulator
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE
-    -march=rv32imc_zicsr -mabi=ilp32
     -Wdouble-promotion
     -Werror=double-promotion
     -Wfloat-conversion
