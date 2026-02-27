@@ -7,7 +7,7 @@ BindsTo=dev-e22900t22u.device
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/iotdata_gateway --config /etc/default/iotdata_gateway.cfg
+ExecStart=/usr/local/bin/iotdata-gateway --config /etc/default/iotdata-gateway
 TimeoutStopSec=15s
 KillMode=mixed
 Restart=on-failure

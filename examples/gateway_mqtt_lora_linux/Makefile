@@ -52,9 +52,10 @@ format:
 
 ##
 
-DIR_INSTALL = /usr/local/bin
-DIR_DEFAULT = /etc/default
-DIR_SYSTEMD = /etc/systemd/system
+INSTALL=iotdata-gateway
+DIR_INSTALL=/usr/local/bin
+DIR_DEFAULT=/etc/default
+DIR_SYSTEMD=/etc/systemd/system
 define install_service_systemd
 	-systemctl stop $(2) 2>/dev/null || true
 	-systemctl disable $(2) 2>/dev/null || true
@@ -64,15 +65,16 @@ define install_service_systemd
 	systemctl start $(2) || echo "Warning: Failed to start $(2)"
 endef
 install_target: $(TARGET)
-	install -m 755 $(TARGET) $(DIR_INSTALL)/$(TARGET)
+	install -m 755 $(TARGET) $(DIR_INSTALL)/$(INSTALL)
 install_default: $(TARGET).cfg
-	install -m 644 $(TARGET).cfg $(DIR_DEFAULT)/$(TARGET)
+	install -m 644 $(TARGET).cfg $(DIR_DEFAULT)/$(INSTALL)
 install_service: $(TARGET).service
-	$(call install_service_systemd,$(TARGET),$(TARGET))
+	$(call install_service_systemd,$(TARGET),$(INSTALL))
 install: install_target install_default install_service
 restart:
-	systemctl restart $(SYSTEM)-$(TARGET)
+	systemctl restart $(INSTALL)
 .PHONY: install install_target install_default install_service
 .PHONY: restart
+
 ##
 
