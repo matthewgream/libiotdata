@@ -147,9 +147,9 @@ bool serial_connected(void) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool serial_connect_wait(volatile bool *running) {
+bool serial_connect_wait(volatile bool *r) {
     int counter = 0;
-    while (*running) {
+    while (*r) {
         if (serial_check()) {
             if (!serial_connect())
                 return false;
