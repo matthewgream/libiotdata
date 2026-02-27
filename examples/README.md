@@ -62,6 +62,7 @@ The simulator uses a deterministic xorshift32 RNG, so a given seed produces
 repeatable output.
 
 ```text
+# ./simulator
 === Simulator: 16 sensors, seed=12345 ===
 
   ID  Variant             Station
@@ -231,6 +232,51 @@ idf.py flash -p /dev/ttyACM0 monitor
 ```
 
 ```text
+# idf.py flash -p /dev/ttyACM0 monitor
+Executing action: flash
+Running ninja in directory /opt/libiotdata/examples/simulator_sensor_lora_esp32/build
+...
+Serial port /dev/ttyACM0
+Connecting...
+Chip is ESP32-C3 (QFN32) (revision v0.4)
+Features: WiFi, BLE, Embedded Flash 4MB (XMC)
+Crystal is 40MHz
+...
+Hard resetting via RTS pin...
+Executing action: monitor
+Running idf_monitor in directory /opt/libiotdata/examples/simulator_sensor_lora_esp32
+...
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x15 (USB_UART_CHIP_RESET),boot:0xd (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40381db4
+--- 0x40381db4: rv_utils_wait_for_intr at /opt/esp32/esp-idf/components/riscv/include/riscv/rv_utils.h:79
+--- (inlined by) esp_cpu_wait_for_intr at /opt/esp32/esp-idf/components/esp_hw_support/cpu.c:62
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5830,len:0x15ec
+load:0x403cbf10,len:0xc44
+--- 0x403cbf10: esp_bootloader_get_description at /opt/esp32/esp-idf/components/esp_bootloader_format/esp_bootloader_desc.c:39
+load:0x403ce710,len:0x3020
+--- 0x403ce710: esp_flash_encryption_enabled at /opt/esp32/esp-idf/components/bootloader_support/src/flash_encrypt.c:89
+entry 0x403cbf1a
+--- 0x403cbf1a: call_start_cpu0 at /opt/esp32/esp-idf/components/bootloader/subproject/main/bootloader_start.c:25
+I (15) boot: ESP-IDF v5.5.2 2nd stage bootloader
+I (15) boot: compile time Feb 27 2026 16:08:51
+...
+I (55) cpu_start: Unicore app
+I (63) cpu_start: Pro cpu start user code
+I (63) cpu_start: cpu freq: 160000000 Hz
+I (64) app_init: Application information:
+I (64) app_init: Project name:     simulator_sensor_lora_esp32
+I (64) app_init: App version:      4abddb0
+I (64) app_init: Compile time:     Feb 27 2026 16:08:42
+I (64) app_init: ELF file SHA256:  44a38928c...
+I (64) app_init: ESP-IDF:          v5.5.2
+I (64) efuse_init: Min chip rev:     v0.3
+I (64) efuse_init: Max chip rev:     v1.99
+I (65) efuse_init: Chip rev:         v0.4
+...
 I (68) main_task: Calling app_main()
 I (3068) app: iotdata multi-sensor simulator transmitter
 I (3068) app: device: e22 connected
