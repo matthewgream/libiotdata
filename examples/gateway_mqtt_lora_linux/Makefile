@@ -52,21 +52,27 @@ format:
 
 ##
 
+DIR_INSTALL = /usr/local/bin
+DIR_DEFAULT = /etc/default
 DIR_SYSTEMD = /etc/systemd/system
-define install_systemd_service
-	-systemctl stop $(1) 2>/dev/null || true
-	-systemctl disable $(1) 2>/dev/null || true
-	cp $(2).service $(DIR_SYSTEMD)/$(1).service
+define install_service_systemd
+	-systemctl stop $(2) 2>/dev/null || true
+	-systemctl disable $(2) 2>/dev/null || true
+	install -m 644 $(1).service $(DIR_SYSTEMD)/$(2).service
 	systemctl daemon-reload
-	systemctl enable $(1)
-	systemctl start $(1) || echo "Warning: Failed to start $(1)"
+	systemctl enable $(2)
+	systemctl start $(2) || echo "Warning: Failed to start $(2)"
 endef
-install_systemd_service: $(TARGET).service
-	$(call install_systemd_service,$(TARGET),$(TARGET))
-install: install_systemd_service
+install_target: $(TARGET)
+	install -m 755 $(TARGET) $(DIR_INSTALL)/$(TARGET)
+install_default: $(TARGET).cfg
+	install -m 644 $(TARGET).cfg $(DIR_DEFAULT)/$(TARGET)
+install_service: $(TARGET).service
+	$(call install_service_systemd,$(TARGET),$(TARGET))
+install: install_target install_default install_service
 restart:
-	systemctl restart $(TARGET)
-.PHONY: install install_systemd_service
-
+	systemctl restart $(SYSTEM)-$(TARGET)
+.PHONY: install install_target install_default install_service
+.PHONY: restart
 ##
 
