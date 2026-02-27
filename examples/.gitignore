@@ -1,2 +1,5 @@
 simulator
 iotdata_gateway
+sdkconfig
+sdkconfig.old
+build
