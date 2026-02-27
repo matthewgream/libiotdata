@@ -2,7 +2,7 @@
  * IoT Sensor Telemetry Protocol
  * Copyright(C) 2026 Matthew Gream (https://libiotdata.org)
  *
- * test_weather.c - test example for builtin (weather station) variant
+ * test_example.c - test example for builtin (weather station) variant
  *
  * Generates random-walk weather data using the built-in weather station
  * variant map.  Every 30 seconds it encodes a packet and displays:

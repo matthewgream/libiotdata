@@ -226,7 +226,7 @@ format:
 	clang-format -i *.[ch] tests/*.[ch] examples/*/*.[ch] examples/*/*/*.[ch]
 
 prettier:
-	prettier --write README.md
+	prettier --write README.md examples/README.md tests/README.md
 
 clean:
 	rm -f $(LIB_OBJ) $(LIB_STATIC) $(TEST_DEFAULT_BIN) $(TEST_CUSTOM_BIN) $(TEST_COMPLETE_BIN) $(TEST_FAILURES_BIN) $(TEST_EXAMPLE_BIN) $(VERSION_BINS) $(MINIMAL_OBJ) $(STACK_USAGE_FILE_LIST)
