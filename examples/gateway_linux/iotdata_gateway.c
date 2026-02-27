@@ -235,12 +235,13 @@ void config_populate_mqtt(mqtt_config_t *cfg) {
     cfg->use_synchronous = MQTT_SYNCHRONOUS_DEFAULT;
     cfg->reconnect_delay = (unsigned int)config_get_integer("mqtt-reconnect-delay", MQTT_RECONNECT_DELAY_DEFAULT);
     cfg->reconnect_delay_max = (unsigned int)config_get_integer("mqtt-reconnect-delay-max", MQTT_RECONNECT_DELAY_MAX_DEFAULT);
+
+    printf("config: mqtt: client=%s, server=%s, tls-insecure=%s, synchronous=%s, reconnect-delay=%d, reconnect-delay-max=%d\n", cfg->client, cfg->server, cfg->tls_insecure ? "on" : "off", cfg->use_synchronous ? "on" : "off",
+           cfg->reconnect_delay, cfg->reconnect_delay_max);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
-
-bool debug_mesh = false;
 
 struct {
     bool enabled;
@@ -258,20 +259,18 @@ struct {
     uint32_t stat_acks_tx;
     uint32_t stat_mesh_ctrl_rx;
     uint32_t stat_mesh_unknown;
+    bool debug;
 } mesh_state;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define DEDUP_PORT_DEFAULT          9876
-#define DEDUP_DELAY_MS_DEFAULT      20
-#define DEDUP_STAT_INTERVAL_DEFAULT (5 * 60)
-#define DEDUP_PEERS_MAX             16
-#define DEDUP_PENDING_MAX           256
-#define DEDUP_BATCH_MAX             32
-#define DEDUP_BUF_SIZE              (3 + DEDUP_BATCH_MAX * 4) /* 131 bytes */
-
-bool debug_dedup = false;
+#define DEDUP_PORT_DEFAULT     9876
+#define DEDUP_DELAY_MS_DEFAULT 20
+#define DEDUP_PEERS_MAX        16
+#define DEDUP_PENDING_MAX      256
+#define DEDUP_BATCH_MAX        32
+#define DEDUP_BUF_SIZE         (3 + DEDUP_BATCH_MAX * 4) /* 131 bytes */
 
 typedef struct {
     char host[128];
@@ -298,6 +297,7 @@ struct {
     uint32_t stat_recvs;
     uint32_t stat_entries_recv;
     uint32_t stat_injected;
+    bool debug;
 } dedup_state;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -371,7 +371,7 @@ void dedup_peers_resolve(void) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define _dedup_min(a, b) ((a) < (b) ? (a) : (b))
+#define DEDUP_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 void *dedup_thread_func(void *arg) {
     (void)arg;
@@ -400,7 +400,7 @@ void *dedup_thread_func(void *arg) {
         return NULL;
     }
 
-    printf("dedup: thread started (port=%" PRIu16 ", peers=%d, delay=%" PRIu32 "ms)\n", dedup_state.port, dedup_state.peers_count, dedup_state.delay_ms);
+    printf("dedup: thread started\n");
 
     iotdata_mesh_dedup_entry_t send_buf[DEDUP_PENDING_MAX];
     while (running) {
@@ -415,7 +415,7 @@ void *dedup_thread_func(void *arg) {
             const ssize_t n = recvfrom(recv_fd, buf, sizeof(buf), 0, (struct sockaddr *)&from, &from_len);
             if (n >= 3) {
                 const uint16_t gw_id = (uint16_t)(((uint16_t)buf[0] << 8) | (uint16_t)buf[1]);
-                const int num_entries = _dedup_min(buf[2], DEDUP_BATCH_MAX);
+                const int num_entries = DEDUP_MIN(buf[2], DEDUP_BATCH_MAX);
                 if (n >= (ssize_t)(3 + num_entries * 4)) {
                     pthread_mutex_lock(&dedup_state.mutex);
                     for (int i = 0; i < num_entries; i++) {
@@ -427,7 +427,7 @@ void *dedup_thread_func(void *arg) {
                     pthread_mutex_unlock(&dedup_state.mutex);
                     dedup_state.stat_recvs++;
                     dedup_state.stat_entries_recv += (uint32_t)num_entries;
-                    if (debug_dedup)
+                    if (dedup_state.debug)
                         printf("dedup: rx from gw=%" PRIu16 " entries=%d\n", gw_id, num_entries);
                 }
             }
@@ -454,7 +454,7 @@ void *dedup_thread_func(void *arg) {
         if (send_needed && dedup_state.peers_count > 0) {
             int offset = 0;
             while (offset < send_count) {
-                const int num_entries = _dedup_min(send_count - offset, DEDUP_BATCH_MAX);
+                const int num_entries = DEDUP_MIN(send_count - offset, DEDUP_BATCH_MAX);
                 uint8_t pkt[DEDUP_BUF_SIZE];
                 pkt[0] = (uint8_t)(mesh_state.station_id >> 8);
                 pkt[1] = (uint8_t)(mesh_state.station_id & 0xFFu);
@@ -473,7 +473,7 @@ void *dedup_thread_func(void *arg) {
                 dedup_state.stat_entries_sent += (uint32_t)num_entries;
                 offset += num_entries;
             }
-            if (debug_dedup)
+            if (dedup_state.debug)
                 printf("dedup: tx %d entries to %d peers\n", send_count, dedup_state.peers_count);
         }
     }
@@ -490,8 +490,11 @@ void config_populate_dedup(void) {
     dedup_state.enabled = config_get_bool("dedup-enable", false);
     dedup_state.port = (uint16_t)config_get_integer("dedup-port", DEDUP_PORT_DEFAULT);
     dedup_state.delay_ms = (uint32_t)config_get_integer("dedup-delay", DEDUP_DELAY_MS_DEFAULT);
-    dedup_peers_parse(config_get_string("dedup-peers", ""));
-    debug_dedup = config_get_bool("debug-dedup", false);
+    const char *peers = config_get_string("dedup-peers", "");
+    dedup_peers_parse(peers);
+    dedup_state.debug = config_get_bool("debug-dedup", false);
+
+    printf("config: dedup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", dedup_state.enabled ? 'y' : 'n', dedup_state.port, peers, dedup_state.delay_ms, dedup_state.debug ? "on" : "off");
 }
 
 bool dedup_begin(void) {
@@ -529,7 +532,9 @@ void config_populate_mesh(void) {
     mesh_state.enabled = config_get_bool("mesh-enable", false);
     mesh_state.station_id = (uint16_t)config_get_integer("mesh-station-id", GATEWAY_STATION_ID_DEFAULT);
     mesh_state.beacon_interval = (time_t)config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
-    debug_mesh = config_get_bool("debug-mesh", false);
+    mesh_state.debug = config_get_bool("debug-mesh", false);
+
+    printf("config: mesh: enabled=%c, station-id=%04X " PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", mesh_state.enabled ? 'y' : 'n', mesh_state.station_id, (uint32_t)mesh_state.beacon_interval, dedup_state.debug ? "on" : "off");
 }
 
 bool mesh_begin(void) {
@@ -538,7 +543,7 @@ bool mesh_begin(void) {
         return true;
     }
     iotdata_mesh_dedup_init(&mesh_state.dedup);
-    printf("mesh: enabled, gateway station_id=%" PRIu16 ", beacon interval=%" PRIu32 "s\n", mesh_state.station_id, (uint32_t)mesh_state.beacon_interval);
+    printf("mesh: enabled, station-id=%04X" PRIX16 ", beacon-interval=%" PRIu32 "s\n", mesh_state.station_id, (uint32_t)mesh_state.beacon_interval);
     return true;
 }
 
@@ -559,7 +564,7 @@ void mesh_beacon_send(void) {
     };
     mesh_state.beacon_generation &= (IOTDATA_MESH_GENERATION_MOD - 1);
     iotdata_mesh_pack_beacon(buf, &beacon);
-    if (debug_mesh)
+    if (mesh_state.debug)
         printf("mesh: tx BEACON gen=%" PRIu16 " station=%" PRIu16 "\n", beacon.generation, beacon.sender_station);
     if (device_packet_write(buf, IOTDATA_MESH_BEACON_SIZE))
         mesh_state.stat_beacons_tx++;
@@ -576,7 +581,7 @@ void mesh_ack_send(uint16_t fwd_station, uint16_t fwd_seq) {
         .fwd_seq = fwd_seq,
     };
     iotdata_mesh_pack_ack(buf, &ack);
-    if (debug_mesh)
+    if (mesh_state.debug)
         printf("mesh: tx ACK to station=%" PRIu16 " seq=%" PRIu16 "\n", fwd_station, fwd_seq);
     if (device_packet_write(buf, IOTDATA_MESH_ACK_SIZE))
         mesh_state.stat_acks_tx++;
@@ -593,12 +598,12 @@ bool mesh_handle_forward(const uint8_t *buf, int len, const uint8_t **inner, int
         return false;
     }
     mesh_state.stat_forwards_rx++;
-    if (debug_mesh)
+    if (mesh_state.debug)
         printf("mesh: rx FORWARD from station=%" PRIu16 " seq=%" PRIu16 " ttl=%" PRIu8 " origin={station=%" PRIu16 ", seq=%" PRIu16 "} inner=%d B\n", fwd.sender_station, fwd.sender_seq, fwd.ttl, fwd.origin_station, fwd.origin_sequence,
                fwd.inner_len);
     if (!dedup_check_and_add(fwd.origin_station, fwd.origin_sequence)) {
         mesh_state.stat_duplicates++;
-        if (debug_mesh)
+        if (mesh_state.debug)
             printf("mesh: FORWARD duplicate suppressed (origin station=%" PRIu16 " seq=%" PRIu16 ")\n", fwd.origin_station, fwd.origin_sequence);
         /* still ACK to prevent the forwarder from retrying */
         if (mesh_state.enabled)
@@ -618,7 +623,7 @@ void mesh_handle_beacon(const uint8_t *buf, int len) {
     /* gateway receiving another gateway's beacon — log for multi-gateway awareness */
     iotdata_mesh_beacon_t b;
     if (iotdata_mesh_unpack_beacon(buf, len, &b))
-        if (debug_mesh)
+        if (mesh_state.debug)
             printf("mesh: rx BEACON from gateway=%" PRIu16 " gen=%" PRIu16 " cost=%" PRIu8 " flags=0x%" PRIX8 "\n", b.gateway_id, b.generation, b.cost, b.flags);
 }
 
@@ -646,8 +651,6 @@ void mesh_handle_pong(const uint8_t *buf, int len) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool debug_process = false;
-
 struct {
     const char *mqtt_topic_prefix;
     bool capture_rssi_packet;
@@ -663,6 +666,7 @@ struct {
     uint32_t stat_packets_okay;
     uint32_t stat_packets_drop;
     uint32_t stat_packets_decode_err;
+    bool debug;
 } process_state;
 
 void config_populate_process(void) {
@@ -672,7 +676,7 @@ void config_populate_process(void) {
     process_state.capture_rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
     process_state.interval_stat = config_get_integer("interval-stat", INTERVAL_STAT_DEFAULT);
     process_state.interval_rssi = config_get_integer("interval-rssi", INTERVAL_RSSI_DEFAULT);
-    debug_process = config_get_bool("debug", false);
+    process_state.debug = config_get_bool("debug", false);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -681,7 +685,7 @@ void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint
     if (via == NULL && mesh_state.enabled)
         if (!dedup_check_and_add(station_id, sequence)) {
             mesh_state.stat_duplicates++;
-            if (debug_mesh)
+            if (mesh_state.debug)
                 printf("mesh: direct packet duplicate suppressed (station=%" PRIu16 " seq=%" PRIu16 ")\n", station_id, sequence);
             return;
         }
@@ -707,31 +711,38 @@ void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint
         fprintf(stderr, "process: mqtt send failed (topic=%s, size=%d)\n", topic, (int)strlen(json));
         process_state.stat_packets_drop++;
     }
-    if (debug_process)
+    if (process_state.debug)
         printf("  -> %s (%d bytes%s%s)\n", topic, (int)strlen(json), via ? " via " : "", via ? via : "");
     free(json);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_t variant_id, uint16_t station_id, uint16_t sequence, const char *topic_prefix) {
+void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint16_t station_id, uint16_t sequence, const char *topic_prefix) {
     const uint8_t ctrl_type = iotdata_mesh_peek_ctrl_type(packet_buffer, packet_length);
     mesh_state.stat_mesh_ctrl_rx++;
-    if (debug_mesh)
+    if (mesh_state.debug)
         printf("mesh: rx %s from station=%" PRIu16 " seq=%" PRIu16 " (%d bytes)\n", iotdata_mesh_ctrl_name(ctrl_type), station_id, sequence, packet_length);
     switch (ctrl_type) {
     case IOTDATA_MESH_CTRL_FORWARD: {
         const uint8_t *inner;
         int inner_len;
-        if (mesh_handle_forward(packet_buffer, packet_length, &inner, &inner_len))
-            process_sensor_packet(inner, inner_len, variant_id, station_id, sequence, topic_prefix, "mesh");
+        if (mesh_handle_forward(packet_buffer, packet_length, &inner, &inner_len)) {
+            uint8_t inner_variant;
+            uint16_t inner_station, inner_sequence;
+            if (iotdata_peek(inner, (size_t)inner_len, &inner_variant, &inner_station, &inner_sequence) != IOTDATA_OK) {
+                fprintf(stderr, "mesh: FORWARD inner packet peek failed (len=%d)\n", inner_len);
+                process_state.stat_packets_drop++;
+            } else
+                process_sensor_packet(inner, inner_len, inner_variant, inner_station, inner_sequence, topic_prefix, "mesh");
+        }
         break;
     }
     case IOTDATA_MESH_CTRL_BEACON:
         mesh_handle_beacon(packet_buffer, packet_length);
         break;
     case IOTDATA_MESH_CTRL_ACK:
-        if (debug_mesh)
+        if (mesh_state.debug)
             printf("mesh: rx unexpected ACK from station=%" PRIu16 "\n", station_id);
         break;
     case IOTDATA_MESH_CTRL_ROUTE_ERROR:
@@ -745,7 +756,7 @@ void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_
         break;
     default:
         mesh_state.stat_mesh_unknown++;
-        if (debug_mesh)
+        if (mesh_state.debug)
             printf("mesh: rx unknown ctrl_type=0x%" PRIX8 " from station=%" PRIu16 "\n", ctrl_type, station_id);
         break;
     }
@@ -756,13 +767,19 @@ void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_
 
 void process_stats(time_t period_stat) {
     const uint32_t rate_okay = (process_state.stat_packets_okay * 6000) / (uint32_t)period_stat, rate_drop = (process_state.stat_packets_drop * 6000) / (uint32_t)period_stat;
-    printf("packets-okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), packets-drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)", process_state.stat_packets_okay, rate_okay / 100, rate_okay % 100, process_state.stat_packets_drop,
-           rate_drop / 100, rate_drop % 100);
+    printf("packets{okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)}", process_state.stat_packets_okay, rate_okay / 100, rate_okay % 100, process_state.stat_packets_drop, rate_drop / 100,
+           rate_drop % 100);
     process_state.stat_packets_okay = process_state.stat_packets_drop = process_state.stat_packets_decode_err = 0;
-    if (process_state.capture_rssi_channel)
-        printf(", channel-rssi=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_channel_rssi_ema), process_state.stat_channel_rssi_cnt);
-    if (process_state.capture_rssi_packet)
-        printf(", packet-rssi=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_packet_rssi_ema), process_state.stat_packet_rssi_cnt);
+    if (process_state.capture_rssi_channel || process_state.capture_rssi_packet) {
+        printf(", rssi{");
+        if (process_state.capture_rssi_channel)
+            printf("channel=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_channel_rssi_ema), process_state.stat_channel_rssi_cnt);
+        if (process_state.capture_rssi_channel && process_state.capture_rssi_packet)
+            printf(", ");
+        if (process_state.capture_rssi_packet)
+            printf("packet=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_packet_rssi_ema), process_state.stat_packet_rssi_cnt);
+        printf("}");
+    }
     if (mesh_state.enabled) {
         printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", mesh_state.stat_forwards_rx, mesh_state.stat_forwards_unwrapped, mesh_state.stat_duplicates,
                mesh_state.stat_beacons_tx, mesh_state.stat_acks_tx, mesh_state.stat_mesh_ctrl_rx);
@@ -777,7 +794,7 @@ void process_stats(time_t period_stat) {
         dedup_state.stat_recvs = dedup_state.stat_entries_recv = 0;
         dedup_state.stat_injected = 0;
     }
-    printf(", mqtt=%s (disconnects=%" PRIu32 ")", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
+    printf(", mqtt{%s, disconnects=%" PRIu32 "}", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
     printf("\n");
 }
 
@@ -811,7 +828,7 @@ void process_begin(void) {
                 fprintf(stderr, "process: packet too short for iotdata header (size=%d)\n", packet_length);
                 process_state.stat_packets_drop++;
             } else if (variant_id == IOTDATA_MESH_VARIANT)
-                process_mesh_packet(packet_buffer, packet_length, variant_id, station_id, sequence, process_state.mqtt_topic_prefix);
+                process_mesh_packet(packet_buffer, packet_length, station_id, sequence, process_state.mqtt_topic_prefix);
             else
                 process_sensor_packet(packet_buffer, packet_length, variant_id, station_id, sequence, process_state.mqtt_topic_prefix, NULL);
         }
