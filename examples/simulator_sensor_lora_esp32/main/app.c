@@ -168,8 +168,8 @@ static e22900t22_config_t e22_config = {
     .address = 0x0008,
     .network = 0x00,
     .channel = 0x17, /* 850.125 + 23 = 873.125 MHz */
-    .packet_maxsize = E22900T22_CONFIG_PACKET_MAXSIZE_DEFAULT,
-    .packet_maxrate = E22900T22_CONFIG_PACKET_MAXRATE_DEFAULT,
+    .packet_size = E22900T22_CONFIG_PACKET_SIZE_DEFAULT,
+    .packet_rate = E22900T22_CONFIG_PACKET_RATE_DEFAULT,
     .crypt = E22900T22_CONFIG_CRYPT_DEFAULT,
     .wor_enabled = E22900T22_CONFIG_WOR_ENABLED_DEFAULT,
     .wor_cycle = E22900T22_CONFIG_WOR_CYCLE_DEFAULT,
