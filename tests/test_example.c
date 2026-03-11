@@ -312,7 +312,7 @@ static void encode_and_display(sensor_state_t *s, int full) {
     }
     /* pres0: always */
     iotdata_encode_battery(&enc, (uint8_t)lround(s->battery), s->charging);
-    iotdata_encode_link(&enc, (int16_t)s->link_rssi, (float)s->link_snr);
+    iotdata_encode_link(&enc, (int8_t)s->link_rssi, (float)s->link_snr);
     iotdata_encode_environment(&enc, (float)s->temperature, (uint16_t)s->pressure, (uint8_t)s->humidity);
     iotdata_encode_wind(&enc, (float)s->wind_speed, (uint16_t)s->wind_dir, (float)s->wind_gust);
     iotdata_encode_rain(&enc, (uint8_t)s->rain_rate, (uint8_t)(s->rain_size * 10.0));

@@ -469,10 +469,10 @@ static iotdata_status_t json_get_battery(cJSON *root, iotdata_encoder_t *enc, co
     cJSON *j = cJSON_GetObjectItem(root, label);
     if (!j)
         return IOTDATA_OK;
-    cJSON *j_level = cJSON_GetObjectItem(j, "level"), *j_charging = cJSON_GetObjectItem(j, "charging");
+    cJSON *j_level = cJSON_GetObjectItem(j, "level"), *j_state = cJSON_GetObjectItem(j, "state");
     if (!j_level)
         return IOTDATA_OK;
-    return iotdata_encode_battery(enc, (uint8_t)j_level->valueint, cJSON_IsTrue(j_charging));
+    return iotdata_encode_battery(enc, (uint8_t)j_level->valueint, cJSON_IsTrue(j_state));
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
@@ -480,7 +480,7 @@ static void json_set_battery(cJSON *root, const iotdata_decoded_t *dec, const ch
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "level", dec->battery_level);
-    cJSON_AddBoolToObject(obj, "charging", dec->battery_charging);
+    cJSON_AddBoolToObject(obj, "state", dec->battery_charging);
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -493,7 +493,7 @@ static int dump_battery(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_BATTERY_CHARGE_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s", dequantise_battery_state(r) ? "charging" : "discharging");
-    n = dump_add(dump, n, s, IOTDATA_BATTERY_CHARGE_BITS, r, dump->_dec_buf, "0/1", "battery_charging");
+    n = dump_add(dump, n, s, IOTDATA_BATTERY_CHARGE_BITS, r, dump->_dec_buf, "0/1", "battery_state");
     return n;
 }
 #endif
@@ -529,7 +529,7 @@ static const iotdata_field_ops_t _iotdata_field_def_battery = {
 
 #if defined(IOTDATA_ENABLE_LINK)
 #if !defined(IOTDATA_NO_ENCODE)
-iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int16_t rssi_dbm, iotdata_float_t snr_db) {
+iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int8_t rssi_dbm, iotdata_float_t snr_db) {
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_LINK);
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
@@ -549,13 +549,13 @@ iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int16_t rssi_dbm, i
 }
 #endif
 #if !defined(IOTDATA_NO_ENCODE)
-static uint32_t quantise_link_rssi(int16_t rssi) {
+static uint32_t quantise_link_rssi(int8_t rssi) {
     return (uint32_t)(((rssi < IOTDATA_LINK_RSSI_MIN ? IOTDATA_LINK_RSSI_MIN : rssi > IOTDATA_LINK_RSSI_MAX ? IOTDATA_LINK_RSSI_MAX : rssi) - IOTDATA_LINK_RSSI_MIN) / IOTDATA_LINK_RSSI_STEP);
 }
 #endif
 #if !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
-static int16_t dequantise_link_rssi(uint32_t raw) {
-    return (int16_t)(IOTDATA_LINK_RSSI_MIN + (int)raw * IOTDATA_LINK_RSSI_STEP);
+static int8_t dequantise_link_rssi(uint32_t raw) {
+    return (int8_t)(IOTDATA_LINK_RSSI_MIN + (int)raw * IOTDATA_LINK_RSSI_STEP);
 }
 #endif
 #if !defined(IOTDATA_NO_FLOATING)
@@ -604,7 +604,7 @@ static iotdata_status_t json_get_link(cJSON *root, iotdata_encoder_t *enc, const
     cJSON *j_rssi = cJSON_GetObjectItem(j, "rssi"), *j_snr = cJSON_GetObjectItem(j, "snr");
     if (!j_rssi || !j_snr)
         return IOTDATA_OK;
-    return iotdata_encode_link(enc, (int16_t)j_rssi->valueint, (iotdata_float_t)j_snr->valuedouble);
+    return iotdata_encode_link(enc, (int8_t)j_rssi->valueint, (iotdata_float_t)j_snr->valuedouble);
 }
 #endif
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
@@ -620,7 +620,7 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
     (void)label;
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_LINK_RSSI_BITS);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " dBm", dequantise_link_rssi(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIi8 " dBm", dequantise_link_rssi(r));
     n = dump_add(dump, n, s, IOTDATA_LINK_RSSI_BITS, r, dump->_dec_buf, "-120..-60, 4dBm", "link_rssi");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_LINK_SNR_BITS);
@@ -636,9 +636,9 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_link(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %" PRIu16 " dBm RSSI, %.0f dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr);
+    bprintf(bp, "  %s:%s %" PRIi8 " dBm RSSI, %.0f dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr);
 #else
-    bprintf(bp, "  %s:%s %" PRIu16 " dBm RSSI, %d.%d dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr / 10, dec->link_snr % 10);
+    bprintf(bp, "  %s:%s %" PRIi8 " dBm RSSI, %d.%d dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr / 10, dec->link_snr % 10);
 #endif
 }
 #endif
@@ -3628,6 +3628,83 @@ static const iotdata_field_ops_t _iotdata_field_def_flags = {
 // clang-format on
 
 /* =========================================================================
+ * Field BITS32
+ * ========================================================================= */
+
+#if defined(IOTDATA_ENABLE_BITS32)
+#if !defined(IOTDATA_NO_ENCODE)
+iotdata_status_t iotdata_encode_bits32(iotdata_encoder_t *enc, uint32_t bits32) {
+    CHECK_CTX_ACTIVE(enc);
+    CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_BITS32);
+    enc->bits32 = bits32;
+    IOTDATA_FIELD_SET(enc->fields, IOTDATA_FIELD_BITS32);
+    return IOTDATA_OK;
+}
+#endif
+// quantise
+#if !defined(IOTDATA_NO_ENCODE)
+static bool pack_bits32(uint8_t *buf, size_t bb, size_t *bp, const iotdata_encoder_t *enc) {
+    return bits_write(buf, bb, bp, enc->bits32, IOTDATA_BITS32_BITS);
+}
+#endif
+#if !defined(IOTDATA_NO_DECODE)
+static bool unpack_bits32(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *dec) {
+    if (*bp + IOTDATA_BITS32_BITS > bb)
+        return false;
+    dec->bits32 = (uint32_t)bits_read(buf, bb, bp, IOTDATA_BITS32_BITS);
+    return true;
+}
+#endif
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_ENCODE)
+static iotdata_status_t json_get_bits32(cJSON *root, iotdata_encoder_t *enc, const char *label, iotdata_encode_from_json_scratch_t *scratch) {
+    (void)scratch;
+    cJSON *j = cJSON_GetObjectItem(root, label);
+    if (!j)
+        return IOTDATA_OK;
+    return iotdata_encode_bits32(enc, (uint32_t)j->valueint);
+}
+#endif
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
+static void json_set_bits32(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
+    (void)scratch;
+    cJSON_AddNumberToObject(root, label, dec->bits32);
+}
+#endif
+#if !defined(IOTDATA_NO_DUMP)
+static int dump_bits32(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *dump, int n, const char *label) {
+    (void)label;
+    size_t s = *bp;
+    uint32_t r = bits_read(buf, bb, bp, IOTDATA_BITS32_BITS);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%08" PRIX32, r);
+    n = dump_add(dump, n, s, IOTDATA_BITS32_BITS, r, dump->_dec_buf, "8-bit bitmask", "bits32");
+    return n;
+}
+#endif
+#if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
+static void print_bits32(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
+    bprintf(bp, "  %s:%s 0x%08" PRIX32 "\n", label, _padd(label), dec->bits32);
+}
+#endif
+// clang-format off
+static const iotdata_field_ops_t _iotdata_field_def_bits32 = {
+    _IOTDATA_OP_NAME("bits32")
+    _IOTDATA_OP_BITS(IOTDATA_BITS32_BITS)
+    _IOTDATA_OP_PACK(pack_bits32)
+    _IOTDATA_OP_UNPACK(unpack_bits32)
+    _IOTDATA_OP_DUMP(dump_bits32)
+    _IOTDATA_OP_PRINT(print_bits32)
+    _IOTDATA_OP_JSON_SET(json_set_bits32)
+    _IOTDATA_OP_JSON_GET(json_get_bits32)
+};
+#define _IOTDATA_ENT_BITS32 [IOTDATA_FIELD_BITS32] = &_iotdata_field_def_bits32,
+#define _IOTDATA_ERR_BITS32
+#else
+#define _IOTDATA_ENT_BITS32
+#define _IOTDATA_ERR_BITS32
+#endif
+// clang-format on
+
+/* =========================================================================
  * Field TLV
  * ========================================================================= */
 
@@ -4092,7 +4169,7 @@ static iotdata_status_t json_get_tlv(cJSON *root, iotdata_encoder_t *enc, const 
 static int _dump_tlv_data(size_t *bp, iotdata_dump_t *dump, int n, uint8_t format, uint8_t length, int tlv_idx, const char *name) {
     const size_t data_bits = (format == IOTDATA_TLV_FMT_STRING) ? (size_t)length * IOTDATA_TLV_CHAR_BITS : (size_t)length * 8;
     snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].%s", tlv_idx, name);
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%" PRIu32 " bits)", (uint32_t)data_bits);
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "(%" PRIu32 " bits)", (uint32_t)data_bits); // XXX string
     n = dump_add(dump, n, *bp, data_bits, 0, dump->_dec_buf, format == IOTDATA_TLV_FMT_STRING ? "6-bit chars" : "raw bytes", dump->_name_buf);
     *bp += data_bits;
     return n;
@@ -4387,6 +4464,7 @@ static const iotdata_field_ops_t *_iotdata_field_ops[IOTDATA_FIELD_COUNT] = {
     _IOTDATA_ENT_DATETIME
     _IOTDATA_ENT_IMAGE
     _IOTDATA_ENT_FLAGS
+    _IOTDATA_ENT_BITS32
 };
 
 // clang-format on
@@ -4916,7 +4994,7 @@ static iotdata_status_t _iotdata_dump_decoded(const iotdata_dump_t *dump, iotdat
 static iotdata_status_t _iotdata_dump_oneline(const iotdata_dump_t *dump, iotdata_buf_t *bp) {
     for (size_t i = 0; i < dump->count; i++) {
         const iotdata_dump_entry_t *e = &dump->entries[i];
-        bprintf(bp, "%s%s=%s%s", (i > 0 ? ", " : ""), e->field_name, e->decoded_str, (i + 1 == dump->count ? "\n" : ""));
+        bprintf(bp, "%s%s=%s", (i > 0 ? ", " : ""), e->field_name, e->decoded_str);
     }
     return IOTDATA_OK;
 }
@@ -5052,6 +5130,7 @@ const char *iotdata_strerror(iotdata_status_t status) {
         _IOTDATA_ERR_DATETIME
         _IOTDATA_ERR_IMAGE
         _IOTDATA_ERR_FLAGS
+        _IOTDATA_ERR_BITS32
 
     default:
         return "Unknown error";

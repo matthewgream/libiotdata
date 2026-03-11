@@ -96,6 +96,7 @@ extern "C" {
 #define IOTDATA_ENABLE_POSITION
 #define IOTDATA_ENABLE_DATETIME
 #define IOTDATA_ENABLE_FLAGS
+#define IOTDATA_ENABLE_BITS32
 #define IOTDATA_ENABLE_IMAGE
 #endif
 
@@ -120,7 +121,7 @@ extern "C" {
 
 #if defined(IOTDATA_ENABLE_LINK)
 #define IOTDATA_LINK_FIELDS \
-    int16_t link_rssi; \
+    int8_t link_rssi; \
     iotdata_float_t link_snr;
 #define IOTDATA_LINK_RSSI_MIN  (-120)
 #define IOTDATA_LINK_RSSI_MAX  (-60)
@@ -421,17 +422,6 @@ extern "C" {
 #endif
 
 /* ---------------------------------------------------------------------------
- * Field FLAGS
- * -------------------------------------------------------------------------*/
-
-#if defined(IOTDATA_ENABLE_FLAGS)
-#define IOTDATA_FLAGS_FIELDS uint8_t flags;
-#define IOTDATA_FLAGS_BITS   8
-#else
-#define IOTDATA_FLAGS_FIELDS
-#endif
-
-/* ---------------------------------------------------------------------------
  * Field IMAGE
  * -------------------------------------------------------------------------*/
 
@@ -488,6 +478,28 @@ typedef struct {
 #else
 #define IOTDATA_IMAGE_FIELDS_ENCODE
 #define IOTDATA_IMAGE_FIELDS_DECODE
+#endif
+
+/* ---------------------------------------------------------------------------
+ * Field FLAGS
+ * -------------------------------------------------------------------------*/
+
+#if defined(IOTDATA_ENABLE_FLAGS)
+#define IOTDATA_FLAGS_FIELDS uint8_t flags;
+#define IOTDATA_FLAGS_BITS   8
+#else
+#define IOTDATA_FLAGS_FIELDS
+#endif
+
+/* ---------------------------------------------------------------------------
+ * Field BITS32
+ * -------------------------------------------------------------------------*/
+
+#if defined(IOTDATA_ENABLE_BITS32)
+#define IOTDATA_BITS32_FIELDS uint32_t bits32;
+#define IOTDATA_BITS32_BITS   32
+#else
+#define IOTDATA_BITS32_FIELDS
 #endif
 
 /* ---------------------------------------------------------------------------
@@ -701,6 +713,9 @@ typedef enum {
 #endif
 #if defined(IOTDATA_ENABLE_FLAGS)
     IOTDATA_FIELD_FLAGS, /*  8 bits */
+#endif
+#if defined(IOTDATA_ENABLE_BITS32)
+    IOTDATA_FIELD_BITS32, /* 32 bits */
 #endif
     IOTDATA_FIELD_COUNT,
 #if defined(IOTDATA_ENABLE_TLV)
@@ -938,6 +953,7 @@ typedef struct {
     IOTDATA_DATETIME_FIELDS
     IOTDATA_IMAGE_FIELDS_ENCODE
     IOTDATA_FLAGS_FIELDS
+    IOTDATA_BITS32_FIELDS
 
     IOTDATA_TLV_FIELDS_ENCODE
 } iotdata_encoder_t;
@@ -971,6 +987,7 @@ typedef struct {
     IOTDATA_DATETIME_FIELDS
     IOTDATA_IMAGE_FIELDS_DECODE
     IOTDATA_FLAGS_FIELDS
+    IOTDATA_BITS32_FIELDS
 
     IOTDATA_TLV_FIELDS_DECODE
 } iotdata_decoded_t;
@@ -1054,7 +1071,7 @@ iotdata_status_t iotdata_encode_tlv_string(iotdata_encoder_t *enc, uint8_t type,
 iotdata_status_t iotdata_encode_battery(iotdata_encoder_t *enc, uint8_t level_percent, bool charging);
 #endif
 #if defined(IOTDATA_ENABLE_LINK)
-iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int16_t rssi_dbm, iotdata_float_t snr_db);
+iotdata_status_t iotdata_encode_link(iotdata_encoder_t *enc, int8_t rssi_dbm, iotdata_float_t snr_db);
 #endif
 #if defined(IOTDATA_ENABLE_ENVIRONMENT)
 iotdata_status_t iotdata_encode_environment(iotdata_encoder_t *enc, iotdata_float_t temp_c, uint16_t pressure_hpa, uint8_t humidity_pct);
@@ -1130,6 +1147,9 @@ iotdata_status_t iotdata_encode_image(iotdata_encoder_t *enc, uint8_t pixel_form
 #endif
 #if defined(IOTDATA_ENABLE_FLAGS)
 iotdata_status_t iotdata_encode_flags(iotdata_encoder_t *enc, uint8_t flags);
+#endif
+#if defined(IOTDATA_ENABLE_BITS32)
+iotdata_status_t iotdata_encode_bits32(iotdata_encoder_t *enc, uint32_t bits32);
 #endif
 #endif /* !IOTDATA_NO_ENCODE */
 
