@@ -1168,6 +1168,8 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
 
 #if !defined(IOTDATA_NO_DUMP)
 
+#define IOTDATA_DUMP_RANGE_STR_STATIC
+
 #define IOTDATA_DUMP_FIELD_NAME_MAX  32
 #define IOTDATA_DUMP_DECODED_STR_MAX 32
 #define IOTDATA_DUMP_RANGE_STR_MAX   32
@@ -1178,7 +1180,11 @@ typedef struct {
     char field_name[IOTDATA_DUMP_FIELD_NAME_MAX];
     uint32_t raw_value;
     char decoded_str[IOTDATA_DUMP_DECODED_STR_MAX];
+#ifdef IOTDATA_DUMP_RANGE_STR_STATIC
+    const char *range_str;
+#else
     char range_str[IOTDATA_DUMP_RANGE_STR_MAX];
+#endif
 } iotdata_dump_entry_t;
 
 #define IOTDATA_MAX_DUMP_ENTRIES 48

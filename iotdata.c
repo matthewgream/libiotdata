@@ -1809,11 +1809,11 @@ static int dump_solar(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t 
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_SOLAR_IRRADIATION_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16 " W/m2", dequantise_solar_irradiance(r));
-    n = dump_add(dump, n, s, IOTDATA_SOLAR_IRRADIATION_BITS, r, dump->_dec_buf, "0..1023 W/m2", "solar_irradiance");
+    n = dump_add(dump, n, s, IOTDATA_SOLAR_IRRADIATION_BITS, r, dump->_dec_buf, "0..1023 W/m2", "solar_ir");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_SOLAR_ULTRAVIOLET_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8, dequantise_solar_ultraviolet(r));
-    n = dump_add(dump, n, s, IOTDATA_SOLAR_ULTRAVIOLET_BITS, r, dump->_dec_buf, "0..15", "solar_ultraviolet");
+    n = dump_add(dump, n, s, IOTDATA_SOLAR_ULTRAVIOLET_BITS, r, dump->_dec_buf, "0..15", "solar_uv");
     return n;
 }
 #endif
@@ -2273,14 +2273,13 @@ static int dump_aq_gas(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t
     uint32_t present = bits_read(buf, bb, bp, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%02" PRIX32, present);
     n = dump_add(dump, n, s, IOTDATA_AIR_QUALITY_GAS_PRESENT_BITS, present, dump->_dec_buf, "8-bit mask", "aq_gas_present");
-    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++) {
+    for (int i = 0; i < IOTDATA_AIR_QUALITY_GAS_COUNT; i++)
         if (present & (1U << i)) {
             s = *bp;
             uint32_t r = bits_read(buf, bb, bp, _aq_gas_bits[i]);
             snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 " %s", r * _aq_gas_res[i], _aq_gas_units[i]);
             n = dump_add(dump, n, s, _aq_gas_bits[i], r, dump->_dec_buf, _aq_gas_range[i], _aq_gas_names[i]);
         }
-    }
     return n;
 }
 #endif
@@ -4180,23 +4179,23 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
     case IOTDATA_TLV_STATUS:
         if (format == IOTDATA_TLV_FMT_RAW && length == IOTDATA_TLV_STATUS_LENGTH) {
             size_t p = *bp;
-            const uint32_t sess = bits_read(buf, bb, &p, 24);
-            const uint32_t life = bits_read(buf, bb, &p, 24);
+            const uint32_t uptime_sess = bits_read(buf, bb, &p, 24);
+            const uint32_t uptime_life = bits_read(buf, bb, &p, 24);
             const uint16_t restarts = (uint16_t)bits_read(buf, bb, &p, 16);
             const uint8_t reason = (uint8_t)bits_read(buf, bb, &p, 8);
-            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_uptime", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(sess * IOTDATA_TLV_STATUS_TICKS_RES));
-            n = dump_add(dump, n, *bp, 24, sess, dump->_dec_buf, "ticks×5", dump->_name_buf);
+            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].uptime_sess", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(uptime_sess * IOTDATA_TLV_STATUS_TICKS_RES));
+            n = dump_add(dump, n, *bp, 24, uptime_sess, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
-            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].lifetime_uptime", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(life * IOTDATA_TLV_STATUS_TICKS_RES));
-            n = dump_add(dump, n, *bp, 24, life, dump->_dec_buf, "ticks×5", dump->_name_buf);
+            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].uptime_life", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(uptime_life * IOTDATA_TLV_STATUS_TICKS_RES));
+            n = dump_add(dump, n, *bp, 24, uptime_life, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 24;
-            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].restarts", tlv_idx);
+            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].restart_count", tlv_idx);
             snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16, restarts);
             n = dump_add(dump, n, *bp, 16, restarts, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
-            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].reason", tlv_idx);
+            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].restart_reason", tlv_idx);
             snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s", reason < _TLV_REASON_COUNT ? _tlv_reason_names[reason] : "?");
             n = dump_add(dump, n, *bp, 8, reason, dump->_dec_buf, "0..255", dump->_name_buf);
             *bp += 8;
@@ -4209,7 +4208,7 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
             const int8_t cpu_temp = (int8_t)(uint8_t)bits_read(buf, bb, &p, 8);
             const uint16_t supply_mv = (uint16_t)bits_read(buf, bb, &p, 16);
             const uint16_t free_heap = (uint16_t)bits_read(buf, bb, &p, 16);
-            const uint16_t active = (uint16_t)bits_read(buf, bb, &p, 16);
+            const uint16_t sess_active = (uint16_t)bits_read(buf, bb, &p, 16);
             snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].cpu_temp", tlv_idx);
             snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRId8 "°C", cpu_temp);
             n = dump_add(dump, n, *bp, 8, (uint32_t)(uint8_t)cpu_temp, dump->_dec_buf, "-40..85", dump->_name_buf);
@@ -4222,9 +4221,9 @@ static int _dump_tlv_global(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
             snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu16, free_heap);
             n = dump_add(dump, n, *bp, 16, free_heap, dump->_dec_buf, "0..65535", dump->_name_buf);
             *bp += 16;
-            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].session_active", tlv_idx);
-            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(active * IOTDATA_TLV_HEALTH_TICKS_RES));
-            n = dump_add(dump, n, *bp, 16, active, dump->_dec_buf, "ticks×5", dump->_name_buf);
+            snprintf(dump->_name_buf, sizeof(dump->_name_buf), "tlv[%d].time_active", tlv_idx);
+            snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu32 "s", (uint32_t)(sess_active * IOTDATA_TLV_HEALTH_TICKS_RES));
+            n = dump_add(dump, n, *bp, 16, sess_active, dump->_dec_buf, "ticks×5", dump->_name_buf);
             *bp += 16;
             return n;
         }
@@ -4896,7 +4895,11 @@ static int dump_add(iotdata_dump_t *dump, int n, size_t bit_offset, size_t bit_l
 #pragma GCC diagnostic ignored "-Wrestrict"
     snprintf(e->field_name, sizeof(e->field_name), "%s", name);
     snprintf(e->decoded_str, sizeof(e->decoded_str), "%s", decoded);
+#ifdef IOTDATA_DUMP_RANGE_STR_STATIC
+    e->range_str = range;
+#else
     snprintf(e->range_str, sizeof(e->range_str), "%s", range);
+#endif
 #pragma GCC diagnostic pop
     return n + 1;
 }
