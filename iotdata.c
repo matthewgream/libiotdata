@@ -625,7 +625,7 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_LINK_SNR_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.0f dB", dequantise_link_snr(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.0f dB", (double) dequantise_link_snr(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_link_snr(r), 10, "dB");
 #endif
@@ -746,7 +746,7 @@ static int dump_temperature(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_TEMPERATURE_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f C", dequantise_temperature(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f C", (double) dequantise_temperature(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_temperature(r), 100, "C");
 #endif
@@ -4564,7 +4564,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
         if (IOTDATA_FIELD_VALID(vdef->fields[si].type) && IOTDATA_FIELD_PRESENT(enc->fields, vdef->fields[si].type)) {
             const int pb = _iotdata_field_pres_byte(si);
             pres[pb] |= (1U << _iotdata_field_pres_bit(si));
-            if (pb + 1 > max_pres_needed)
+            if (pb >= max_pres_needed)
                 max_pres_needed = pb + 1;
         }
 #if defined(IOTDATA_ENABLE_TLV)
