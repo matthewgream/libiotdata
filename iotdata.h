@@ -421,6 +421,24 @@ extern "C" {
 #define IOTDATA_DATETIME_FIELDS
 #endif
 
+uint32_t iotdata_datetime_convert_utc_to_seconds_from_year_start(int64_t utc) {
+    if (utc <= 0)
+        return 0;
+    // Days and seconds since Unix epoch
+    int d = (int)(utc / 86400), rem = (int)(utc % 86400);
+    // Leap days from 1970 to approximate year (every 4y, minus 100y, plus 400y)
+    // Shift to March-based year so leap day falls at end, then shift back
+    // Using: days since epoch -> civil date (Howard Hinnant algorithm, simplified)
+    int y = (int)((10000LL * (long long)d + 14780) / 3652425) + 1970;
+    // Day-of-year for Jan 1 of year y (relative to epoch)
+    int j = y * 365 + y / 4 - y / 100 + y / 400 - 719527;
+    if (j > d) {
+        y--;
+        j = y * 365 + y / 4 - y / 100 + y / 400 - 719527;
+    }
+    return (uint32_t)((d - j) * 86400 + rem); // 0-based day of year
+}
+
 /* ---------------------------------------------------------------------------
  * Field IMAGE
  * -------------------------------------------------------------------------*/
