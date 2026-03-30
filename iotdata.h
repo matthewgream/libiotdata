@@ -421,7 +421,7 @@ extern "C" {
 #define IOTDATA_DATETIME_FIELDS
 #endif
 
-uint32_t iotdata_datetime_convert_utc_to_seconds_from_year_start(int64_t utc) {
+static inline uint32_t iotdata_datetime_convert_utc_to_seconds_from_year_start(int64_t utc) {
     if (utc <= 0)
         return 0;
     // Days and seconds since Unix epoch
