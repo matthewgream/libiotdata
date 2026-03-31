@@ -173,10 +173,10 @@ const iotdata_variant_def_t iotdata_variant_suite[IOTDATA_VSUITE_COUNT] = {
             { IOTDATA_FIELD_DEPTH,               "snow_depth"  },  /* S2 */
             { IOTDATA_FIELD_ENVIRONMENT,         "environment" },  /* S3 */
             { IOTDATA_FIELD_SOLAR,               "solar"       },  /* S4 */
-            { IOTDATA_FIELD_POSITION,            "position"    },  /* S5 */
+            { IOTDATA_FIELD_BITS32,              "flags"       },  /* S5 */
             /* pres1 [6..12] */
-            { IOTDATA_FIELD_DATETIME,            "datetime"    },  /* S6 */
-            { IOTDATA_FIELD_FLAGS,               "flags"       },  /* S7 */
+            { IOTDATA_FIELD_POSITION,            "position"    },  /* S6 */
+            { IOTDATA_FIELD_DATETIME,            "datetime"    },  /* S7 */
             _VS_NONE,                                              /* S8 */
             _VS_NONE,                                              /* S9 */
             _VS_NONE,                                              /* S10 */
