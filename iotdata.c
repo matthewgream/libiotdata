@@ -3675,7 +3675,7 @@ static int dump_bits32(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_BITS32_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "0x%08" PRIX32, r);
-    n = dump_add(dump, n, s, IOTDATA_BITS32_BITS, r, dump->_dec_buf, "8-bit bitmask", "bits32");
+    n = dump_add(dump, n, s, IOTDATA_BITS32_BITS, r, dump->_dec_buf, "32-bit unit", "bits32");
     return n;
 }
 #endif
@@ -3788,7 +3788,7 @@ iotdata_status_t iotdata_encode_tlv_type_status(iotdata_encoder_t *enc, uint32_t
         return IOTDATA_ERR_TLV_DATA_NULL;
     const uint32_t sess = session_uptime_secs / IOTDATA_TLV_STATUS_TICKS_RES, life = lifetime_uptime_secs / IOTDATA_TLV_STATUS_TICKS_RES;
     if (sess > IOTDATA_TLV_STATUS_TICKS_MAX || life > IOTDATA_TLV_STATUS_TICKS_MAX)
-        return IOTDATA_ERR_TLV_LEN_HIGH;
+        return IOTDATA_ERR_TLV_VALUE_HIGH;
     buf[0] = (uint8_t)(sess >> 16);
     buf[1] = (uint8_t)(sess >> 8);
     buf[2] = (uint8_t)sess;
@@ -3805,7 +3805,7 @@ iotdata_status_t iotdata_encode_tlv_type_health(iotdata_encoder_t *enc, int8_t c
         return IOTDATA_ERR_TLV_DATA_NULL;
     const uint32_t active = session_active_secs / IOTDATA_TLV_HEALTH_TICKS_RES;
     if (active > IOTDATA_TLV_HEALTH_TICKS_MAX)
-        return IOTDATA_ERR_TLV_LEN_HIGH;
+        return IOTDATA_ERR_TLV_VALUE_HIGH;
     buf[0] = (uint8_t)cpu_temp;
     buf[1] = (uint8_t)(supply_mv >> 8);
     buf[2] = (uint8_t)supply_mv;
@@ -4424,7 +4424,9 @@ static void print_tlv(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const cha
     case IOTDATA_ERR_TLV_UNMATCHED: \
         return "TLV global type was unmatched"; \
     case IOTDATA_ERR_TLV_KV_MISMATCH: \
-        return "TLV global key-value type missing one pair";
+        return "TLV global key-value type missing one pair"; \
+    case IOTDATA_ERR_TLV_VALUE_HIGH: \
+        return "TLV value above range";
 #else
 #define _IOTDATA_ERR_TLV
 #endif
@@ -4882,7 +4884,6 @@ iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t
 
 #if !defined(IOTDATA_NO_DUMP)
 
-#define IOTDATA_MAX_DUMP_ENTRIES 48
 static int dump_add(iotdata_dump_t *dump, int n, size_t bit_offset, size_t bit_length, uint32_t raw_value, const char *decoded, const char *range, const char *name) {
     // XXX silent overflow
     if (n >= IOTDATA_MAX_DUMP_ENTRIES)

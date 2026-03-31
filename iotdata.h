@@ -579,6 +579,10 @@ typedef struct {
 #define IOTDATA_TLV_FMT_RAW     0
 #define IOTDATA_TLV_FMT_STRING  1
 #define IOTDATA_TLV_CHAR_BITS   6
+static inline bool iotdata_issixbit(const char c) {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == ' ');
+}
+
 #else
 #define IOTDATA_TLV_FIELDS_ENCODE
 #define IOTDATA_TLV_FIELDS_DECODE
@@ -836,6 +840,7 @@ typedef enum {
     IOTDATA_ERR_TLV_STR_CHAR_INVALID,
     IOTDATA_ERR_TLV_UNMATCHED,
     IOTDATA_ERR_TLV_KV_MISMATCH,
+    IOTDATA_ERR_TLV_VALUE_HIGH,
 #endif
 
 //
