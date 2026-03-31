@@ -580,7 +580,7 @@ typedef struct {
 #define IOTDATA_TLV_FMT_STRING  1
 #define IOTDATA_TLV_CHAR_BITS   6
 static inline bool iotdata_issixbit(const char c) {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == ' ');
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == ' ');
 }
 
 #else

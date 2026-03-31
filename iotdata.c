@@ -625,7 +625,7 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_LINK_SNR_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.0f dB", (double) dequantise_link_snr(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.0f dB", (double)dequantise_link_snr(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_link_snr(r), 10, "dB");
 #endif
@@ -636,7 +636,7 @@ static int dump_link(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_link(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %" PRIi8 " dBm RSSI, %.0f dB SNR\n", label, _padd(label), dec->link_rssi, (double) dec->link_snr);
+    bprintf(bp, "  %s:%s %" PRIi8 " dBm RSSI, %.0f dB SNR\n", label, _padd(label), dec->link_rssi, (double)dec->link_snr);
 #else
     bprintf(bp, "  %s:%s %" PRIi8 " dBm RSSI, %d.%d dB SNR\n", label, _padd(label), dec->link_rssi, dec->link_snr / 10, dec->link_snr % 10);
 #endif
@@ -746,7 +746,7 @@ static int dump_temperature(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_TEMPERATURE_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f C", (double) dequantise_temperature(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f C", (double)dequantise_temperature(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_temperature(r), 100, "C");
 #endif
@@ -757,7 +757,7 @@ static int dump_temperature(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 #if defined(IOTDATA_ENABLE_TEMPERATURE) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_temperature(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.2f C\n", label, _padd(label), (double) dec->temperature);
+    bprintf(bp, "  %s:%s %.2f C\n", label, _padd(label), (double)dec->temperature);
 #else
     const int32_t ta = dec->temperature < 0 ? -(dec->temperature) : dec->temperature;
     bprintf(bp, "  %s:%s %s%d.%02d C\n", label, _padd(label), dec->temperature < 0 ? "-" : "", ta / 100, ta % 100);
@@ -1044,7 +1044,7 @@ static int dump_environment(const uint8_t *buf, size_t bb, size_t *bp, iotdata_d
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_environment(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.2f C, %" PRIu16 " hPa, %" PRIu8 "%%\n", label, _padd(label), (double) dec->temperature, dec->pressure, dec->humidity);
+    bprintf(bp, "  %s:%s %.2f C, %" PRIu16 " hPa, %" PRIu8 "%%\n", label, _padd(label), (double)dec->temperature, dec->pressure, dec->humidity);
 #else
     const int32_t ta = dec->temperature < 0 ? -(dec->temperature) : dec->temperature;
     bprintf(bp, "  %s:%s %s%d.%02d C, %" PRIu16 " hPa, %" PRIu8 "%%\n", label, _padd(label), dec->temperature < 0 ? "-" : "", ta / 100, ta % 100, dec->pressure, dec->humidity);
@@ -1145,7 +1145,7 @@ static int dump_wind_speed(const uint8_t *buf, size_t bb, size_t *bp, iotdata_du
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_WIND_SPEED_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", (double) dequantise_wind_speed(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", (double)dequantise_wind_speed(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), 100, "m/s");
 #endif
@@ -1156,7 +1156,7 @@ static int dump_wind_speed(const uint8_t *buf, size_t bb, size_t *bp, iotdata_du
 #if defined(IOTDATA_ENABLE_WIND_SPEED) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_wind_speed(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.1f m/s\n", label, _padd(label), (double) dec->wind_speed);
+    bprintf(bp, "  %s:%s %.1f m/s\n", label, _padd(label), (double)dec->wind_speed);
 #else
     bprintf(bp, "  %s:%s %d.%02d m/s\n", label, _padd(label), dec->wind_speed / 100, dec->wind_speed % 100);
 #endif
@@ -1341,7 +1341,7 @@ static int dump_wind_gust(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dum
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_WIND_GUST_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", (double) dequantise_wind_speed(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.1f m/s", (double)dequantise_wind_speed(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_wind_speed(r), 100, "m/s");
 #endif
@@ -1352,7 +1352,7 @@ static int dump_wind_gust(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dum
 #if defined(IOTDATA_ENABLE_WIND_GUST) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_wind_gust(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.1f m/s\n", label, _padd(label), (double) dec->wind_gust);
+    bprintf(bp, "  %s:%s %.1f m/s\n", label, _padd(label), (double)dec->wind_gust);
 #else
     bprintf(bp, "  %s:%s %d.%02d m/s\n", label, _padd(label), dec->wind_gust / 100, dec->wind_gust % 100);
 #endif
@@ -1444,7 +1444,7 @@ static int dump_wind(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_t *
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_wind(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.1f m/s, %" PRIu16 " deg, gust %.1f m/s\n", label, _padd(label), (double) dec->wind_speed, dec->wind_direction, (double) dec->wind_gust);
+    bprintf(bp, "  %s:%s %.1f m/s, %" PRIu16 " deg, gust %.1f m/s\n", label, _padd(label), (double)dec->wind_speed, dec->wind_direction, (double)dec->wind_gust);
 #else
     bprintf(bp, "  %s:%s %d.%02d m/s, %" PRIu16 " deg, gust %d.%02d m/s\n", label, _padd(label), dec->wind_speed / 100, dec->wind_speed % 100, dec->wind_direction, dec->wind_gust / 100, dec->wind_gust % 100);
 #endif
@@ -2600,7 +2600,7 @@ static int dump_radiation_dose(const uint8_t *buf, size_t bb, size_t *bp, iotdat
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_RADIATION_DOSE_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f uSv/h", (double) dequantise_radiation_dose(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.2f uSv/h", (double)dequantise_radiation_dose(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_radiation_dose(r), 100, "uSv/h");
 #endif
@@ -2611,7 +2611,7 @@ static int dump_radiation_dose(const uint8_t *buf, size_t bb, size_t *bp, iotdat
 #if defined(IOTDATA_ENABLE_RADIATION_DOSE) && !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_radiation_dose(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.1f uSv/h\n", label, _padd(label), (double) dec->radiation_dose);
+    bprintf(bp, "  %s:%s %.1f uSv/h\n", label, _padd(label), (double)dec->radiation_dose);
 #else
     bprintf(bp, "  %s:%s %d.%02d uSv/h\n", label, _padd(label), dec->radiation_dose / 100, dec->radiation_dose % 100);
 #endif
@@ -2696,7 +2696,7 @@ static int dump_radiation(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dum
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_radiation(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %" PRIu16 " CPM, %.2f uSv/h\n", label, _padd(label), dec->radiation_cpm, (double) dec->radiation_dose);
+    bprintf(bp, "  %s:%s %" PRIu16 " CPM, %.2f uSv/h\n", label, _padd(label), dec->radiation_cpm, (double)dec->radiation_dose);
 #else
     bprintf(bp, "  %s:%s %" PRIu16 " CPM, %d.%02d uSv/h\n", label, _padd(label), dec->radiation_cpm, dec->radiation_dose / 100, dec->radiation_dose % 100);
 #endif
@@ -2822,13 +2822,13 @@ iotdata_status_t iotdata_encode_position(iotdata_encoder_t *enc, iotdata_double_
     CHECK_CTX_ACTIVE(enc);
     CHECK_NOT_DUPLICATE(enc, IOTDATA_FIELD_POSITION);
 #if !defined(IOTDATA_NO_CHECKS_TYPES)
-    if (latitude < IOTDATA_POS_LAT_LOW)
+    if (latitude < (iotdata_double_t)IOTDATA_POS_LAT_LOW)
         return IOTDATA_ERR_POSITION_LAT_LOW;
-    if (latitude > IOTDATA_POS_LAT_HIGH)
+    if (latitude > (iotdata_double_t)IOTDATA_POS_LAT_HIGH)
         return IOTDATA_ERR_POSITION_LAT_HIGH;
-    if (longitude < IOTDATA_POS_LON_LOW)
+    if (longitude < (iotdata_double_t)IOTDATA_POS_LON_LOW)
         return IOTDATA_ERR_POSITION_LON_LOW;
-    if (longitude > IOTDATA_POS_LON_HIGH)
+    if (longitude > (iotdata_double_t)IOTDATA_POS_LON_HIGH)
         return IOTDATA_ERR_POSITION_LON_HIGH;
 #endif
     enc->position_lat = latitude;
@@ -2928,7 +2928,7 @@ static int dump_position(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_POS_LAT_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", (double) dequantise_position_lat(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", (double)dequantise_position_lat(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lat(r), 10000000, "");
 #endif
@@ -2936,7 +2936,7 @@ static int dump_position(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_POS_LON_BITS);
 #if !defined(IOTDATA_NO_FLOATING)
-    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", (double) dequantise_position_lon(r));
+    snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%.6f", (double)dequantise_position_lon(r));
 #else
     fmt_scaled(dump->_dec_buf, sizeof(dump->_dec_buf), dequantise_position_lon(r), 10000000, "");
 #endif
@@ -2947,7 +2947,7 @@ static int dump_position(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
 static void print_position(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label) {
 #if !defined(IOTDATA_NO_FLOATING)
-    bprintf(bp, "  %s:%s %.6f, %.6f\n", label, _padd(label), (double) dec->position_lat, (double) dec->position_lon);
+    bprintf(bp, "  %s:%s %.6f, %.6f\n", label, _padd(label), (double)dec->position_lat, (double)dec->position_lon);
 #else
     const int32_t lat = dec->position_lat, la = lat < 0 ? -lat : lat, lon = dec->position_lon, lo = lon < 0 ? -lon : lon;
     bprintf(bp, "  %s:%s %s%d.%06d, %s%d.%06d\n", label, _padd(label), lat < 0 ? "-" : "", (int)(la / 10000000), (int)(la % 10000000), lon < 0 ? "-" : "", (int)(lo / 10000000), (int)(lo % 10000000));
