@@ -365,33 +365,72 @@ resolution from Section 2, making the gap visible.
 
 ### 2.11 Layer 1 — Generic / Flexible Field Types
 
+### 2.11 Layer 1 — Generic / Flexible Field Types
+
 No protocol-defined units or quantisation. Variant label gives meaning.
 
-| Type   | Bits | Range            | Scale Type  | Sign Domain | Description                                              |
-| ------ | ---- | ---------------- | ----------- | ----------- | -------------------------------------------------------- |
-| NULL   | 0    | presence only    | —           | —           | Zero-width flag. Presence bit = true, absence = false.   |
-| BIT1   | 1    | 0/1              | Categorical | Unsigned    | Boolean. Door open/closed, alarm, mode select.           |
-| UINT4  | 4    | 0–15             | Linear      | Unsigned    | Small enum, category, state machine value.               |
-| UINT8  | 8    | 0–255            | Linear      | Unsigned    | Generic unsigned byte.                                   |
-| UINT10 | 10   | 0–1023           | Linear      | Unsigned    | Medium unsigned.                                         |
-| UINT16 | 16   | 0–65535          | Linear      | Unsigned    | Large unsigned, raw ADC.                                 |
-| INT8   | 8    | -128 to +127     | Linear      | Signed      | Signed byte.                                             |
-| INT16  | 16   | -32768 to +32767 | Linear      | Signed      | Signed word.                                             |
-| RAW8   | 8    | opaque           | —           | —           | Opaque byte, no interpretation.                          |
-| RAW16  | 16   | opaque           | —           | —           | Opaque 2 bytes.                                          |
-| RAW24  | 24   | opaque           | —           | —           | Opaque 3 bytes.                                          |
-| RAW32  | 32   | opaque           | —           | —           | Opaque 4 bytes.                                          |
+#### Integer Types
+
+| Type   | Bits | Range              | Scale  | Sign     | Description                              |
+| ------ | ---- | ------------------ | ------ | -------- | ---------------------------------------- |
+| NULL   | 0    | presence only      | —      | —        | Zero-width flag. Presence bit = true.    |
+| BIT1   | 1    | 0/1                | Categ. | Unsigned | Boolean. Door, alarm, mode select.       |
+| UINT4  | 4    | 0–15               | Linear | Unsigned | Small enum, category, state machine.     |
+| UINT8  | 8    | 0–255              | Linear | Unsigned | Generic unsigned byte.                   |
+| UINT10 | 10   | 0–1023             | Linear | Unsigned | Medium unsigned.                         |
+| UINT16 | 16   | 0–65535            | Linear | Unsigned | Large unsigned, raw ADC.                 |
+| UINT32 | 32   | 0–4,294,967,295    | Linear | Unsigned | Very large unsigned.                     |
+| UINT64 | 64   | 0–1.8×10¹⁹         | Linear | Unsigned | Extended unsigned. Expensive (8 bytes).  |
+| INT8   | 8    | -128 to +127       | Linear | Signed   | Signed byte.                             |
+| INT16  | 16   | -32768 to +32767   | Linear | Signed   | Signed word.                             |
+| INT32  | 32   | ±2,147,483,647     | Linear | Signed   | Large signed integer.                    |
+| INT64  | 64   | ±9.2×10¹⁸          | Linear | Signed   | Extended signed. Expensive (8 bytes).    |
+
+#### Floating Point Types
+
+| Type    | Bits | Range                   | Scale | Sign   | Description                              |
+| ------- | ---- | ----------------------- | ----- | ------ | ---------------------------------------- |
+| FLOAT16 | 16   | ±65,504 (~3 digits)     | —     | Signed | IEEE 754 half-precision.                 |
+| FLOAT32 | 32   | ±3.4×10³⁸ (~7 digits)   | —     | Signed | IEEE 754 single-precision.               |
+| FLOAT64 | 64   | ±1.8×10³⁰⁸ (~15 digits) | —     | Signed | IEEE 754 double-precision. Expensive.    |
+
+#### Opaque / Raw Types
+
+| Type   | Bits | Range   | Scale | Sign | Description                              |
+| ------ | ---- | ------- | ----- | ---- | ---------------------------------------- |
+| RAW8   | 8    | opaque  | —     | —    | Opaque byte, no interpretation.          |
+| RAW16  | 16   | opaque  | —     | —    | Opaque 2 bytes.                          |
+| RAW24  | 24   | opaque  | —     | —    | Opaque 3 bytes.                          |
+| RAW32  | 32   | opaque  | —     | —    | Opaque 4 bytes.                          |
+| RAW64  | 64   | opaque  | —     | —    | Opaque 8 bytes.                          |
+| RAW128 | 128  | opaque  | —     | —    | Opaque 16 bytes.                         |
 
 Notes:
 
-- UINT vs RAW: UINT is numeric (JSON outputs a number), RAW is opaque (JSON
-  outputs hex or base64). Semantics differ at the gateway.
+- **Integer vs RAW:** UINT/INT types are numeric (JSON outputs a number). RAW
+  types are opaque (JSON outputs hex or base64). Semantics differ at the
+  gateway.
+- **Float scale type is "—"** because IEEE 754 encodes its own scale via
+  mantissa and exponent. This is a meaningful distinction from integer types
+  where the protocol defines scale via quantisation parameters.
+- **FLOAT16** (half-precision) is the recommended default for uncalibrated or
+  prototype measurements where no domain-specific quantisation has been defined.
+  Same cost as UINT16, but self-scaling.
+- **Cost awareness:** 64-bit and 128-bit types are expensive in constrained
+  payloads. A single FLOAT64 or RAW128 consumes 8–16 bytes — potentially
+  15–30% of a LoRa payload. Use only when narrower types cannot serve.
+- **Identifier payloads:** RAW types (especially RAW64 and RAW128) serve
+  non-quantifiable data such as barcode values, QR code content hashes, RFID
+  UIDs, NFC tag identifiers, UUID device references, or cryptographic
+  signatures. These are not measurements — they carry identity or provenance
+  information. The variant label defines interpretation (e.g.,
+  `label="rfid_uid"`, `label="asset_barcode"`).
+- **BIT1** scale type is Categorical because 0/1 are discrete states. However,
+  BIT1 also serves as a dynamic selector flag (§2.6b) — a structural role
+  rather than a measurement.
 - Variant map may optionally carry scale/offset hints for generic types in
   future (J.27 variant advertisement), but for now interpretation is
   out-of-band.
-- BIT1 scale type is listed as Categorical because 0/1 are discrete states, not
-  a linear range. However, BIT1 can also serve as a dynamic selector flag
-  (§2.6b), which is a structural role rather than a measurement.
 
 ### 2.12 Layer 2 — Unit-Based Field Types
 
