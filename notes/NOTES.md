@@ -48,6 +48,16 @@ produces the data? Each question has its own section. Cross-references link
 them. This prevents sensor-specific details from leaking into encoding
 decisions, and domain-specific semantics from constraining generic types.
 
+**Spatial, temporal, practical.** Within the encoding architecture (Section 2),
+three orthogonal concerns structure the design. §2.2 (scale types and sign
+domains) addresses the **spatial** axis — how a value is interpreted within its
+measurement space. §2.4 (temporal interpretation) addresses the **temporal**
+axis — how a value relates to time, whether as a raw instantaneous sample, a
+statistical summary (average, min, max), an accumulation, or a derivative. §2.5
+onward addresses **practical** encoding mechanics — bit-width trade-offs,
+expansion/contraction, bundling, naming. These three concerns are independent:
+any scale type can combine with any temporal mode and any bit-width strategy.
+
 **Precision about what the protocol controls.** The protocol defines encoding
 resolution (quantisation step size). It does not define sensor accuracy,
 calibration state, or measurement methodology. These are device-layer concerns
@@ -130,62 +140,107 @@ into bits, and what structural properties does that encoding have?
 
 ### 2.1 Three-Layer Field Type Hierarchy
 
-Field types are organised in three layers. Higher layers build on lower layers.
+Field types are organised in three layers that represent increasing levels of
+semantic commitment.
 
 **Layer 1 — Generic / Flexible.** Raw bit-width types with no protocol-defined
 semantics. The variant label provides all meaning. No quantisation, no units, no
-JSON structure — just N bits in the packet. Examples: UINT8, RAW16, BIT1.
+JSON structure — just N bits in the packet. Examples: UINT8, RAW16, BIT1,
+FLOAT32.
 
 **Layer 2 — Unit-Based.** Types that encode a specific physical unit with a
 defined quantisation but no specific measurement context. "Distance in cm" is
 unit-based; "snow depth" is specific. Unit-based types can be reused across many
 variant labels. Each Layer 2 type has defined: bit width, value range,
 quantisation step, SI or conventional unit, scale type (§2.2), and sign domain
-(§2.3).
+(§2.2).
 
 **Layer 3 — Specific / Domain.** Types with fully defined semantics:
-measurement context, quantisation, range, and JSON structure. Some are newly
-defined; others are built upon Layer 1 or Layer 2 types with additional
-protocol-level meaning (bundles, specific ranges, specific JSON output).
-Existing fields (Temperature, Pressure, Wind, etc.) are Layer 3. New Layer 3
-types are defined in Section 3 under their respective domains.
+measurement context, quantisation, range, and JSON structure. Existing fields
+(Temperature, Pressure, Wind, etc.) are Layer 3. New Layer 3 types are defined
+in Section 3 under their respective domains.
 
-The hierarchy is not just organisational — it drives implementation. A decoder
-that knows only Layer 1 can still extract and forward raw values. A decoder
-that knows Layer 2 can produce correctly-typed numeric values with units. A
-decoder that knows Layer 3 can produce structured, domain-specific JSON.
+**The layers are not a strict compositional hierarchy.** A higher layer *may*
+build on a lower layer — Soil Moisture is built on PERCENTAGE (Layer 2), which
+is a constrained form of UINT8 (Layer 1). But a higher layer type can equally
+originate as a root with its own encoding, owing nothing to the layers below.
+Water pH (Layer 3) has a bespoke 8-bit encoding with its own quantisation
+formula; it is not built on any Layer 2 or Layer 1 type. The Environment bundle
+(Layer 3) packs three measurements with a unique bit layout that doesn't
+decompose into reusable Layer 2 components.
 
-### 2.2 Scale Types
+What the layers provide is **vocabulary and optionality**, not a mandatory
+inheritance chain. When a natural building block exists at a lower layer, use
+it — this gives you reuse, decoder simplicity, and a shorter path to
+implementation. When it doesn't, define the type fresh at the layer where it
+belongs. The layer number reflects the level of semantic commitment (none →
+unit → full domain context), not a dependency relationship.
 
-Every encoded value has one of the following scale types. This is a first-class
-property of each Layer 2 type, not an ad-hoc per-field decision.
+This layering also determines decoder capability. A decoder that knows only
+Layer 1 can extract and forward raw values from any field. A decoder that knows
+Layer 2 can produce correctly-typed numeric values with units. A decoder that
+knows Layer 3 can produce structured, domain-specific JSON. Each layer is a
+useful capability plateau — a deployment can operate at whatever layer its
+tooling supports.
+
+### 2.2 Scale Types and Sign Domains
+
+Every encoded value has two interpretation properties: a **scale type** (how
+raw bits map to real-world values) and a **sign domain** (what region of the
+number line the value occupies). Together these fully characterise the
+decoder's job for a given field. Both are first-class properties of each
+Layer 2 type — not ad-hoc per-field decisions.
+
+#### Scale Types
 
 | Scale Type          | Description                                                                                    | Examples                                                | Encoding Behaviour                                                             |
 | ------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | **Linear**          | Uniform quantisation steps across the range. Most common.                                      | Temperature, pressure, distance, voltage                | `value = offset + (raw × step)`                                                |
 | **Logarithmic**     | Steps proportional to value. Covers large dynamic ranges in few bits.                          | Lux, turbidity, some gas concentrations                 | `value = base^(raw / steps_per_decade) × min_value` (formula TBD — see §2.13) |
-| **Categorical**     | Discrete named levels with no meaningful arithmetic relationship.                              | Cloud cover (okta), leaf wetness levels, Beaufort scale | `value = lookup[raw]`; no interpolation                                        |
+| **Categorical**     | Discrete named levels from a finite, known set. No meaningful arithmetic between levels.       | Cloud cover (okta), leaf wetness levels, Beaufort scale | `value = lookup[raw]`; no interpolation                                        |
 | **Wrapping/Cyclic** | Value wraps at boundaries. For counters: monotonic until overflow. For angles: continuous wrap. | Rain tips, energy totaliser, compass bearing            | Counter: increment-only, wrap at max. Angle: 0° = 360°.                       |
 | **Ratio**           | Normalised 0.0–1.0 (or -1.0 to +1.0). Semantically a proportion, not a count.                 | NDVI, duty cycle, confidence score, reflectance         | `value = raw / max_raw`                                                        |
+| **Identifier**      | Opaque reference to an entity. No ordering, no arithmetic, no pre-defined set.                 | RFID UID, barcode, QR content hash, UUID, NFC tag ID    | Raw bytes; equality comparison only.                                           |
 
-**Why this matters:** When the scale type is defined per-type rather than
-per-deployment, decoders can apply the correct reconstruction formula without
-out-of-band metadata. A LOG type is decoded differently from a LINEAR type even
-if both are 8 bits.
+The Identifier type is distinct from Categorical in an important way.
+Categorical values are drawn from a finite, pre-defined set — the decoder knows
+the possible values and can map them to labels. Identifier values are drawn from
+an open, unbounded space — the decoder cannot enumerate them in advance. It can
+only test equality ("is this the same tag I saw before?") or pass the value
+through for external resolution. Identifiers have no scale at all — they are
+not measurements. They carry provenance or reference information alongside
+measurements. In practice, Identifier maps to the RAW types (RAW8 through
+RAW128) at Layer 1. The scale type annotation tells the decoder not to attempt
+numeric interpretation, aggregation, or interpolation — just store and compare.
 
-### 2.3 Sign Domains
+#### Sign Domains
 
-Every encoded value has a sign domain. This determines bit interpretation.
+| Sign Domain  | Description                                                         | Examples                                     |
+| ------------ | ------------------------------------------------------------------- | -------------------------------------------- |
+| **Unsigned** | Non-negative values only. All bits encode magnitude.                | Distance, percentage, lux, counter, weight   |
+| **Signed**   | Positive and negative values. MSB or offset encoding.               | Acceleration, ORP, water potential, tilt     |
+| **Cyclic**   | Wraps at domain boundaries. Neither positive nor negative — directional. | Compass bearing (0–360°), phase angle   |
+| **N/A**      | Not applicable. Value is not numeric.                               | RAW types, Identifier scale type             |
 
-| Sign Domain  | Description                                        | Examples                                     |
-| ------------ | -------------------------------------------------- | -------------------------------------------- |
-| **Unsigned** | Non-negative values only. All bits encode magnitude. | Distance, percentage, lux, counter, weight  |
-| **Signed**   | Positive and negative values. MSB or offset encoding. | Acceleration, ORP, water potential, tilt   |
-| **Cyclic**   | Wraps at domain boundaries. Neither positive nor negative — directional. | Compass bearing (0–360°), phase angle |
+Cyclic sign domain is related to but distinct from the Wrapping/Cyclic scale
+type. A wrapping counter (rain tips, energy totaliser) has **unsigned** sign
+domain and **wrapping** scale type — it wraps due to overflow of a
+non-negative accumulator. A compass bearing has **cyclic** sign domain and
+**linear** scale type — it wraps because the domain is inherently circular
+(359° + 2° = 1°, not 361°). The combination of scale type and sign domain
+together captures this distinction.
 
-Cyclic is distinct from wrapping counters (§2.2). A counter wraps due to
-overflow; a cyclic value wraps because the domain is inherently circular
-(359° + 2° = 1°, not 361°).
+#### Why these matter
+
+When scale type and sign domain are defined per-type rather than per-deployment,
+decoders can apply the correct reconstruction formula without out-of-band
+metadata. A LOG type is decoded differently from a LINEAR type even if both are
+8 bits. A SIGNED type is bit-shifted differently from an UNSIGNED type at the
+same width. Defining these properties at the type level means a generic decoder
+can handle any field it encounters, even one it has never seen before, provided
+it knows the Layer 2 type.
+
+### 2.3 (Reserved)
 
 ### 2.4 Temporal Interpretation
 
@@ -303,15 +358,60 @@ Candidate new bundles are defined in Section 3 under their respective domains.
 
 ### 2.8 Naming Conventions
 
-| Element                   | Convention                                           | Examples                                     |
-| ------------------------- | ---------------------------------------------------- | -------------------------------------------- |
-| Layer 1 types             | ALL_CAPS, bit-width suffix                           | UINT8, INT16, RAW24, BIT1, NULL              |
-| Layer 2 types             | ALL_CAPS, unit suffix                                | DISTANCE_CM, PERCENTAGE, CONDUCTIVITY, LUX   |
-| Expanded variants         | Base name + `_EXPANDED`                              | TEMPERATURE_EXPANDED, DISTANCE_CM_EXPANDED   |
-| Compact/alternate widths  | Base name + qualifier                                | CONDUCTIVITY_COARSE, DISTANCE_MM_SHORT       |
-| Layer 3 types             | Title Case in documentation, ALL_CAPS in protocol    | Soil Moisture, Water pH, Lightning Bundle    |
-| Variant labels            | snake_case, descriptive                              | `soil_moisture`, `water_ec`, `temp_is_rate`  |
-| JSON output keys          | snake_case, matching variant label where applicable  | `soil_moisture_vwc`, `water_ph`              |
+| Element                | Convention                                          | Examples                                   |
+| ---------------------- | --------------------------------------------------- | ------------------------------------------ |
+| Layer 1 types          | ALL_CAPS, bit-width suffix                          | UINT8, INT16, RAW24, BIT1, NULL            |
+| Layer 2 types          | ALL_CAPS, unit suffix                               | DISTANCE_CM, PERCENTAGE, CONDUCTIVITY, LUX |
+| Alternative encodings  | Base name + qualifier suffix                        | TEMPERATURE_EXPANDED, CONDUCTIVITY_COARSE, DISTANCE_MM_SHORT |
+| Layer 3 types          | Title Case in documentation, ALL_CAPS in protocol   | Soil Moisture, Water pH, Lightning Bundle  |
+| Variant labels         | snake_case, descriptive                             | `soil_moisture`, `water_ec`, `temp_is_rate` |
+| JSON output keys       | snake_case, matching variant label where applicable | `soil_moisture_vwc`, `water_ph`            |
+
+#### Alternative Encoding Variants
+
+Where a single physical unit needs more than one encoding, alternative variants
+are defined with a qualifying suffix. These are all instances of the same
+concept — trading bit cost against range or resolution — viewed from different
+directions.
+
+The two independent axes of variation are:
+
+- **Range:** The span of values the encoding can represent (e.g., -40 to +80°C
+  vs -60 to +150°C).
+- **Resolution:** The smallest distinguishable step (e.g., 0.25°C vs 0.05°C).
+
+An alternative encoding may change one or both of these relative to the base
+type. More bits typically buys more range, finer resolution, or both — but the
+designer chooses where to spend those bits.
+
+| Direction    | What it means                                      | Suffix style         | Examples                                             |
+| ------------ | -------------------------------------------------- | -------------------- | ---------------------------------------------------- |
+| Expansion    | Wider range and/or finer resolution, more bits     | `_EXPANDED`          | TEMPERATURE_EXPANDED (12 bits vs 9)                  |
+| Contraction  | Narrower range or coarser resolution, fewer bits   | Descriptive qualifier| CONDUCTIVITY_COARSE (10 bits vs 16), DISTANCE_MM_SHORT (10 bits vs 16) |
+
+Both are "alternatives" — neither is inherently better. The base type optimises
+for bit efficiency in the common case. Expansions cover edge cases at higher
+bit cost. Contractions sacrifice precision or range to save bits where the full
+encoding is unnecessary.
+
+Rules:
+
+- Each alternative is a separate field type ID.
+- The variant picks exactly one encoding per measurement — alternatives never
+  coexist for the same measurement in the same variant.
+- No in-band signalling is needed. The variant advertisement declares which
+  encoding is used.
+- The base type name (without suffix) should represent the most broadly useful
+  encoding for the target deployment class. This is a judgement call per type.
+
+When defining a new Layer 2 type, consider whether the common case and the
+edge case differ enough on range or resolution to justify an alternative. If
+they do, decide which axis matters: a high-altitude pressure sensor needs range
+expansion (300–1100 hPa vs 850–1105 hPa); a precision laboratory sensor needs
+resolution expansion (0.05°C vs 0.25°C); a brackish-water EC sensor needs
+range with resolution contraction (50 µS/cm steps to cover 0–51,150 in 10 bits
+vs 1 µS/cm steps in 16 bits). Making the axis explicit helps choose the right
+suffix and avoids defining alternatives that don't serve a real deployment need.
 
 ### 2.9 Derivation Relationships
 
@@ -362,8 +462,6 @@ This boundary prevents two failure modes:
 
 Section 4 (Device Coverage) documents sensor accuracy alongside the encoding
 resolution from Section 2, making the gap visible.
-
-### 2.11 Layer 1 — Generic / Flexible Field Types
 
 ### 2.11 Layer 1 — Generic / Flexible Field Types
 
@@ -1008,6 +1106,9 @@ Notes:
   (`mag_x`, `mag_y`, `mag_z`).
 - RF power monitoring overlaps with the existing Link field (RSSI). As a data
   measurement (not a link quality indicator), INT8 covers it.
+- Electric field strength (V/m) is a known gap — relevant for power line
+  monitoring and EMC compliance, but no common low-cost sensor IC exists in the
+  target deployment class. Revisit if affordable E-field sensors emerge.
 
 ### 3.8 Rate of Change (Cross-Domain)
 
