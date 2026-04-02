@@ -28,7 +28,8 @@
  *     de-duplication before publishing to MQTT. Operates indepemdently of
  *     Mesh protocol.
  *
- * Depends upon EBYTE E22 connector
+ * Uses EBYTE E22 connector for low-level, but is sufficiently modular to
+ * fit onto another driver.
  * https://github.com/matthewgream/e22900t22
  */
 
@@ -112,9 +113,6 @@ void debug_hexdump(const char *prefix, const uint8_t *data, size_t length) {
 
 #include "serial_linux.h"
 
-// -----------------------------------------------------------------------------------------------------------------------------------------
-// -----------------------------------------------------------------------------------------------------------------------------------------
-
 bool debug_e22 = false;
 void printf_debug_e22(const char *format, ...) {
     if (!debug_e22)
@@ -145,6 +143,16 @@ void printf_stderr_e22(const char *format, ...) {
 void __sleep_ms(const uint32_t ms) {
     usleep((useconds_t)ms * 1000);
 }
+
+// bool device_mode_config(void);
+//   bool device_info_read(void);
+//   bool device_config_read_and_update(void);
+// bool device_mode_transfer(void);
+// bool device_connect(const e22900t22_module_t config_module, const e22900t22_config_t *config_device);
+//   bool device_channel_rssi_read(uint8_t *rssi);
+//   bool device_packet_read(uint8_t *packet, const int max_size, int *packet_size, uint8_t *rssi);
+//   bool device_packet_write(const uint8_t *packet, const int length);
+// void device_disconnect(void);
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -177,6 +185,7 @@ void __sleep_ms(const uint32_t ms) {
 #define MQTT_TOPIC_PREFIX_DEFAULT        "iotdata"
 #define MQTT_RECONNECT_DELAY_DEFAULT     5
 #define MQTT_RECONNECT_DELAY_MAX_DEFAULT 60
+#define MQTT_TOPIC_STR_MAX               255
 
 #define INTERVAL_STAT_DEFAULT            (5 * 60)
 #define INTERVAL_RSSI_DEFAULT            (1 * 60)
@@ -188,41 +197,41 @@ void __sleep_ms(const uint32_t ms) {
 
 // clang-format off
 const struct option config_options [] = {
-    {"help",                  no_argument,       0, 'h'},
-    {"config",                required_argument, 0, 0},
-    {"port",                  required_argument, 0, 0},
-    {"rate",                  required_argument, 0, 0},
-    {"bits",                  required_argument, 0, 0},
-    {"address",               required_argument, 0, 0},
-    {"network",               required_argument, 0, 0},
-    {"channel",               required_argument, 0, 0},
-    {"packet-size",           required_argument, 0, 0},
-    {"packet-rate",           required_argument, 0, 0},
-    {"rssi-channel",          required_argument, 0, 0},
-    {"rssi-packet",           required_argument, 0, 0},
-    {"listen-before-transmit",required_argument, 0, 0},
-    {"read-timeout-command",  required_argument, 0, 0},
-    {"read-timeout-packet",   required_argument, 0, 0},
-    {"interval-rssi",         required_argument, 0, 0},
-    {"interval-stat",         required_argument, 0, 0},
-    {"debug-e22",             required_argument, 0, 0},
-    {"mqtt-client",           required_argument, 0, 0},
-    {"mqtt-server",           required_argument, 0, 0},
-    {"mqtt-topic-prefix",     required_argument, 0, 0},
-    {"mqtt-tls-insecure",     required_argument, 0, 0},
-    {"mqtt-reconnect-delay",  required_argument, 0, 0},
-    {"mqtt-reconnect-delay-max", required_argument, 0, 0},
-    {"mesh-enable",           required_argument, 0, 0},
-    {"mesh-station-id",       required_argument, 0, 0},
-    {"mesh-beacon-interval",  required_argument, 0, 0},
-    {"debug-mesh",            required_argument, 0, 0},
-    {"dedup-enable",             required_argument, 0, 0},
-    {"dedup-port",               required_argument, 0, 0},
-    {"dedup-peers",              required_argument, 0, 0},
-    {"dedup-delay",              required_argument, 0, 0},
-    {"debug-dedup",              required_argument, 0, 0},
-    {"debug",                 required_argument, 0, 0},
-    {"debug-data",            required_argument, 0, 0},
+    {"help",                        no_argument,       0, 'h'},
+    {"config",                      required_argument, 0, 0},
+    {"port",                        required_argument, 0, 0},
+    {"rate",                        required_argument, 0, 0},
+    {"bits",                        required_argument, 0, 0},
+    {"address",                     required_argument, 0, 0},
+    {"network",                     required_argument, 0, 0},
+    {"channel",                     required_argument, 0, 0},
+    {"packet-size",                 required_argument, 0, 0},
+    {"packet-rate",                 required_argument, 0, 0},
+    {"rssi-channel",                required_argument, 0, 0},
+    {"rssi-packet",                 required_argument, 0, 0},
+    {"listen-before-transmit",      required_argument, 0, 0},
+    {"read-timeout-command",        required_argument, 0, 0},
+    {"read-timeout-packet",         required_argument, 0, 0},
+    {"interval-rssi",               required_argument, 0, 0},
+    {"interval-stat",               required_argument, 0, 0},
+    {"debug-e22",                   required_argument, 0, 0},
+    {"mqtt-client",                 required_argument, 0, 0},
+    {"mqtt-server",                 required_argument, 0, 0},
+    {"mqtt-topic-prefix",           required_argument, 0, 0},
+    {"mqtt-tls-insecure",           required_argument, 0, 0},
+    {"mqtt-reconnect-delay",        required_argument, 0, 0},
+    {"mqtt-reconnect-delay-max",    required_argument, 0, 0},
+    {"mesh-enable",                 required_argument, 0, 0},
+    {"mesh-station-id",             required_argument, 0, 0},
+    {"mesh-beacon-interval",        required_argument, 0, 0},
+    {"debug-mesh",                  required_argument, 0, 0},
+    {"dedup-enable",                required_argument, 0, 0},
+    {"dedup-port",                  required_argument, 0, 0},
+    {"dedup-peers",                 required_argument, 0, 0},
+    {"dedup-delay",                 required_argument, 0, 0},
+    {"debug-dedup",                 required_argument, 0, 0},
+    {"debug",                       required_argument, 0, 0},
+    {"debug-data",                  required_argument, 0, 0},
     {0, 0, 0, 0}
 };
 
@@ -261,6 +270,9 @@ const config_option_help_t config_options_help [] = {
     {"dedup-delay",            "Dedup batch send delay in ms"},
     {"debug-dedup",            "Enable dedup debug output (true/false)"},
     {"debug",                  "Enable general debug output (true/false)"},
+    {"crypt",                  "E22 encryption key (default: 0x0000)"},
+    {"transmit-power",         "E22 transmit power level 0-3 (default: 0)"},
+    {"transmission-method",    "E22 transmission method 0=transparent, 1=fixed-point (default: 0)"},
     {"debug-data",             "Enable hex dump of received packet data (true/false)"},
 };
 // clang-format on
@@ -270,6 +282,7 @@ const config_option_help_t config_options_help [] = {
 
 void serial_config_populate(serial_config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
+
     cfg->port = config_get_string("port", SERIAL_PORT_DEFAULT);
     cfg->rate = config_get_integer("rate", SERIAL_RATE_DEFAULT);
     cfg->bits = config_get_bits("bits", SERIAL_BITS_DEFAULT);
@@ -281,14 +294,15 @@ void serial_config_populate(serial_config_t *cfg) {
 
 void e22_config_populate(e22900t22_config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
+
     cfg->address = (uint16_t)config_get_integer("address", E22900T22_CONFIG_ADDRESS_DEFAULT);
     cfg->network = (uint8_t)config_get_integer("network", E22900T22_CONFIG_NETWORK_DEFAULT);
     cfg->channel = (uint8_t)config_get_integer("channel", E22900T22_CONFIG_CHANNEL_DEFAULT);
-    cfg->packet_size = (uint8_t)config_get_integer("packet-size", E22900T22_CONFIG_PACKET_SIZE_DEFAULT);
-    cfg->packet_rate = (uint8_t)config_get_integer("packet-rate", E22900T22_CONFIG_PACKET_RATE_DEFAULT);
-    cfg->crypt = E22900T22_CONFIG_CRYPT_DEFAULT;
-    cfg->transmit_power = E22900T22_CONFIG_TRANSMIT_POWER_DEFAULT;
-    cfg->transmission_method = E22900T22_CONFIG_TRANSMISSION_METHOD_DEFAULT;
+    cfg->crypt = (uint16_t)config_get_integer("crypt", E22900T22_CONFIG_CRYPT_DEFAULT);
+    cfg->packet_size = (uint8_t)config_get_integer("packet-size", E22900T22_CONFIG_PACKET_SIZE_DEFAULT);          // index
+    cfg->packet_rate = (uint8_t)config_get_integer("packet-rate", E22900T22_CONFIG_PACKET_RATE_DEFAULT);          // index
+    cfg->transmit_power = (uint8_t)config_get_integer("transmit-power", E22900T22_CONFIG_TRANSMIT_POWER_DEFAULT); // index
+    cfg->transmission_method = (uint8_t)config_get_integer("transmission-method", E22900T22_CONFIG_TRANSMISSION_METHOD_DEFAULT);
     cfg->relay_enabled = E22900T22_CONFIG_RELAY_ENABLED_DEFAULT;
     cfg->listen_before_transmit = config_get_bool("listen-before-transmit", E22900T22_CONFIG_LISTEN_BEFORE_TRANSMIT);
     cfg->rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
@@ -309,6 +323,7 @@ void e22_config_populate(e22900t22_config_t *cfg) {
 
 void mqtt_config_populate(mqtt_config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
+
     cfg->client = config_get_string("mqtt-client", MQTT_CLIENT_DEFAULT);
     cfg->server = config_get_string("mqtt-server", MQTT_SERVER_DEFAULT);
     cfg->tls_insecure = config_get_bool("mqtt-tls-insecure", MQTT_TLS_DEFAULT);
@@ -326,6 +341,30 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
 #include "iotdata_gateway_mesh.h"
 #include "iotdata_gateway_dedup.h"
 
+void dedup_config_populate(dedup_state_t *state) {
+    memset(state, 0, sizeof(*state));
+
+    state->enabled = config_get_bool("dedup-enable", false);
+    state->port = (uint16_t)config_get_integer("dedup-port", DEDUP_PORT_DEFAULT);
+    state->delay_ms = (uint32_t)config_get_integer("dedup-delay", DEDUP_DELAY_MS_DEFAULT);
+    const char *peers = config_get_string("dedup-peers", "");
+    dedup_peers_parse(state, peers);
+    state->debug = config_get_bool("debug-dedup", false);
+
+    printf("config: dedup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", state->enabled ? 'y' : 'n', state->port, peers, state->delay_ms, state->debug ? "on" : "off");
+}
+
+void mesh_config_populate(mesh_state_t *state) {
+    memset(state, 0, sizeof(*state));
+
+    state->enabled = config_get_bool("mesh-enable", false);
+    state->station_id = (uint16_t)config_get_integer("mesh-station-id", GATEWAY_STATION_ID_DEFAULT);
+    state->beacon_interval = (time_t)config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
+    state->debug = config_get_bool("debug-mesh", false);
+
+    printf("config: mesh: enabled=%c, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", state->enabled ? 'y' : 'n', state->station_id, (uint32_t)state->beacon_interval, state->debug ? "on" : "off");
+}
+
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -337,6 +376,8 @@ struct {
     time_t interval_rssi;
     time_t interval_stat_last;
     time_t interval_rssi_last;
+    mesh_state_t mesh_state;
+    dedup_state_t dedup_state;
     bool debug;
     bool debug_data;
     /* statistics */
@@ -351,11 +392,17 @@ struct {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
+bool dedup_check_and_add_handler(uint16_t station_id, uint16_t sequence) {
+    return dedup_check_and_add(&process_state.dedup_state, station_id, sequence);
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------
+
 bool dedup_check_sensor_packet(uint16_t station_id, uint16_t sequence) {
-    if (mesh_state.enabled)
-        if (!dedup_check_and_add(station_id, sequence)) {
-            mesh_state.stat_duplicates++;
-            if (process_state.debug || mesh_state.debug)
+    if (process_state.mesh_state.enabled)
+        if (!dedup_check_and_add(&process_state.dedup_state, station_id, sequence)) {
+            process_state.mesh_state.stat_duplicates++;
+            if (process_state.debug || process_state.mesh_state.debug)
                 printf("process: mesh direct packet duplicate suppressed (station=0x%04" PRIX16 ", sequence=%" PRIu16 ")\n", station_id, sequence);
             return false;
         }
@@ -366,8 +413,8 @@ bool dedup_check_sensor_packet(uint16_t station_id, uint16_t sequence) {
 
 void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint8_t variant_id, uint16_t station_id, uint16_t sequence, const char *topic_prefix, const char *via) {
     (void)sequence;
-    const iotdata_variant_def_t *vdef = iotdata_get_variant(variant_id);
-    if (vdef == NULL) {
+    const iotdata_variant_def_t *vdef;
+    if ((vdef = iotdata_get_variant(variant_id)) == NULL) {
         fprintf(stderr, "process: unknown variant %" PRIu8 " (station=0x%04" PRIX16 ", size=%d)\n", variant_id, station_id, packet_length);
         process_state.stat_packets_drop++;
         return;
@@ -380,7 +427,7 @@ void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint
         process_state.stat_packets_decode_err++;
         return;
     }
-    char topic[255];
+    char topic[MQTT_TOPIC_STR_MAX];
     snprintf(topic, sizeof(topic), "%s/%s/%04" PRIX16, topic_prefix, vdef->name, station_id);
     if (mqtt_send(topic, json, (int)strlen(json)))
         process_state.stat_packets_okay++;
@@ -398,14 +445,14 @@ void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint
 void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_t variant_id, uint16_t station_id, uint16_t sequence, const char *topic_prefix) {
     (void)variant_id;
     const uint8_t ctrl_type = iotdata_mesh_peek_ctrl_type(packet_buffer, packet_length);
-    mesh_state.stat_mesh_ctrl_rx++;
-    if (mesh_state.debug)
+    process_state.mesh_state.stat_mesh_ctrl_rx++;
+    if (process_state.mesh_state.debug)
         printf("mesh: rx %s from station=0x%04" PRIX16 ", sequence=%" PRIu16 " (%d bytes)\n", iotdata_mesh_ctrl_name(ctrl_type), station_id, sequence, packet_length);
     switch (ctrl_type) {
     case IOTDATA_MESH_CTRL_FORWARD: {
         const uint8_t *inner;
         int inner_len;
-        if (mesh_handle_forward(packet_buffer, packet_length, &inner, &inner_len)) {
+        if (mesh_handle_forward(&process_state.mesh_state, packet_buffer, packet_length, &inner, &inner_len)) {
             uint8_t inner_variant;
             uint16_t inner_station, inner_sequence;
             if (iotdata_peek(inner, (size_t)inner_len, &inner_variant, &inner_station, &inner_sequence) != IOTDATA_OK) {
@@ -417,24 +464,24 @@ void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_
         break;
     }
     case IOTDATA_MESH_CTRL_BEACON:
-        mesh_handle_beacon(packet_buffer, packet_length);
+        mesh_handle_beacon(&process_state.mesh_state, packet_buffer, packet_length);
         break;
     case IOTDATA_MESH_CTRL_ACK:
-        if (mesh_state.debug)
+        if (process_state.mesh_state.debug)
             printf("mesh: rx unexpected ACK from station=0x%04" PRIX16 "\n", station_id);
         break;
     case IOTDATA_MESH_CTRL_ROUTE_ERROR:
-        mesh_handle_route_error(packet_buffer, packet_length);
+        mesh_handle_route_error(&process_state.mesh_state, packet_buffer, packet_length);
         break;
     case IOTDATA_MESH_CTRL_NEIGHBOUR_RPT:
-        mesh_handle_neighbour_report(packet_buffer, packet_length);
+        mesh_handle_neighbour_report(&process_state.mesh_state, packet_buffer, packet_length);
         break;
     case IOTDATA_MESH_CTRL_PONG:
-        mesh_handle_pong(packet_buffer, packet_length);
+        mesh_handle_pong(&process_state.mesh_state, packet_buffer, packet_length);
         break;
     default:
-        mesh_state.stat_mesh_unknown++;
-        if (mesh_state.debug)
+        process_state.mesh_state.stat_mesh_unknown++;
+        if (process_state.mesh_state.debug)
             printf("mesh: rx unknown ctrl_type=0x%02" PRIX8 " from station=0x%04" PRIX16 "\n", ctrl_type, station_id);
         break;
     }
@@ -457,19 +504,19 @@ void process_stats(time_t period_stat) {
             printf("packet=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_rssi_packet_ema), process_state.stat_rssi_packet_cnt);
         printf("}");
     }
-    if (mesh_state.enabled) {
-        printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", mesh_state.stat_forwards_rx, mesh_state.stat_forwards_unwrapped, mesh_state.stat_duplicates,
-               mesh_state.stat_beacons_tx, mesh_state.stat_acks_tx, mesh_state.stat_mesh_ctrl_rx);
-        mesh_state.stat_forwards_rx = mesh_state.stat_forwards_unwrapped = 0;
-        mesh_state.stat_duplicates = mesh_state.stat_acks_tx = 0;
-        mesh_state.stat_mesh_ctrl_rx = mesh_state.stat_mesh_unknown = 0;
+    if (process_state.mesh_state.enabled) {
+        printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", process_state.mesh_state.stat_forwards_rx, process_state.mesh_state.stat_forwards_unwrapped,
+               process_state.mesh_state.stat_duplicates, process_state.mesh_state.stat_beacons_tx, process_state.mesh_state.stat_acks_tx, process_state.mesh_state.stat_mesh_ctrl_rx);
+        process_state.mesh_state.stat_forwards_rx = process_state.mesh_state.stat_forwards_unwrapped = 0;
+        process_state.mesh_state.stat_duplicates = process_state.mesh_state.stat_acks_tx = 0;
+        process_state.mesh_state.stat_mesh_ctrl_rx = process_state.mesh_state.stat_mesh_unknown = 0;
     }
-    if (dedup_state.enabled) {
-        printf(", dedup{sends=%" PRIu32 "/%" PRIu32 ", recvs=%" PRIu32 "/%" PRIu32 ", injected=%" PRIu32 "}", dedup_state.stat_send_cycles, dedup_state.stat_send_entries, dedup_state.stat_recv_cycles, dedup_state.stat_recv_entries,
-               dedup_state.stat_injected);
-        dedup_state.stat_send_cycles = dedup_state.stat_send_entries = 0;
-        dedup_state.stat_recv_cycles = dedup_state.stat_recv_entries = 0;
-        dedup_state.stat_injected = 0;
+    if (process_state.dedup_state.enabled) {
+        printf(", dedup{sends=%" PRIu32 "/%" PRIu32 ", recvs=%" PRIu32 "/%" PRIu32 ", injected=%" PRIu32 "}", process_state.dedup_state.stat_send_cycles, process_state.dedup_state.stat_send_entries,
+               process_state.dedup_state.stat_recv_cycles, process_state.dedup_state.stat_recv_entries, process_state.dedup_state.stat_injected);
+        process_state.dedup_state.stat_send_cycles = process_state.dedup_state.stat_send_entries = 0;
+        process_state.dedup_state.stat_recv_cycles = process_state.dedup_state.stat_recv_entries = 0;
+        process_state.dedup_state.stat_injected = 0;
     }
     printf(", mqtt{%s, disconnects=%" PRIu32 "}", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
     printf("\n");
@@ -496,16 +543,16 @@ void process_run(void) {
 
     printf("process: iotdata gateway (stat=%" PRIu32 "s, rssi=%" PRIu32 "s [packets=%c, channel=%c], topic-prefix=%s", (uint32_t)process_state.interval_stat, (uint32_t)process_state.interval_rssi,
            process_state.capture_rssi_packet ? 'y' : 'n', process_state.capture_rssi_channel ? 'y' : 'n', process_state.mqtt_topic_prefix);
-    if (mesh_state.enabled)
-        printf(", mesh=on, beacon=%" PRIu32 "s", (uint32_t)mesh_state.beacon_interval);
+    if (process_state.mesh_state.enabled)
+        printf(", mesh=on, beacon=%" PRIu32 "s", (uint32_t)process_state.mesh_state.beacon_interval);
     printf(")\n");
 
     for (int i = 0; i < IOTDATA_VARIANT_MAPS_COUNT; i++) {
         const iotdata_variant_def_t *vdef = iotdata_get_variant((uint8_t)i);
         printf("process: variant[%d] = \"%s\" (pres_bytes=%" PRIu8 ") -> %s/%s/<station>\n", i, vdef->name, vdef->num_pres_bytes, process_state.mqtt_topic_prefix, vdef->name);
     }
-    if (mesh_state.enabled)
-        printf("process: variant[15] = mesh control (gateway station=0x%04" PRIX16 ")\n", mesh_state.station_id);
+    if (process_state.mesh_state.enabled)
+        printf("process: variant[15] = mesh control (gateway station=0x%04" PRIX16 ")\n", process_state.mesh_state.station_id);
 
     while (running) {
 
@@ -533,8 +580,8 @@ void process_run(void) {
                 ema_update(channel_rssi, &process_state.stat_rssi_channel_ema, &process_state.stat_rssi_channel_cnt);
 
         // mesh beacons
-        if (running && mesh_state.enabled && intervalable(mesh_state.beacon_interval, &mesh_state.beacon_last))
-            mesh_beacon_send();
+        if (running && process_state.mesh_state.enabled && intervalable(process_state.mesh_state.beacon_interval, &process_state.mesh_state.beacon_last))
+            mesh_beacon_send(&process_state.mesh_state);
 
         // stats output
         time_t period_stat;
@@ -564,8 +611,9 @@ bool config_setup(const int argc, char *argv[]) {
     serial_config_populate(&serial_config);
     e22_config_populate(&e22_config);
     mqtt_config_populate(&mqtt_config);
-    mesh_config_populate();
-    dedup_config_populate();
+    mesh_config_populate(&process_state.mesh_state);
+    dedup_config_populate(&process_state.dedup_state);
+    process_state.dedup_state.running = &running;
     process_config_populate();
 
     return true;
@@ -582,6 +630,7 @@ void signal_handler(const int sig __attribute__((unused))) {
 }
 
 int main(int argc, char *argv[]) {
+
     int ret = EXIT_FAILURE;
 
     setbuf(stdout, NULL);
@@ -604,17 +653,17 @@ int main(int argc, char *argv[]) {
         goto end_device;
     if (!mqtt_begin(&mqtt_config))
         goto end_device;
-    if (!mesh_begin(device_packet_write, dedup_check_and_add))
+    if (!mesh_begin(&process_state.mesh_state, device_packet_write, dedup_check_and_add_handler))
         goto end_mqtt;
-    if (!dedup_begin(mesh_state.station_id, &mesh_state.dedup_ring))
+    if (!dedup_begin(&process_state.dedup_state, process_state.mesh_state.station_id, &process_state.mesh_state.dedup_ring))
         goto end_mesh;
 
     process_run();
     ret = EXIT_SUCCESS;
 
-    dedup_end();
+    dedup_end(&process_state.dedup_state);
 end_mesh:
-    mesh_end();
+    mesh_end(&process_state.mesh_state);
 end_mqtt:
     mqtt_end();
 end_device:

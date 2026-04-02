@@ -7,10 +7,10 @@ DIR_E22XXXTXX=/opt/e22900t22/include
 
 CC=gcc
 CFLAGS_DEFINES=
-CFLAGS_COMMON=-Wall -Wextra -Wpedantic
-CFLAGS_STRICT=-Werror \
-    -Wstrict-prototypes \
-    -Wold-style-definition \
+CFLAGS_COMMON=\
+    -Wfloat-conversion -Werror=float-conversion \
+    -Wall -Wextra -Werror -Wpedantic \
+    -Wstrict-prototypes -Wold-style-definition \
     -Wcast-align -Wcast-qual -Wconversion \
     -Wfloat-equal -Wformat=2 -Wformat-security \
     -Winit-self -Wjump-misses-init \
@@ -18,12 +18,20 @@ CFLAGS_STRICT=-Werror \
     -Wnested-externs -Wpointer-arith \
     -Wredundant-decls -Wshadow \
     -Wstrict-overflow=2 -Wswitch-default \
-    -Wundef \
     -Wunreachable-code -Wunused \
-    -Wwrite-strings
+    -Wwrite-strings \
+    -Wdouble-promotion \
+    -Wnull-dereference \
+    -Wduplicated-cond \
+    -Wduplicated-branches \
+    -Wrestrict \
+    -Wstringop-overflow \
+    -Wundef \
+    -Wvla \
+    -Wno-duplicated-branches
 CFLAGS_OPT=-O3
 CFLAGS_INCLUDES=-I$(DIR_IOTDATA) -I$(DIR_E22XXXTXX) -I$(DIR_IOTDATA_VARIANT)
-CFLAGS=$(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_DEFINES) $(CFLAGS_OPT) $(CFLAGS_INCLUDES)
+CFLAGS=$(CFLAGS_COMMON) $(CFLAGS_DEFINES) $(CFLAGS_OPT) $(CFLAGS_INCLUDES)
 LDFLAGS=
 LIBS=-lcjson -lmosquitto -lm -lpthread
 
@@ -31,10 +39,23 @@ LIBS=-lcjson -lmosquitto -lm -lpthread
 
 TARGET=iotdata_gateway
 MAIN=iotdata_gateway.c
-SOURCES=config_linux.h serial_linux.h mqtt_linux.h \
+SOURCES=\
+    iotdata_gateway_dedup.h iotdata_gateway_mesh.h \
+    config_linux.h serial_linux.h mqtt_linux.h \
     $(DIR_E22XXXTXX)/e22xxxtxx.h \
+    $(DIR_IOTDATA_VARIANT)/iotdata_mesh.h \
     $(DIR_IOTDATA_VARIANT)/iotdata_variant_suite.h \
     $(DIR_IOTDATA)/iotdata.h $(DIR_IOTDATA)/iotdata.c
+
+##
+
+TEST=iotdata_gateway_test
+TEST_MAIN=iotdata_gateway_test.c
+TEST_CFLAGS=$(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_OPT) -I$(DIR_IOTDATA_VARIANT)
+TEST_LIBS=-lpthread
+TEST_SOURCES=\
+    iotdata_gateway_dedup.h iotdata_gateway_mesh.h \
+    $(DIR_IOTDATA_VARIANT)/iotdata_mesh.h
 
 ##
 
@@ -43,12 +64,18 @@ all: $(TARGET)
 $(TARGET): $(MAIN) $(SOURCES)
 	$(CC) $(CFLAGS) -o $(TARGET) $(MAIN) $(LDFLAGS) $(LIBS)
 
-clean:
-	rm -f $(TARGET)
-format:
-	clang-format -i $(MAIN) $(SOURCES)
+$(TEST): $(TEST_MAIN) $(TEST_SOURCES)
+	$(CC) $(TEST_CFLAGS) -o $(TEST) $(TEST_MAIN) $(TEST_LIBS)
 
-.PHONY: all clean format
+test: $(TEST)
+	./$(TEST)
+
+clean:
+	rm -f $(TARGET) $(TEST)
+format:
+	clang-format -i $(MAIN) $(SOURCES) $(TEST_MAIN) $(TEST_SOURCES)
+
+.PHONY: all clean format test
 
 ##
 
