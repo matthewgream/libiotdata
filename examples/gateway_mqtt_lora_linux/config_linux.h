@@ -119,6 +119,24 @@ static void __config_load_file(const char *filename) {
     fclose(file);
 }
 
+typedef struct {
+    const char *name;
+    const char *description;
+} config_option_help_t;
+
+void config_help(const char *program, const struct option *options_long, const config_option_help_t *help, int help_count) {
+    printf("Usage: %s [OPTIONS]\n\nOptions:\n", program);
+    for (int i = 0; options_long[i].name != NULL; i++) {
+        const char *desc = "";
+        for (int j = 0; j < help_count; j++)
+            if (strcmp(help[j].name, options_long[i].name) == 0) {
+                desc = help[j].description;
+                break;
+            }
+        printf("  --%-28s %s\n", options_long[i].name, desc);
+    }
+}
+
 bool config_load(const char *config_file, const int argc, char *argv[], const struct option *options_long) {
     int c;
     int option_index = 0;
