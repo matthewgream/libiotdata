@@ -1,6 +1,7 @@
 *.o
 *.a
 *.su
+.vscode
 tests/test_default
 tests/test_complete
 tests/test_failures

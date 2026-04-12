@@ -74,13 +74,6 @@ time_t intervalable(const time_t interval, time_t *last) {
     return 0;
 }
 
-// 0.2 ≈ 51/256, 0.8 ≈ 205/256
-#define EMA_ALPHA_NUM   51
-#define EMA_ALPHA_DENOM 256
-void ema_update(uint8_t value, uint8_t *value_ema, uint32_t *value_cnt) {
-    *value_ema = ((*value_cnt)++ == 0) ? value : (uint8_t)((EMA_ALPHA_NUM * (uint16_t)value + (EMA_ALPHA_DENOM - EMA_ALPHA_NUM) * (uint16_t)(*value_ema)) / EMA_ALPHA_DENOM);
-}
-
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -230,6 +223,8 @@ const struct option config_options [] = {
     {"dedup-peers",                 required_argument, 0, 0},
     {"dedup-delay",                 required_argument, 0, 0},
     {"debug-dedup",                 required_argument, 0, 0},
+    {"stats-mqtt-enabled",          required_argument, 0, 0},
+    {"stats-mqtt-topic",            required_argument, 0, 0},
     {"debug",                       required_argument, 0, 0},
     {"debug-data",                  required_argument, 0, 0},
     {0, 0, 0, 0}
@@ -269,6 +264,8 @@ const config_option_help_t config_options_help [] = {
     {"dedup-peers",            "Comma-separated list of dedup peers (host:port)"},
     {"dedup-delay",            "Dedup batch send delay in ms"},
     {"debug-dedup",            "Enable dedup debug output (true/false)"},
+    {"stats-mqtt-enabled",     "Publish gateway stats via MQTT (default: true)"},
+    {"stats-mqtt-topic",       "MQTT stats topic prefix (default: iotdata/stats)"},
     {"debug",                  "Enable general debug output (true/false)"},
     {"crypt",                  "E22 encryption key (default: 0x0000)"},
     {"transmit-power",         "E22 transmit power level 0-3 (default: 0)"},
@@ -340,6 +337,7 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
 
 #include "iotdata_gateway_mesh.h"
 #include "iotdata_gateway_dedup.h"
+#include "iotdata_gateway_stats.h"
 
 void dedup_config_populate(dedup_state_t *state) {
     memset(state, 0, sizeof(*state));
@@ -365,6 +363,21 @@ void mesh_config_populate(mesh_state_t *state) {
     printf("config: mesh: enabled=%c, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", state->enabled ? 'y' : 'n', state->station_id, (uint32_t)state->beacon_interval, state->debug ? "on" : "off");
 }
 
+void stats_config_populate(stats_state_t *state) {
+    memset(state, 0, sizeof(*state));
+
+    state->mqtt_enabled = config_get_bool("stats-mqtt-enabled", STATS_MQTT_ENABLED_DEFAULT);
+    const char *topic = config_get_string("stats-mqtt-topic", STATS_MQTT_TOPIC_DEFAULT);
+    strncpy(state->mqtt_topic, topic, sizeof(state->mqtt_topic) - 1);
+    state->mqtt_topic[sizeof(state->mqtt_topic) - 1] = '\0';
+    /* strip trailing slash */
+    size_t len = strlen(state->mqtt_topic);
+    if (len > 0 && state->mqtt_topic[len - 1] == '/')
+        state->mqtt_topic[len - 1] = '\0';
+
+    printf("config: stats: mqtt-enabled=%c, mqtt-topic=%s\n", state->mqtt_enabled ? 'y' : 'n', state->mqtt_topic);
+}
+
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -378,16 +391,9 @@ struct {
     time_t interval_rssi_last;
     mesh_state_t mesh_state;
     dedup_state_t dedup_state;
+    stats_state_t stats_state;
     bool debug;
     bool debug_data;
-    /* statistics */
-    uint32_t stat_rssi_channel_cnt;
-    uint8_t stat_rssi_channel_ema;
-    uint32_t stat_rssi_packet_cnt;
-    uint8_t stat_rssi_packet_ema;
-    uint32_t stat_packets_okay;
-    uint32_t stat_packets_drop;
-    uint32_t stat_packets_decode_err;
 } process_state;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -412,11 +418,10 @@ bool dedup_check_sensor_packet(uint16_t station_id, uint16_t sequence) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint8_t variant_id, uint16_t station_id, uint16_t sequence, const char *topic_prefix, const char *via) {
-    (void)sequence;
     const iotdata_variant_def_t *vdef;
     if ((vdef = iotdata_get_variant(variant_id)) == NULL) {
         fprintf(stderr, "process: unknown variant %" PRIu8 " (station=0x%04" PRIX16 ", size=%d)\n", variant_id, station_id, packet_length);
-        process_state.stat_packets_drop++;
+        stats_on_packet_decode_error(&process_state.stats_state, station_id, variant_id);
         return;
     }
     char *json = NULL;
@@ -424,16 +429,15 @@ void process_sensor_packet(const uint8_t *packet_buffer, int packet_length, uint
     iotdata_status_t rc;
     if ((rc = iotdata_decode_to_json(packet_buffer, (size_t)packet_length, &json, &scratch)) != IOTDATA_OK) {
         fprintf(stderr, "process: decode failed: %s (variant=%" PRIu8 ", station=0x%04" PRIX16 ", size=%d)\n", iotdata_strerror(rc), variant_id, station_id, packet_length);
-        process_state.stat_packets_decode_err++;
+        stats_on_packet_decode_error(&process_state.stats_state, station_id, variant_id);
         return;
     }
+    stats_on_packet_decoded(&process_state.stats_state, station_id, sequence, variant_id, packet_length, &scratch.dec);
     char topic[MQTT_TOPIC_STR_MAX];
     snprintf(topic, sizeof(topic), "%s/%s/%04" PRIX16, topic_prefix, vdef->name, station_id);
-    if (mqtt_send(topic, json, (int)strlen(json)))
-        process_state.stat_packets_okay++;
-    else {
+    if (!mqtt_send(topic, json, (int)strlen(json))) {
         fprintf(stderr, "process: mqtt send failed (topic=%s, size=%d)\n", topic, (int)strlen(json));
-        process_state.stat_packets_drop++;
+        stats_on_packet_process_error(&process_state.stats_state, station_id, variant_id);
     }
     if (process_state.debug)
         printf("  -> %s (%d bytes%s%s)\n", topic, (int)strlen(json), via ? " via " : "", via ? via : "");
@@ -457,16 +461,21 @@ void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_
             uint16_t inner_station, inner_sequence;
             if (iotdata_peek(inner, (size_t)inner_len, &inner_variant, &inner_station, &inner_sequence) != IOTDATA_OK) {
                 fprintf(stderr, "mesh: FORWARD inner packet peek failed (len=%d)\n", inner_len);
-                process_state.stat_packets_drop++;
+                stats_on_link_rx_drop(&process_state.stats_state);
             } else if (dedup_check_sensor_packet(inner_station, inner_sequence))
                 process_sensor_packet(inner, inner_len, inner_variant, inner_station, inner_sequence, topic_prefix, "mesh");
         }
         break;
     }
-    case IOTDATA_MESH_CTRL_BEACON:
+    case IOTDATA_MESH_CTRL_BEACON: {
         mesh_handle_beacon(&process_state.mesh_state, packet_buffer, packet_length);
+        iotdata_mesh_beacon_t b;
+        if (iotdata_mesh_unpack_beacon(packet_buffer, packet_length, &b))
+            stats_on_mesh_peer(&process_state.stats_state, b.gateway_id, b.generation, b.cost, b.flags);
         break;
+    }
     case IOTDATA_MESH_CTRL_ACK:
+        process_state.mesh_state.stat_acks_rx++;
         if (process_state.mesh_state.debug)
             printf("mesh: rx unexpected ACK from station=0x%04" PRIX16 "\n", station_id);
         break;
@@ -485,41 +494,6 @@ void process_mesh_packet(const uint8_t *packet_buffer, int packet_length, uint8_
             printf("mesh: rx unknown ctrl_type=0x%02" PRIX8 " from station=0x%04" PRIX16 "\n", ctrl_type, station_id);
         break;
     }
-}
-
-// -----------------------------------------------------------------------------------------------------------------------------------------
-
-void process_stats(time_t period_stat) {
-    const uint32_t rate_okay = (process_state.stat_packets_okay * 6000) / (uint32_t)period_stat, rate_drop = (process_state.stat_packets_drop * 6000) / (uint32_t)period_stat;
-    printf("packets{okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)}", process_state.stat_packets_okay, rate_okay / 100, rate_okay % 100, process_state.stat_packets_drop, rate_drop / 100,
-           rate_drop % 100);
-    process_state.stat_packets_okay = process_state.stat_packets_drop = process_state.stat_packets_decode_err = 0;
-    if (process_state.capture_rssi_channel || process_state.capture_rssi_packet) {
-        printf(", rssi{");
-        if (process_state.capture_rssi_channel)
-            printf("channel=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_rssi_channel_ema), process_state.stat_rssi_channel_cnt);
-        if (process_state.capture_rssi_channel && process_state.capture_rssi_packet)
-            printf(", ");
-        if (process_state.capture_rssi_packet)
-            printf("packet=%d dBm (%" PRIu32 ")", get_rssi_dbm(process_state.stat_rssi_packet_ema), process_state.stat_rssi_packet_cnt);
-        printf("}");
-    }
-    if (process_state.mesh_state.enabled) {
-        printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", process_state.mesh_state.stat_forwards_rx, process_state.mesh_state.stat_forwards_unwrapped,
-               process_state.mesh_state.stat_duplicates, process_state.mesh_state.stat_beacons_tx, process_state.mesh_state.stat_acks_tx, process_state.mesh_state.stat_mesh_ctrl_rx);
-        process_state.mesh_state.stat_forwards_rx = process_state.mesh_state.stat_forwards_unwrapped = 0;
-        process_state.mesh_state.stat_duplicates = process_state.mesh_state.stat_acks_tx = 0;
-        process_state.mesh_state.stat_mesh_ctrl_rx = process_state.mesh_state.stat_mesh_unknown = 0;
-    }
-    if (process_state.dedup_state.enabled) {
-        printf(", dedup{sends=%" PRIu32 "/%" PRIu32 ", recvs=%" PRIu32 "/%" PRIu32 ", injected=%" PRIu32 "}", process_state.dedup_state.stat_send_cycles, process_state.dedup_state.stat_send_entries,
-               process_state.dedup_state.stat_recv_cycles, process_state.dedup_state.stat_recv_entries, process_state.dedup_state.stat_injected);
-        process_state.dedup_state.stat_send_cycles = process_state.dedup_state.stat_send_entries = 0;
-        process_state.dedup_state.stat_recv_cycles = process_state.dedup_state.stat_recv_entries = 0;
-        process_state.dedup_state.stat_injected = 0;
-    }
-    printf(", mqtt{%s, disconnects=%" PRIu32 "}", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
-    printf("\n");
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -559,15 +533,16 @@ void process_run(void) {
         // packet processing
         uint8_t packet_rssi = 0, channel_rssi = 0;
         if (device_packet_read(packet_buffer, sizeof(packet_buffer), &packet_length, &packet_rssi) && running) {
+            stats_on_link_rx_packet(&process_state.stats_state, packet_length);
             if (process_state.debug_data)
                 debug_hexdump("data: ", packet_buffer, (size_t)packet_length);
             if (process_state.capture_rssi_packet && packet_rssi > 0)
-                ema_update(packet_rssi, &process_state.stat_rssi_packet_ema, &process_state.stat_rssi_packet_cnt);
+                stats_on_link_rssi_packet(&process_state.stats_state, packet_rssi);
             uint8_t variant_id;
             uint16_t station_id, sequence;
             if (iotdata_peek(packet_buffer, (size_t)packet_length, &variant_id, &station_id, &sequence) != IOTDATA_OK) {
                 fprintf(stderr, "process: packet too short for iotdata header (size=%d)\n", packet_length);
-                process_state.stat_packets_drop++;
+                stats_on_link_rx_drop(&process_state.stats_state);
             } else if (variant_id == IOTDATA_MESH_VARIANT)
                 process_mesh_packet(packet_buffer, packet_length, variant_id, station_id, sequence, process_state.mqtt_topic_prefix);
             else
@@ -577,7 +552,7 @@ void process_run(void) {
         // rssi update
         if (running && process_state.capture_rssi_channel && intervalable(process_state.interval_rssi, &process_state.interval_rssi_last))
             if (device_channel_rssi_read(&channel_rssi) && running)
-                ema_update(channel_rssi, &process_state.stat_rssi_channel_ema, &process_state.stat_rssi_channel_cnt);
+                stats_on_link_rssi_channel(&process_state.stats_state, channel_rssi);
 
         // mesh beacons
         if (running && process_state.mesh_state.enabled && intervalable(process_state.mesh_state.beacon_interval, &process_state.mesh_state.beacon_last))
@@ -586,7 +561,7 @@ void process_run(void) {
         // stats output
         time_t period_stat;
         if (running && (period_stat = intervalable(process_state.interval_stat, &process_state.interval_stat_last)) > 0)
-            process_stats(period_stat);
+            stats_process_display_and_publish(period_stat, &process_state.stats_state, &process_state.mesh_state, &process_state.dedup_state);
     }
 }
 
@@ -615,6 +590,7 @@ bool config_setup(const int argc, char *argv[]) {
     dedup_config_populate(&process_state.dedup_state);
     process_state.dedup_state.running = &running;
     process_config_populate();
+    stats_config_populate(&process_state.stats_state);
 
     return true;
 }
@@ -657,10 +633,12 @@ int main(int argc, char *argv[]) {
         goto end_mqtt;
     if (!dedup_begin(&process_state.dedup_state, process_state.mesh_state.station_id, &process_state.mesh_state.dedup_ring))
         goto end_mesh;
+    stats_begin(&process_state.stats_state, process_state.mesh_state.station_id, &e22_config);
 
     process_run();
     ret = EXIT_SUCCESS;
 
+    stats_end(&process_state.stats_state);
     dedup_end(&process_state.dedup_state);
 end_mesh:
     mesh_end(&process_state.mesh_state);

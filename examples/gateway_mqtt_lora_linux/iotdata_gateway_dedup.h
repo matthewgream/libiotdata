@@ -40,9 +40,14 @@ typedef struct {
     /* statistics */
     uint32_t stat_send_cycles;
     uint32_t stat_send_entries;
+    uint32_t stat_send_errors;
     uint32_t stat_recv_cycles;
     uint32_t stat_recv_entries;
+    uint32_t stat_recv_errors;
     uint32_t stat_injected;
+    uint32_t stat_pending_overflow;
+    uint32_t stat_peers_resolved;
+    uint32_t stat_peers_unresolved;
 } dedup_state_t;
 
 #define DEDUP_MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -107,6 +112,8 @@ void dedup_peers_parse(dedup_state_t *state, const char *peers_str) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 void dedup_peers_resolve(dedup_state_t *state) {
+    state->stat_peers_resolved = 0;
+    state->stat_peers_unresolved = 0;
     for (int i = 0; i < state->peers_count; i++) {
         char port_str[8];
         snprintf(port_str, sizeof(port_str), "%" PRIu16, state->peers[i].port);
@@ -116,10 +123,12 @@ void dedup_peers_resolve(dedup_state_t *state) {
         if (err == 0) {
             memcpy(&state->peers[i].addr, res->ai_addr, sizeof(state->peers[i].addr));
             state->peers[i].resolved = true;
+            state->stat_peers_resolved++;
             freeaddrinfo(res);
             printf("dedup: peer[%d] %s:%" PRIu16 " resolved\n", i, state->peers[i].host, state->peers[i].port);
         } else {
             state->peers[i].resolved = false;
+            state->stat_peers_unresolved++;
             fprintf(stderr, "dedup: peer[%d] %s:%" PRIu16 " resolution failed: %s\n", i, state->peers[i].host, state->peers[i].port, gai_strerror(err));
         }
     }
@@ -153,21 +162,25 @@ void dedup_recv_from_peers(dedup_state_t *state, int recv_fd) {
         struct sockaddr_in from;
         socklen_t from_len = (socklen_t)sizeof(from);
         const ssize_t recv_len = recvfrom(recv_fd, pkt, sizeof(pkt), 0, (struct sockaddr *)&from, &from_len);
-        if (recv_len >= DEDUP_PKT_HEADER_SIZE) {
-            const int entry_count = dedup_packet_get_entry_count(pkt);
-            if (recv_len >= (ssize_t)dedup_packet_get_length(pkt)) {
-                pthread_mutex_lock(&state->mutex);
-                for (int entry_index = 0; entry_index < entry_count; entry_index++) {
-                    iotdata_mesh_dedup_check_and_add(state->dedup_ring, dedup_packet_get_entry_station(pkt, entry_index), dedup_packet_get_entry_sequence(pkt, entry_index));
-                    state->stat_injected++;
-                }
-                pthread_mutex_unlock(&state->mutex);
-                state->stat_recv_cycles++;
-                state->stat_recv_entries += (uint32_t)entry_count;
-                if (state->debug)
-                    printf("dedup: rx from gateway=0x%04" PRIX16 ", entries=%d\n", dedup_packet_get_gateway_id(pkt), entry_count);
-            }
+        if (recv_len < DEDUP_PKT_HEADER_SIZE) {
+            state->stat_recv_errors++;
+            return;
         }
+        const int entry_count = dedup_packet_get_entry_count(pkt);
+        if (recv_len < (ssize_t)dedup_packet_get_length(pkt)) {
+            state->stat_recv_errors++;
+            return;
+        }
+        pthread_mutex_lock(&state->mutex);
+        for (int entry_index = 0; entry_index < entry_count; entry_index++) {
+            iotdata_mesh_dedup_check_and_add(state->dedup_ring, dedup_packet_get_entry_station(pkt, entry_index), dedup_packet_get_entry_sequence(pkt, entry_index));
+            state->stat_injected++;
+        }
+        pthread_mutex_unlock(&state->mutex);
+        state->stat_recv_cycles++;
+        state->stat_recv_entries += (uint32_t)entry_count;
+        if (state->debug)
+            printf("dedup: rx from gateway=0x%04" PRIX16 ", entries=%d\n", dedup_packet_get_gateway_id(pkt), entry_count);
     }
 }
 
@@ -218,7 +231,8 @@ void dedup_send_to_peers(dedup_state_t *state, int send_fd, iotdata_mesh_dedup_e
         const size_t pkt_len = dedup_packet_get_length(pkt);
         for (int peer = 0; peer < state->peers_count; peer++)
             if (state->peers[peer].resolved)
-                (void)sendto(send_fd, pkt, pkt_len, 0, (const struct sockaddr *)&state->peers[peer].addr, (socklen_t)sizeof(state->peers[peer].addr));
+                if (sendto(send_fd, pkt, pkt_len, 0, (const struct sockaddr *)&state->peers[peer].addr, (socklen_t)sizeof(state->peers[peer].addr)) < 0)
+                    state->stat_send_errors++;
         state->stat_send_cycles++;
         state->stat_send_entries += (uint32_t)entry_count;
         send_offset += entry_count;
@@ -260,11 +274,14 @@ bool dedup_check_and_add(dedup_state_t *state, uint16_t station_id, uint16_t seq
     bool is_new;
     pthread_mutex_lock(&state->mutex);
     is_new = iotdata_mesh_dedup_check_and_add(state->dedup_ring, station_id, sequence);
-    if (is_new && state->pending_count < DEDUP_PENDING_MAX) {
-        state->pending[state->pending_count].station_id = station_id;
-        state->pending[state->pending_count].sequence = sequence;
-        if (state->pending_count++ == 0)
-            clock_gettime(CLOCK_MONOTONIC, &state->pending_first);
+    if (is_new) {
+        if (state->pending_count < DEDUP_PENDING_MAX) {
+            state->pending[state->pending_count].station_id = station_id;
+            state->pending[state->pending_count].sequence = sequence;
+            if (state->pending_count++ == 0)
+                clock_gettime(CLOCK_MONOTONIC, &state->pending_first);
+        } else
+            state->stat_pending_overflow++;
     }
     pthread_mutex_unlock(&state->mutex);
     return is_new;

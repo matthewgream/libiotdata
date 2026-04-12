@@ -19,12 +19,20 @@ typedef struct {
     mesh_dedup_handler_t dedup_handler;
     /* statistics */
     uint32_t stat_beacons_tx;
+    uint32_t stat_beacons_rx;
     uint32_t stat_forwards_rx;
     uint32_t stat_forwards_unwrapped;
+    uint32_t stat_forwards_unpack_err;
     uint32_t stat_duplicates;
     uint32_t stat_acks_tx;
+    uint32_t stat_acks_rx;
+    uint32_t stat_route_errors_rx;
+    uint32_t stat_neighbour_reports_rx;
+    uint32_t stat_pongs_rx;
     uint32_t stat_mesh_ctrl_rx;
     uint32_t stat_mesh_unknown;
+    uint32_t stat_errors_tx;
+    uint64_t stat_bytes_tx;
 } mesh_state_t;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -43,10 +51,13 @@ void mesh_beacon_send(mesh_state_t *state) {
     iotdata_mesh_pack_beacon(buf, &beacon);
     if (state->debug)
         printf("mesh: tx BEACON generation=%" PRIu16 ", station=0x%04" PRIX16 "\n", beacon.generation, beacon.sender_station);
-    if (state->packet_handler(buf, IOTDATA_MESH_BEACON_SIZE))
+    if (state->packet_handler(buf, IOTDATA_MESH_BEACON_SIZE)) {
         state->stat_beacons_tx++;
-    else
+        state->stat_bytes_tx += (uint64_t)IOTDATA_MESH_BEACON_SIZE;
+    } else {
+        state->stat_errors_tx++;
         fprintf(stderr, "mesh: tx BEACON failed\n");
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -62,10 +73,13 @@ void mesh_ack_send(mesh_state_t *state, uint16_t fwd_station, uint16_t fwd_seq) 
     iotdata_mesh_pack_ack(buf, &ack);
     if (state->debug)
         printf("mesh: tx ACK to station=0x%04" PRIX16 ", sequence=%" PRIu16 "\n", fwd_station, fwd_seq);
-    if (state->packet_handler(buf, IOTDATA_MESH_ACK_SIZE))
+    if (state->packet_handler(buf, IOTDATA_MESH_ACK_SIZE)) {
         state->stat_acks_tx++;
-    else
+        state->stat_bytes_tx += (uint64_t)IOTDATA_MESH_ACK_SIZE;
+    } else {
+        state->stat_errors_tx++;
         fprintf(stderr, "mesh: tx ACK failed\n");
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -73,6 +87,7 @@ void mesh_ack_send(mesh_state_t *state, uint16_t fwd_station, uint16_t fwd_seq) 
 bool mesh_handle_forward(mesh_state_t *state, const uint8_t *buf, int len, const uint8_t **inner, int *inner_len) {
     iotdata_mesh_forward_t fwd;
     if (!iotdata_mesh_unpack_forward(buf, len, &fwd)) {
+        state->stat_forwards_unpack_err++;
         fprintf(stderr, "mesh: FORWARD unpack failed (len=%d)\n", len);
         return false;
     }
@@ -103,39 +118,44 @@ bool mesh_handle_forward(mesh_state_t *state, const uint8_t *buf, int len, const
 void mesh_handle_beacon(mesh_state_t *state, const uint8_t *buf, int len) {
     /* gateway receiving another gateway's beacon -- log for multi-gateway awareness */
     iotdata_mesh_beacon_t b;
-    if (iotdata_mesh_unpack_beacon(buf, len, &b))
+    if (iotdata_mesh_unpack_beacon(buf, len, &b)) {
+        state->stat_beacons_rx++;
         if (state->debug)
             printf("mesh: rx BEACON from gateway=0x%04" PRIX16 ", generation=%" PRIu16 ", cost=%" PRIu8 ", flags=0x%02" PRIX8 "\n", b.gateway_id, b.generation, b.cost, b.flags);
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 void mesh_handle_route_error(mesh_state_t *state, const uint8_t *buf, int len) {
-    (void)state;
     iotdata_mesh_route_error_t err;
-    if (iotdata_mesh_unpack_route_error(buf, len, &err))
+    if (iotdata_mesh_unpack_route_error(buf, len, &err)) {
+        state->stat_route_errors_rx++;
         printf("mesh: rx ROUTE_ERROR from station=0x%04" PRIX16 ", reason=%s\n", err.sender_station, iotdata_mesh_reason_name(err.reason));
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 void mesh_handle_neighbour_report(mesh_state_t *state, const uint8_t *buf, int len) {
-    (void)state;
     /* full topology aggregation is future work -- log receipt for now */
     uint8_t variant;
     uint16_t station_id, sequence;
-    if (iotdata_mesh_peek_header(buf, len, &variant, &station_id, &sequence))
+    if (iotdata_mesh_peek_header(buf, len, &variant, &station_id, &sequence)) {
+        state->stat_neighbour_reports_rx++;
         printf("mesh rx NEIGHBOUR_REPORT from station=0x%04" PRIX16 " (%d bytes)\n", station_id, len);
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 void mesh_handle_pong(mesh_state_t *state, const uint8_t *buf, int len) {
-    (void)state;
     uint8_t variant;
     uint16_t station_id, sequence;
-    if (iotdata_mesh_peek_header(buf, len, &variant, &station_id, &sequence))
+    if (iotdata_mesh_peek_header(buf, len, &variant, &station_id, &sequence)) {
+        state->stat_pongs_rx++;
         printf("mesh: rx PONG from station=0x%04" PRIX16 " (%d bytes)\n", station_id, len);
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------

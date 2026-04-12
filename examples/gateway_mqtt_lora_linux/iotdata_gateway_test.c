@@ -27,9 +27,7 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static int tests_run = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
+static int tests_run = 0, tests_passed = 0;
 
 #define ASSERT(cond) \
     do { \
@@ -48,8 +46,6 @@ static int tests_failed = 0;
         if (test_##name()) { \
             printf("PASS\n"); \
             tests_passed++; \
-        } else { \
-            tests_failed++; \
         } \
     } while (0)
 
@@ -1070,9 +1066,9 @@ int main(void) {
     RUN_TEST(dedup_three_gateway_sync);
 
     printf("\n=== Results ===\n\n");
-    printf("  Total: %d, Passed: %d, Failed: %d\n\n", tests_run, tests_passed, tests_failed);
+    printf("  Total: %d, Passed: %d, Failed: %d\n\n", tests_run, tests_passed, tests_run - tests_passed);
 
-    return tests_failed > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+    return tests_run > tests_passed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------

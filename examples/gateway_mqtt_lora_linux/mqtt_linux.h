@@ -29,18 +29,34 @@ struct mosquitto *mosq = NULL;
 void (*mqtt_message_callback)(const char *, const unsigned char *, const int) = NULL;
 bool mqtt_synchronous = false;
 bool mqtt_connected = false;
+uint32_t mqtt_stat_connects = 0;
 uint32_t mqtt_stat_disconnects = 0;
+uint32_t mqtt_stat_reconnects = 0;
+time_t mqtt_stat_last_connect_time = 0;
+uint32_t mqtt_stat_publishes = 0;
+uint64_t mqtt_stat_publish_bytes = 0;
+uint32_t mqtt_stat_publish_errors = 0;
+
+static unsigned int mqtt_reconnect_delay_base = 0;
+static unsigned int mqtt_reconnect_delay_max_base = 0;
+static unsigned int mqtt_reconnect_delay_current = 0;
+static time_t mqtt_reconnect_next_attempt = 0;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 bool mqtt_send(const char *topic, const char *message, const int length) {
-    if (!mosq)
+    if (!mosq || !mqtt_connected) {
+        mqtt_stat_publish_errors++;
         return false;
+    }
     const int result = mosquitto_publish(mosq, NULL, topic, length, message, MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN);
     if (result != MOSQ_ERR_SUCCESS) {
+        mqtt_stat_publish_errors++;
         fprintf(stderr, "mqtt: publish error: %s\n", mosquitto_strerror(result));
         return false;
     }
+    mqtt_stat_publishes++;
+    mqtt_stat_publish_bytes += (uint64_t)length;
     return true;
 }
 
@@ -114,6 +130,10 @@ static void __mqtt_connect_callback(struct mosquitto *m, void *o __attribute__((
         return;
     }
     mqtt_connected = true;
+    mqtt_stat_connects++;
+    mqtt_stat_last_connect_time = time(NULL);
+    mqtt_reconnect_delay_current = mqtt_reconnect_delay_base;
+    mqtt_reconnect_next_attempt = 0;
     printf("mqtt: connected\n");
 }
 
@@ -130,9 +150,39 @@ static void __mqtt_disconnect_callback(struct mosquitto *m, void *o __attribute_
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
+static void __mqtt_reconnect_attempt(void) {
+    const time_t now = time(NULL);
+    if (now < mqtt_reconnect_next_attempt)
+        return;
+    if (mqtt_reconnect_delay_current == 0)
+        mqtt_reconnect_delay_current = mqtt_reconnect_delay_base ? mqtt_reconnect_delay_base : 1;
+    printf("mqtt: attempting reconnect\n");
+    const int r = mosquitto_reconnect(mosq);
+    if (r == MOSQ_ERR_SUCCESS) {
+        mqtt_stat_reconnects++;
+        mqtt_reconnect_delay_current = mqtt_reconnect_delay_base;
+        mqtt_reconnect_next_attempt = 0;
+    } else {
+        fprintf(stderr, "mqtt: reconnect failed: %s (next attempt in %us)\n", mosquitto_strerror(r), mqtt_reconnect_delay_current);
+        mqtt_reconnect_next_attempt = now + mqtt_reconnect_delay_current;
+        mqtt_reconnect_delay_current *= 2;
+        if (mqtt_reconnect_delay_max_base > 0 && mqtt_reconnect_delay_current > mqtt_reconnect_delay_max_base)
+            mqtt_reconnect_delay_current = mqtt_reconnect_delay_max_base;
+    }
+}
+
 void mqtt_loop(const int timeout_ms) {
-    if (mosq)
-        mosquitto_loop(mosq, timeout_ms, 1);
+    if (!mosq)
+        return;
+    const int rc = mosquitto_loop(mosq, timeout_ms, 1);
+    if (rc != MOSQ_ERR_SUCCESS) {
+        if (mqtt_connected) {
+            mqtt_connected = false;
+            mqtt_stat_disconnects++;
+            fprintf(stderr, "mqtt: loop error: %s\n", mosquitto_strerror(rc));
+        }
+        __mqtt_reconnect_attempt();
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -166,6 +216,10 @@ bool mqtt_begin(const mqtt_config_t *cfg) {
     mosquitto_message_callback_set(mosq, __mqtt_message_callback_wrapper);
     if (cfg->reconnect_delay > 0)
         mosquitto_reconnect_delay_set(mosq, cfg->reconnect_delay, cfg->reconnect_delay_max, true);
+    mqtt_reconnect_delay_base = cfg->reconnect_delay > 0 ? cfg->reconnect_delay : 1;
+    mqtt_reconnect_delay_max_base = cfg->reconnect_delay_max > 0 ? cfg->reconnect_delay_max : mqtt_reconnect_delay_base;
+    mqtt_reconnect_delay_current = mqtt_reconnect_delay_base;
+    mqtt_reconnect_next_attempt = 0;
     int result;
     if ((result = mosquitto_connect(mosq, host, port, MQTT_CONNECT_TIMEOUT)) != MOSQ_ERR_SUCCESS) {
         fprintf(stderr, "mqtt: error connecting to broker: %s\n", mosquitto_strerror(result));
@@ -181,6 +235,9 @@ bool mqtt_begin(const mqtt_config_t *cfg) {
         mosq = NULL;
         return false;
     }
+    if (mqtt_synchronous)
+        for (int i = 0; i < 50 && !mqtt_connected; i++)
+            mosquitto_loop(mosq, 100, 1);
 
     return true;
 }
@@ -188,7 +245,7 @@ bool mqtt_begin(const mqtt_config_t *cfg) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 bool mqtt_is_connected(void) {
-    return mqtt_connected;
+    return mosq && mqtt_connected;
 }
 
 void mqtt_end(void) {
