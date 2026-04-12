@@ -180,7 +180,7 @@ void __sleep_ms(const uint32_t ms) {
 #define MQTT_RECONNECT_DELAY_MAX_DEFAULT 60
 #define MQTT_TOPIC_STR_MAX               255
 
-#define INTERVAL_STAT_DEFAULT            (5 * 60)
+#define STATS_INTERVAL_DEFAULT           (5 * 60)
 #define INTERVAL_RSSI_DEFAULT            (1 * 60)
 #define INTERVAL_BEACON_DEFAULT          60 /* seconds */
 
@@ -206,7 +206,6 @@ const struct option config_options [] = {
     {"read-timeout-command",        required_argument, 0, 0},
     {"read-timeout-packet",         required_argument, 0, 0},
     {"interval-rssi",               required_argument, 0, 0},
-    {"interval-stat",               required_argument, 0, 0},
     {"debug-e22",                   required_argument, 0, 0},
     {"mqtt-client",                 required_argument, 0, 0},
     {"mqtt-server",                 required_argument, 0, 0},
@@ -223,7 +222,8 @@ const struct option config_options [] = {
     {"dedup-peers",                 required_argument, 0, 0},
     {"dedup-delay",                 required_argument, 0, 0},
     {"debug-dedup",                 required_argument, 0, 0},
-    {"stats-mqtt-enabled",          required_argument, 0, 0},
+    {"stats-display-interval",      required_argument, 0, 0},
+    {"stats-publish-interval",      required_argument, 0, 0},
     {"stats-mqtt-topic",            required_argument, 0, 0},
     {"debug",                       required_argument, 0, 0},
     {"debug-data",                  required_argument, 0, 0},
@@ -247,7 +247,6 @@ const config_option_help_t config_options_help [] = {
     {"read-timeout-command",   "E22 command read timeout in ms"},
     {"read-timeout-packet",    "E22 packet read timeout in ms"},
     {"interval-rssi",          "RSSI polling interval in seconds"},
-    {"interval-stat",          "Statistics output interval in seconds"},
     {"debug-e22",              "Enable E22 module debug output (true/false)"},
     {"mqtt-client",            "MQTT client ID (default: " MQTT_CLIENT_DEFAULT ")"},
     {"mqtt-server",            "MQTT server URL (default: " MQTT_SERVER_DEFAULT ")"},
@@ -264,7 +263,8 @@ const config_option_help_t config_options_help [] = {
     {"dedup-peers",            "Comma-separated list of dedup peers (host:port)"},
     {"dedup-delay",            "Dedup batch send delay in ms"},
     {"debug-dedup",            "Enable dedup debug output (true/false)"},
-    {"stats-mqtt-enabled",     "Publish gateway stats via MQTT (default: true)"},
+    {"stats-display-interval", "Stats stdout display interval in seconds (0 disables)"},
+    {"stats-publish-interval", "Stats MQTT publish interval in seconds (0 disables)"},
     {"stats-mqtt-topic",       "MQTT stats topic prefix (default: iotdata/stats)"},
     {"debug",                  "Enable general debug output (true/false)"},
     {"crypt",                  "E22 encryption key (default: 0x0000)"},
@@ -366,7 +366,6 @@ void mesh_config_populate(mesh_state_t *state) {
 void stats_config_populate(stats_state_t *state) {
     memset(state, 0, sizeof(*state));
 
-    state->mqtt_enabled = config_get_bool("stats-mqtt-enabled", STATS_MQTT_ENABLED_DEFAULT);
     const char *topic = config_get_string("stats-mqtt-topic", STATS_MQTT_TOPIC_DEFAULT);
     strncpy(state->mqtt_topic, topic, sizeof(state->mqtt_topic) - 1);
     state->mqtt_topic[sizeof(state->mqtt_topic) - 1] = '\0';
@@ -375,7 +374,7 @@ void stats_config_populate(stats_state_t *state) {
     if (len > 0 && state->mqtt_topic[len - 1] == '/')
         state->mqtt_topic[len - 1] = '\0';
 
-    printf("config: stats: mqtt-enabled=%c, mqtt-topic=%s\n", state->mqtt_enabled ? 'y' : 'n', state->mqtt_topic);
+    printf("config: stats: mqtt-topic=%s\n", state->mqtt_topic);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -385,9 +384,11 @@ struct {
     const char *mqtt_topic_prefix;
     bool capture_rssi_packet;
     bool capture_rssi_channel;
-    time_t interval_stat;
+    time_t stats_display_interval;
+    time_t stats_display_interval_last;
+    time_t stats_publish_interval;
+    time_t stats_publish_interval_last;
     time_t interval_rssi;
-    time_t interval_stat_last;
     time_t interval_rssi_last;
     mesh_state_t mesh_state;
     dedup_state_t dedup_state;
@@ -504,7 +505,8 @@ void process_config_populate(void) {
     process_state.capture_rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
     process_state.capture_rssi_packet = config_get_bool("rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT);
     process_state.interval_rssi = config_get_integer("interval-rssi", INTERVAL_RSSI_DEFAULT);
-    process_state.interval_stat = config_get_integer("interval-stat", INTERVAL_STAT_DEFAULT);
+    process_state.stats_display_interval = config_get_integer("stats-display-interval", STATS_INTERVAL_DEFAULT);
+    process_state.stats_publish_interval = config_get_integer("stats-publish-interval", STATS_INTERVAL_DEFAULT);
     process_state.debug = config_get_bool("debug", false);
     process_state.debug_data = config_get_bool("debug-data", false);
 }
@@ -515,8 +517,8 @@ void process_run(void) {
     uint8_t packet_buffer[E22900T22_PACKET_MAXSIZE + 1]; /* +1 for RSSI byte */
     int packet_length;
 
-    printf("process: iotdata gateway (stat=%" PRIu32 "s, rssi=%" PRIu32 "s [packets=%c, channel=%c], topic-prefix=%s", (uint32_t)process_state.interval_stat, (uint32_t)process_state.interval_rssi,
-           process_state.capture_rssi_packet ? 'y' : 'n', process_state.capture_rssi_channel ? 'y' : 'n', process_state.mqtt_topic_prefix);
+    printf("process: iotdata gateway (stats-display=%" PRIu32 "s, stats-publish=%" PRIu32 "s, rssi=%" PRIu32 "s [packets=%c, channel=%c], topic-prefix=%s", (uint32_t)process_state.stats_display_interval,
+           (uint32_t)process_state.stats_publish_interval, (uint32_t)process_state.interval_rssi, process_state.capture_rssi_packet ? 'y' : 'n', process_state.capture_rssi_channel ? 'y' : 'n', process_state.mqtt_topic_prefix);
     if (process_state.mesh_state.enabled)
         printf(", mesh=on, beacon=%" PRIu32 "s", (uint32_t)process_state.mesh_state.beacon_interval);
     printf(")\n");
@@ -558,10 +560,14 @@ void process_run(void) {
         if (running && process_state.mesh_state.enabled && intervalable(process_state.mesh_state.beacon_interval, &process_state.mesh_state.beacon_last))
             mesh_beacon_send(&process_state.mesh_state);
 
-        // stats output
-        time_t period_stat;
-        if (running && (period_stat = intervalable(process_state.interval_stat, &process_state.interval_stat_last)) > 0)
-            stats_process_display_and_publish(period_stat, &process_state.stats_state, &process_state.mesh_state, &process_state.dedup_state);
+        // stats display (stdout)
+        time_t period_display;
+        if (running && process_state.stats_display_interval > 0 && (period_display = intervalable(process_state.stats_display_interval, &process_state.stats_display_interval_last)) > 0)
+            stats_display(period_display, &process_state.stats_state, &process_state.mesh_state, &process_state.dedup_state);
+
+        // stats publish (mqtt)
+        if (running && process_state.stats_publish_interval > 0 && intervalable(process_state.stats_publish_interval, &process_state.stats_publish_interval_last) > 0)
+            stats_publish(&process_state.stats_state, &process_state.mesh_state, &process_state.dedup_state);
     }
 }
 

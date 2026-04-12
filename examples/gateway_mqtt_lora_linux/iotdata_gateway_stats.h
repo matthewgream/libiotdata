@@ -31,14 +31,13 @@ void ema_update_timed(uint8_t value, uint8_t *value_ema, uint32_t *value_cnt, ti
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define STATS_MAX_STATIONS         128
-#define STATS_RING_SIZE            256
-#define STATS_MESH_PEERS_MAX       16
-#define STATS_MQTT_TOPIC_DEFAULT   "iotdata/stats"
-#define STATS_MQTT_ENABLED_DEFAULT true
-#define STATS_TOPIC_STR_MAX        256
+#define STATS_MAX_STATIONS       128
+#define STATS_RING_SIZE          256
+#define STATS_MESH_PEERS_MAX     16
+#define STATS_MQTT_TOPIC_DEFAULT "iotdata/stats"
+#define STATS_TOPIC_STR_MAX      256
 
-#define STATS_WINDOW_COUNT         8
+#define STATS_WINDOW_COUNT       8
 static const time_t stats_windows_secs[STATS_WINDOW_COUNT] = { 5 * 60, 15 * 60, 60 * 60, 3 * 3600, 12 * 3600, 24 * 3600, 3 * 86400, 7 * 86400 };
 static const char *const stats_windows_names[STATS_WINDOW_COUNT] = { "5m", "15m", "1h", "3h", "12h", "24h", "3d", "7d" };
 
@@ -149,7 +148,6 @@ typedef struct {
 } stats_mesh_peer_t;
 
 typedef struct {
-    bool mqtt_enabled;
     char mqtt_topic[STATS_TOPIC_STR_MAX];
     uint16_t gateway_id;
     time_t start_time;
@@ -531,10 +529,75 @@ cJSON *stats_build_stats_json(const stats_state_t *s, const mesh_state_t *mesh, 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_process_display_and_publish(time_t period_stat, stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup);
+char *stats_build_stats_string(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup, time_t period_stat) {
+    char buf[2048];
+    size_t off = 0;
+    int n;
+#define STATS_APPEND(...) \
+    do { \
+        n = snprintf(buf + off, sizeof(buf) - off, __VA_ARGS__); \
+        if (n > 0) { \
+            off += (size_t)n; \
+            if (off >= sizeof(buf)) \
+                off = sizeof(buf) - 1; \
+        } \
+    } while (0)
+
+    static stats_totals_t last_totals = { 0, 0 };
+    stats_totals_t cur_totals;
+    stats_get_totals(s, &cur_totals);
+    const uint32_t delta_okay = cur_totals.rx_ok - last_totals.rx_ok;
+    const uint32_t delta_drop = cur_totals.rx_drop - last_totals.rx_drop;
+    last_totals = cur_totals;
+    const uint32_t rate_okay = (delta_okay * 6000) / (uint32_t)period_stat, rate_drop = (delta_drop * 6000) / (uint32_t)period_stat;
+    STATS_APPEND("packets{okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)}", delta_okay, rate_okay / 100, rate_okay % 100, delta_drop, rate_drop / 100, rate_drop % 100);
+    if (s->link.rssi_channel_cnt > 0 || s->link.rssi_packet_cnt > 0) {
+        STATS_APPEND(", rssi{");
+        if (s->link.rssi_channel_cnt > 0)
+            STATS_APPEND("channel=%d dBm (%" PRIu32 ")", get_rssi_dbm(s->link.rssi_channel_ema), s->link.rssi_channel_cnt);
+        if (s->link.rssi_channel_cnt > 0 && s->link.rssi_packet_cnt > 0)
+            STATS_APPEND(", ");
+        if (s->link.rssi_packet_cnt > 0)
+            STATS_APPEND("packet=%d dBm (%" PRIu32 ")", get_rssi_dbm(s->link.rssi_packet_ema), s->link.rssi_packet_cnt);
+        STATS_APPEND("}");
+    }
+    static struct {
+        uint32_t forwards_rx, forwards_unwrapped, duplicates, beacons_tx, acks_tx, ctrl_rx;
+        uint32_t send_cycles, send_entries, recv_cycles, recv_entries, injected;
+    } last = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    if (mesh && mesh->enabled) {
+        STATS_APPEND(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", mesh->stat_forwards_rx - last.forwards_rx,
+                     mesh->stat_forwards_unwrapped - last.forwards_unwrapped, mesh->stat_duplicates - last.duplicates, mesh->stat_beacons_tx - last.beacons_tx, mesh->stat_acks_tx - last.acks_tx, mesh->stat_mesh_ctrl_rx - last.ctrl_rx);
+        last.forwards_rx = mesh->stat_forwards_rx;
+        last.forwards_unwrapped = mesh->stat_forwards_unwrapped;
+        last.duplicates = mesh->stat_duplicates;
+        last.beacons_tx = mesh->stat_beacons_tx;
+        last.acks_tx = mesh->stat_acks_tx;
+        last.ctrl_rx = mesh->stat_mesh_ctrl_rx;
+    }
+    if (dedup && dedup->enabled) {
+        STATS_APPEND(", dedup{sends=%" PRIu32 "/%" PRIu32 ", recvs=%" PRIu32 "/%" PRIu32 ", injected=%" PRIu32 "}", dedup->stat_send_cycles - last.send_cycles, dedup->stat_send_entries - last.send_entries,
+                     dedup->stat_recv_cycles - last.recv_cycles, dedup->stat_recv_entries - last.recv_entries, dedup->stat_injected - last.injected);
+        last.send_cycles = dedup->stat_send_cycles;
+        last.send_entries = dedup->stat_send_entries;
+        last.recv_cycles = dedup->stat_recv_cycles;
+        last.recv_entries = dedup->stat_recv_entries;
+        last.injected = dedup->stat_injected;
+    }
+    STATS_APPEND(", mqtt{%s, disconnects=%" PRIu32 "}", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
+#undef STATS_APPEND
+    const size_t len = strlen(buf);
+    char *out = (char *)malloc(len + 1);
+    if (out)
+        memcpy(out, buf, len + 1);
+    return out;
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------------------------------
 
 void stats_publish(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
-    if (!s->mqtt_enabled || !mqtt_is_connected())
+    if (!mqtt_is_connected())
         return;
     cJSON *root = stats_build_stats_json(s, mesh, dedup);
     if (!root)
@@ -551,51 +614,12 @@ void stats_publish(const stats_state_t *s, const mesh_state_t *mesh, const dedup
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_process_display_and_publish(time_t period_stat, stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
-    stats_publish(s, mesh, dedup);
-    static stats_totals_t last_totals = { 0, 0 };
-    stats_totals_t cur_totals;
-    stats_get_totals(s, &cur_totals);
-    const uint32_t delta_okay = cur_totals.rx_ok - last_totals.rx_ok;
-    const uint32_t delta_drop = cur_totals.rx_drop - last_totals.rx_drop;
-    last_totals = cur_totals;
-    const uint32_t rate_okay = (delta_okay * 6000) / (uint32_t)period_stat, rate_drop = (delta_drop * 6000) / (uint32_t)period_stat;
-    printf("packets{okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)}", delta_okay, rate_okay / 100, rate_okay % 100, delta_drop, rate_drop / 100, rate_drop % 100);
-    if (s->link.rssi_channel_cnt > 0 || s->link.rssi_packet_cnt > 0) {
-        printf(", rssi{");
-        if (s->link.rssi_channel_cnt > 0)
-            printf("channel=%d dBm (%" PRIu32 ")", get_rssi_dbm(s->link.rssi_channel_ema), s->link.rssi_channel_cnt);
-        if (s->link.rssi_channel_cnt > 0 && s->link.rssi_packet_cnt > 0)
-            printf(", ");
-        if (s->link.rssi_packet_cnt > 0)
-            printf("packet=%d dBm (%" PRIu32 ")", get_rssi_dbm(s->link.rssi_packet_ema), s->link.rssi_packet_cnt);
-        printf("}");
-    }
-    static struct {
-        uint32_t forwards_rx, forwards_unwrapped, duplicates, beacons_tx, acks_tx, ctrl_rx;
-        uint32_t send_cycles, send_entries, recv_cycles, recv_entries, injected;
-    } last = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    if (mesh && mesh->enabled) {
-        printf(", mesh{fwd=%" PRIu32 ", unwrap=%" PRIu32 ", dedup=%" PRIu32 ", beacons=%" PRIu32 ", acks=%" PRIu32 ", ctrl=%" PRIu32 "}", mesh->stat_forwards_rx - last.forwards_rx, mesh->stat_forwards_unwrapped - last.forwards_unwrapped,
-               mesh->stat_duplicates - last.duplicates, mesh->stat_beacons_tx - last.beacons_tx, mesh->stat_acks_tx - last.acks_tx, mesh->stat_mesh_ctrl_rx - last.ctrl_rx);
-        last.forwards_rx = mesh->stat_forwards_rx;
-        last.forwards_unwrapped = mesh->stat_forwards_unwrapped;
-        last.duplicates = mesh->stat_duplicates;
-        last.beacons_tx = mesh->stat_beacons_tx;
-        last.acks_tx = mesh->stat_acks_tx;
-        last.ctrl_rx = mesh->stat_mesh_ctrl_rx;
-    }
-    if (dedup && dedup->enabled) {
-        printf(", dedup{sends=%" PRIu32 "/%" PRIu32 ", recvs=%" PRIu32 "/%" PRIu32 ", injected=%" PRIu32 "}", dedup->stat_send_cycles - last.send_cycles, dedup->stat_send_entries - last.send_entries,
-               dedup->stat_recv_cycles - last.recv_cycles, dedup->stat_recv_entries - last.recv_entries, dedup->stat_injected - last.injected);
-        last.send_cycles = dedup->stat_send_cycles;
-        last.send_entries = dedup->stat_send_entries;
-        last.recv_cycles = dedup->stat_recv_cycles;
-        last.recv_entries = dedup->stat_recv_entries;
-        last.injected = dedup->stat_injected;
-    }
-    printf(", mqtt{%s, disconnects=%" PRIu32 "}", mqtt_is_connected() ? "up" : "down", mqtt_stat_disconnects);
-    printf("\n");
+void stats_display(time_t period_stat, const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
+    char *str = stats_build_stats_string(s, mesh, dedup, period_stat);
+    if (!str)
+        return;
+    printf("%s\n", str);
+    free(str);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
