@@ -18,7 +18,7 @@ typedef struct {
     char *value;
 } config_entry_t;
 
-#define CONFIG_MAX_ENTRIES 32
+#define CONFIG_MAX_ENTRIES 64
 config_entry_t config_entries[CONFIG_MAX_ENTRIES];
 int config_entry_count = 0;
 
