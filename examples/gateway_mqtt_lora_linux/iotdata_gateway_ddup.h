@@ -2,16 +2,16 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define DEDUP_PORT_DEFAULT     9876
+#define DDUP_PORT_DEFAULT     9876
 
-#define DEDUP_DELAY_MS_DEFAULT 20
+#define DDUP_DELAY_MS_DEFAULT 20
 
-#define DEDUP_PEERS_MAX        16
-#define DEDUP_PENDING_MAX      256
-#define DEDUP_BATCH_MAX        32
+#define DDUP_PEERS_MAX        16
+#define DDUP_PENDING_MAX      256
+#define DDUP_BATCH_MAX        32
 
-#define DEDUP_PKT_HEADER_SIZE  3
-#define DEDUP_PKT_SIZE         (DEDUP_PKT_HEADER_SIZE + DEDUP_BATCH_MAX * 4) /* 131 bytes */
+#define DDUP_PKT_HEADER_SIZE  3
+#define DDUP_PKT_SIZE         (DDUP_PKT_HEADER_SIZE + DDUP_BATCH_MAX * 4) /* 131 bytes */
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -20,17 +20,17 @@ typedef struct {
     uint16_t port;
     struct sockaddr_in addr;
     bool resolved;
-} dedup_peer_t;
+} ddup_peer_t;
 
 typedef struct {
     bool enabled;
     uint16_t port;
     uint32_t delay_ms;
-    dedup_peer_t peers[DEDUP_PEERS_MAX];
+    ddup_peer_t peers[DDUP_PEERS_MAX];
     int peers_count;
     pthread_mutex_t mutex;
     pthread_t thread;
-    iotdata_mesh_dedup_entry_t pending[DEDUP_PENDING_MAX];
+    iotdata_mesh_dedup_entry_t pending[DDUP_PENDING_MAX];
     int pending_count;
     struct timespec pending_first;
     uint16_t gateway_id;
@@ -48,36 +48,36 @@ typedef struct {
     uint32_t stat_pending_overflow;
     uint32_t stat_peers_resolved;
     uint32_t stat_peers_unresolved;
-} dedup_state_t;
+} ddup_state_t;
 
-#define DEDUP_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define DDUP_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-typedef uint8_t dedup_packet_t[DEDUP_PKT_SIZE];
+typedef uint8_t ddup_packet_t[DDUP_PKT_SIZE];
 
-#define dedup_packet_get_length(pkt)                      (size_t)(3 + (size_t)pkt[2] * 4)
+#define ddup_packet_get_length(pkt)                      (size_t)(3 + (size_t)pkt[2] * 4)
 
-#define dedup_packet_get_gateway_id(pkt)                  (((uint16_t)pkt[0] << 8) | (uint16_t)pkt[1])
-#define dedup_packet_get_entry_count(pkt)                 (DEDUP_MIN(pkt[2], DEDUP_BATCH_MAX))
-#define dedup_packet_get_entry_station(pkt, entry_index)  (((uint16_t)pkt[(3 + entry_index * 4) + 0] << 8) | (uint16_t)pkt[(3 + entry_index * 4) + 1])
-#define dedup_packet_get_entry_sequence(pkt, entry_index) (((uint16_t)pkt[(3 + entry_index * 4) + 2] << 8) | (uint16_t)pkt[(3 + entry_index * 4) + 3])
+#define ddup_packet_get_gateway_id(pkt)                  (((uint16_t)pkt[0] << 8) | (uint16_t)pkt[1])
+#define ddup_packet_get_entry_count(pkt)                 (DDUP_MIN(pkt[2], DDUP_BATCH_MAX))
+#define ddup_packet_get_entry_station(pkt, entry_index)  (((uint16_t)pkt[(3 + entry_index * 4) + 0] << 8) | (uint16_t)pkt[(3 + entry_index * 4) + 1])
+#define ddup_packet_get_entry_sequence(pkt, entry_index) (((uint16_t)pkt[(3 + entry_index * 4) + 2] << 8) | (uint16_t)pkt[(3 + entry_index * 4) + 3])
 
-#define dedup_packet_set_gateway_id(pkt, gateway_id) \
+#define ddup_packet_set_gateway_id(pkt, gateway_id) \
     do { \
         pkt[0] = (uint8_t)((gateway_id) >> 8); \
         pkt[1] = (uint8_t)((gateway_id) & 0xFF); \
     } while (0)
-#define dedup_packet_set_entry_count(pkt, entry_count) \
+#define ddup_packet_set_entry_count(pkt, entry_count) \
     do { \
         pkt[2] = (uint8_t)(entry_count); \
     } while (0)
-#define dedup_packet_set_entry_station(pkt, entry_index, station_id) \
+#define ddup_packet_set_entry_station(pkt, entry_index, station_id) \
     do { \
         pkt[(3 + entry_index * 4) + 0] = (uint8_t)((station_id) >> 8); \
         pkt[(3 + entry_index * 4) + 1] = (uint8_t)((station_id) & 0xFF); \
     } while (0)
-#define dedup_packet_set_entry_sequence(pkt, entry_index, sequence) \
+#define ddup_packet_set_entry_sequence(pkt, entry_index, sequence) \
     do { \
         pkt[(3 + entry_index * 4) + 2] = (uint8_t)((sequence) >> 8); \
         pkt[(3 + entry_index * 4) + 3] = (uint8_t)((sequence) & 0xFF); \
@@ -85,14 +85,14 @@ typedef uint8_t dedup_packet_t[DEDUP_PKT_SIZE];
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void dedup_peers_parse(dedup_state_t *state, const char *peers_str) {
+void ddup_peers_parse(ddup_state_t *state, const char *peers_str) {
     if (!peers_str || !*peers_str)
         return;
     char buf[512];
     strncpy(buf, peers_str, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     char *save = NULL, *tok = strtok_r(buf, ",", &save);
-    while (tok && state->peers_count < DEDUP_PEERS_MAX) {
+    while (tok && state->peers_count < DDUP_PEERS_MAX) {
         while (*tok == ' ')
             tok++;
         char *colon = strrchr(tok, ':');
@@ -111,7 +111,7 @@ void dedup_peers_parse(dedup_state_t *state, const char *peers_str) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void dedup_peers_resolve(dedup_state_t *state) {
+void ddup_peers_resolve(ddup_state_t *state) {
     state->stat_peers_resolved = 0;
     state->stat_peers_unresolved = 0;
     for (int i = 0; i < state->peers_count; i++) {
@@ -136,7 +136,7 @@ void dedup_peers_resolve(dedup_state_t *state) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-int dedup_recv_setup(dedup_state_t *state) {
+int ddup_recv_setup(ddup_state_t *state) {
     const int recv_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (recv_fd < 0) {
         fprintf(stderr, "dedup: recv socket: %s\n", strerror(errno));
@@ -155,38 +155,38 @@ int dedup_recv_setup(dedup_state_t *state) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void dedup_recv_from_peers(dedup_state_t *state, int recv_fd) {
+void ddup_recv_from_peers(ddup_state_t *state, int recv_fd) {
     struct pollfd pfd = { .fd = recv_fd, .events = POLLIN, .revents = 0 };
     if (poll(&pfd, 1, 5) > 0 && (pfd.revents & POLLIN)) {
-        dedup_packet_t pkt;
+        ddup_packet_t pkt;
         struct sockaddr_in from;
         socklen_t from_len = (socklen_t)sizeof(from);
         const ssize_t recv_len = recvfrom(recv_fd, pkt, sizeof(pkt), 0, (struct sockaddr *)&from, &from_len);
-        if (recv_len < DEDUP_PKT_HEADER_SIZE) {
+        if (recv_len < DDUP_PKT_HEADER_SIZE) {
             state->stat_recv_errors++;
             return;
         }
-        const int entry_count = dedup_packet_get_entry_count(pkt);
-        if (recv_len < (ssize_t)dedup_packet_get_length(pkt)) {
+        const int entry_count = ddup_packet_get_entry_count(pkt);
+        if (recv_len < (ssize_t)ddup_packet_get_length(pkt)) {
             state->stat_recv_errors++;
             return;
         }
         pthread_mutex_lock(&state->mutex);
         for (int entry_index = 0; entry_index < entry_count; entry_index++) {
-            iotdata_mesh_dedup_check_and_add(state->dedup_ring, dedup_packet_get_entry_station(pkt, entry_index), dedup_packet_get_entry_sequence(pkt, entry_index));
+            iotdata_mesh_dedup_check_and_add(state->dedup_ring, ddup_packet_get_entry_station(pkt, entry_index), ddup_packet_get_entry_sequence(pkt, entry_index));
             state->stat_injected++;
         }
         pthread_mutex_unlock(&state->mutex);
         state->stat_recv_cycles++;
         state->stat_recv_entries += (uint32_t)entry_count;
         if (state->debug)
-            printf("dedup: rx from gateway=0x%04" PRIX16 ", entries=%d\n", dedup_packet_get_gateway_id(pkt), entry_count);
+            printf("dedup: rx from gateway=0x%04" PRIX16 ", entries=%d\n", ddup_packet_get_gateway_id(pkt), entry_count);
     }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-int dedup_send_setup(dedup_state_t *state) {
+int ddup_send_setup(ddup_state_t *state) {
     (void)state;
     const int send_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (send_fd < 0) {
@@ -198,7 +198,7 @@ int dedup_send_setup(dedup_state_t *state) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-int dedup_send_collect(dedup_state_t *state, iotdata_mesh_dedup_entry_t *send_entries) {
+int ddup_send_collect(ddup_state_t *state, iotdata_mesh_dedup_entry_t *send_entries) {
     int send_count = 0;
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -217,18 +217,18 @@ int dedup_send_collect(dedup_state_t *state, iotdata_mesh_dedup_entry_t *send_en
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void dedup_send_to_peers(dedup_state_t *state, int send_fd, iotdata_mesh_dedup_entry_t *send_entries, int send_count) {
+void ddup_send_to_peers(ddup_state_t *state, int send_fd, iotdata_mesh_dedup_entry_t *send_entries, int send_count) {
     int send_offset = 0;
     while (send_offset < send_count) {
-        const int entry_count = DEDUP_MIN(send_count - send_offset, DEDUP_BATCH_MAX);
-        dedup_packet_t pkt;
-        dedup_packet_set_gateway_id(pkt, state->gateway_id);
-        dedup_packet_set_entry_count(pkt, entry_count);
+        const int entry_count = DDUP_MIN(send_count - send_offset, DDUP_BATCH_MAX);
+        ddup_packet_t pkt;
+        ddup_packet_set_gateway_id(pkt, state->gateway_id);
+        ddup_packet_set_entry_count(pkt, entry_count);
         for (int entry_index = 0; entry_index < entry_count; entry_index++) {
-            dedup_packet_set_entry_station(pkt, entry_index, send_entries[send_offset + entry_index].station_id);
-            dedup_packet_set_entry_sequence(pkt, entry_index, send_entries[send_offset + entry_index].sequence);
+            ddup_packet_set_entry_station(pkt, entry_index, send_entries[send_offset + entry_index].station_id);
+            ddup_packet_set_entry_sequence(pkt, entry_index, send_entries[send_offset + entry_index].sequence);
         }
-        const size_t pkt_len = dedup_packet_get_length(pkt);
+        const size_t pkt_len = ddup_packet_get_length(pkt);
         for (int peer = 0; peer < state->peers_count; peer++)
             if (state->peers[peer].resolved)
                 if (sendto(send_fd, pkt, pkt_len, 0, (const struct sockaddr *)&state->peers[peer].addr, (socklen_t)sizeof(state->peers[peer].addr)) < 0)
@@ -243,39 +243,39 @@ void dedup_send_to_peers(dedup_state_t *state, int send_fd, iotdata_mesh_dedup_e
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void *dedup_thread_func(void *arg) {
-    dedup_state_t *state = (dedup_state_t *)arg;
+void *ddup_thread_func(void *arg) {
+    ddup_state_t *state = (ddup_state_t *)arg;
     int recv_fd, send_fd;
-    if ((recv_fd = dedup_recv_setup(state)) < 0)
-        goto dedup_end_all;
-    if ((send_fd = dedup_send_setup(state)) < 0)
-        goto dedup_end_send;
-    iotdata_mesh_dedup_entry_t send_entries[DEDUP_PENDING_MAX];
+    if ((recv_fd = ddup_recv_setup(state)) < 0)
+        goto ddup_end_all;
+    if ((send_fd = ddup_send_setup(state)) < 0)
+        goto ddup_end_send;
+    iotdata_mesh_dedup_entry_t send_entries[DDUP_PENDING_MAX];
     while (*state->running) {
-        dedup_recv_from_peers(state, recv_fd);
+        ddup_recv_from_peers(state, recv_fd);
         if (state->peers_count > 0) {
-            const int send_count = dedup_send_collect(state, send_entries);
+            const int send_count = ddup_send_collect(state, send_entries);
             if (send_count > 0)
-                dedup_send_to_peers(state, send_fd, send_entries, send_count);
+                ddup_send_to_peers(state, send_fd, send_entries, send_count);
         }
     }
     close(send_fd);
-dedup_end_send:
+ddup_end_send:
     close(recv_fd);
-dedup_end_all:
+ddup_end_all:
     return NULL;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool dedup_check_and_add(dedup_state_t *state, uint16_t station_id, uint16_t sequence) {
+bool ddup_check_and_add(ddup_state_t *state, uint16_t station_id, uint16_t sequence) {
     if (!state->enabled)
         return iotdata_mesh_dedup_check_and_add(state->dedup_ring, station_id, sequence);
     bool is_new;
     pthread_mutex_lock(&state->mutex);
     is_new = iotdata_mesh_dedup_check_and_add(state->dedup_ring, station_id, sequence);
     if (is_new) {
-        if (state->pending_count < DEDUP_PENDING_MAX) {
+        if (state->pending_count < DDUP_PENDING_MAX) {
             state->pending[state->pending_count].station_id = station_id;
             state->pending[state->pending_count].sequence = sequence;
             if (state->pending_count++ == 0)
@@ -289,7 +289,7 @@ bool dedup_check_and_add(dedup_state_t *state, uint16_t station_id, uint16_t seq
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool dedup_begin(dedup_state_t *state, uint16_t gateway_id, iotdata_mesh_dedup_ring_t *dedup_ring, volatile bool *running) {
+bool ddup_begin(ddup_state_t *state, uint16_t gateway_id, iotdata_mesh_dedup_ring_t *dedup_ring, volatile bool *running) {
     if (!state->enabled) {
         printf("dedup: disabled, not starting\n");
         return true;
@@ -298,9 +298,9 @@ bool dedup_begin(dedup_state_t *state, uint16_t gateway_id, iotdata_mesh_dedup_r
     state->gateway_id = gateway_id;
     state->dedup_ring = dedup_ring;
     printf("dedup: enabled, port=%" PRIu16 ", peers=%d, gateway_id=%04" PRIX16 ", delay=%" PRIu32 "ms\n", state->port, state->peers_count, state->gateway_id, state->delay_ms);
-    dedup_peers_resolve(state);
+    ddup_peers_resolve(state);
     pthread_mutex_init(&state->mutex, NULL);
-    if (pthread_create(&state->thread, NULL, dedup_thread_func, state) != 0) {
+    if (pthread_create(&state->thread, NULL, ddup_thread_func, state) != 0) {
         state->enabled = false;
         fprintf(stderr, "dedup: thread create failed: %s\n", strerror(errno));
         pthread_mutex_destroy(&state->mutex);
@@ -311,7 +311,7 @@ bool dedup_begin(dedup_state_t *state, uint16_t gateway_id, iotdata_mesh_dedup_r
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void dedup_end(dedup_state_t *state) {
+void ddup_end(ddup_state_t *state) {
     if (!state->enabled)
         return;
     pthread_join(state->thread, NULL);

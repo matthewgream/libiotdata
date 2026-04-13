@@ -22,7 +22,7 @@
 #include "iotdata_mesh.h"
 
 #include "iotdata_gateway_mesh.h"
-#include "iotdata_gateway_dedup.h"
+#include "iotdata_gateway_ddup.h"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -427,67 +427,67 @@ static bool test_mesh_end_noop(void) {
 // packet encoding macros
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_packet_encoding(void) {
-    dedup_packet_t pkt;
+static bool test_ddup_packet_encoding(void) {
+    ddup_packet_t pkt;
     memset(pkt, 0, sizeof(pkt));
 
-    dedup_packet_set_gateway_id(pkt, 0x1234);
-    ASSERT_EQ_INT(dedup_packet_get_gateway_id(pkt), 0x1234u);
+    ddup_packet_set_gateway_id(pkt, 0x1234);
+    ASSERT_EQ_INT(ddup_packet_get_gateway_id(pkt), 0x1234u);
 
-    dedup_packet_set_entry_count(pkt, 5);
-    ASSERT_EQ_INT(dedup_packet_get_entry_count(pkt), 5);
+    ddup_packet_set_entry_count(pkt, 5);
+    ASSERT_EQ_INT(ddup_packet_get_entry_count(pkt), 5);
 
-    dedup_packet_set_entry_station(pkt, 0, 0xABCD);
-    ASSERT_EQ_INT(dedup_packet_get_entry_station(pkt, 0), 0xABCDu);
+    ddup_packet_set_entry_station(pkt, 0, 0xABCD);
+    ASSERT_EQ_INT(ddup_packet_get_entry_station(pkt, 0), 0xABCDu);
 
-    dedup_packet_set_entry_sequence(pkt, 0, 0x5678);
-    ASSERT_EQ_INT(dedup_packet_get_entry_sequence(pkt, 0), 0x5678u);
+    ddup_packet_set_entry_sequence(pkt, 0, 0x5678);
+    ASSERT_EQ_INT(ddup_packet_get_entry_sequence(pkt, 0), 0x5678u);
 
     /* multiple entries */
-    dedup_packet_set_entry_station(pkt, 1, 0x1111);
-    dedup_packet_set_entry_sequence(pkt, 1, 0x2222);
-    ASSERT_EQ_INT(dedup_packet_get_entry_station(pkt, 1), 0x1111u);
-    ASSERT_EQ_INT(dedup_packet_get_entry_sequence(pkt, 1), 0x2222u);
+    ddup_packet_set_entry_station(pkt, 1, 0x1111);
+    ddup_packet_set_entry_sequence(pkt, 1, 0x2222);
+    ASSERT_EQ_INT(ddup_packet_get_entry_station(pkt, 1), 0x1111u);
+    ASSERT_EQ_INT(ddup_packet_get_entry_sequence(pkt, 1), 0x2222u);
 
     /* first entry unchanged */
-    ASSERT_EQ_INT(dedup_packet_get_entry_station(pkt, 0), 0xABCDu);
-    ASSERT_EQ_INT(dedup_packet_get_entry_sequence(pkt, 0), 0x5678u);
+    ASSERT_EQ_INT(ddup_packet_get_entry_station(pkt, 0), 0xABCDu);
+    ASSERT_EQ_INT(ddup_packet_get_entry_sequence(pkt, 0), 0x5678u);
     return true;
 }
 
-static bool test_dedup_packet_length(void) {
-    dedup_packet_t pkt;
+static bool test_ddup_packet_length(void) {
+    ddup_packet_t pkt;
     memset(pkt, 0, sizeof(pkt));
 
-    dedup_packet_set_entry_count(pkt, 0);
-    ASSERT_EQ_INT(dedup_packet_get_length(pkt), 3u);
+    ddup_packet_set_entry_count(pkt, 0);
+    ASSERT_EQ_INT(ddup_packet_get_length(pkt), 3u);
 
-    dedup_packet_set_entry_count(pkt, 1);
-    ASSERT_EQ_INT(dedup_packet_get_length(pkt), 7u);
+    ddup_packet_set_entry_count(pkt, 1);
+    ASSERT_EQ_INT(ddup_packet_get_length(pkt), 7u);
 
-    dedup_packet_set_entry_count(pkt, 32);
-    ASSERT_EQ_INT(dedup_packet_get_length(pkt), (size_t)(3 + 32 * 4));
+    ddup_packet_set_entry_count(pkt, 32);
+    ASSERT_EQ_INT(ddup_packet_get_length(pkt), (size_t)(3 + 32 * 4));
     return true;
 }
 
-static bool test_dedup_packet_entry_count_clamped(void) {
-    dedup_packet_t pkt;
+static bool test_ddup_packet_entry_count_clamped(void) {
+    ddup_packet_t pkt;
     memset(pkt, 0, sizeof(pkt));
-    pkt[2] = 100; /* raw count exceeds DEDUP_BATCH_MAX */
-    ASSERT_EQ_INT(dedup_packet_get_entry_count(pkt), DEDUP_BATCH_MAX);
+    pkt[2] = 100; /* raw count exceeds DDUP_BATCH_MAX */
+    ASSERT_EQ_INT(ddup_packet_get_entry_count(pkt), DDUP_BATCH_MAX);
     return true;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
-// dedup_peers_parse
+// ddup_peers_parse
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_peers_parse_basic(void) {
-    dedup_state_t ds;
+static bool test_ddup_peers_parse_basic(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.port = 9876;
 
-    dedup_peers_parse(&ds, "host1,host2,host3");
+    ddup_peers_parse(&ds, "host1,host2,host3");
 
     ASSERT_EQ_INT(ds.peers_count, 3);
     ASSERT(strcmp(ds.peers[0].host, "host1") == 0);
@@ -497,12 +497,12 @@ static bool test_dedup_peers_parse_basic(void) {
     return true;
 }
 
-static bool test_dedup_peers_parse_with_ports(void) {
-    dedup_state_t ds;
+static bool test_ddup_peers_parse_with_ports(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.port = 9876;
 
-    dedup_peers_parse(&ds, "host1:1234,host2:5678");
+    ddup_peers_parse(&ds, "host1:1234,host2:5678");
 
     ASSERT_EQ_INT(ds.peers_count, 2);
     ASSERT(strcmp(ds.peers[0].host, "host1") == 0);
@@ -512,24 +512,24 @@ static bool test_dedup_peers_parse_with_ports(void) {
     return true;
 }
 
-static bool test_dedup_peers_parse_empty(void) {
-    dedup_state_t ds;
+static bool test_ddup_peers_parse_empty(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
 
-    dedup_peers_parse(&ds, "");
+    ddup_peers_parse(&ds, "");
     ASSERT_EQ_INT(ds.peers_count, 0);
 
-    dedup_peers_parse(&ds, NULL);
+    ddup_peers_parse(&ds, NULL);
     ASSERT_EQ_INT(ds.peers_count, 0);
     return true;
 }
 
-static bool test_dedup_peers_parse_whitespace(void) {
-    dedup_state_t ds;
+static bool test_ddup_peers_parse_whitespace(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.port = 9876;
 
-    dedup_peers_parse(&ds, " host1, host2");
+    ddup_peers_parse(&ds, " host1, host2");
 
     ASSERT_EQ_INT(ds.peers_count, 2);
     ASSERT(strcmp(ds.peers[0].host, "host1") == 0);
@@ -537,14 +537,14 @@ static bool test_dedup_peers_parse_whitespace(void) {
     return true;
 }
 
-static bool test_dedup_peers_parse_max(void) {
-    dedup_state_t ds;
+static bool test_ddup_peers_parse_max(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.port = 9876;
 
     char buf[512];
     buf[0] = '\0';
-    for (int i = 0; i < DEDUP_PEERS_MAX + 5; i++) {
+    for (int i = 0; i < DDUP_PEERS_MAX + 5; i++) {
         if (i > 0)
             strcat(buf, ",");
         char h[16];
@@ -552,68 +552,68 @@ static bool test_dedup_peers_parse_max(void) {
         strcat(buf, h);
     }
 
-    dedup_peers_parse(&ds, buf);
-    ASSERT_EQ_INT(ds.peers_count, DEDUP_PEERS_MAX);
+    ddup_peers_parse(&ds, buf);
+    ASSERT_EQ_INT(ds.peers_count, DDUP_PEERS_MAX);
     return true;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
-// dedup_check_and_add
+// ddup_check_and_add
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_check_and_add_new(void) {
-    dedup_state_t ds;
+static bool test_ddup_check_and_add_new(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
     iotdata_mesh_dedup_init(&ring);
     ds.dedup_ring = &ring;
 
-    ASSERT(dedup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(ddup_check_and_add(&ds, 0x0042, 1));
     return true;
 }
 
-static bool test_dedup_check_and_add_duplicate(void) {
-    dedup_state_t ds;
+static bool test_ddup_check_and_add_duplicate(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
     iotdata_mesh_dedup_init(&ring);
     ds.dedup_ring = &ring;
 
-    ASSERT(dedup_check_and_add(&ds, 0x0042, 1));
-    ASSERT(!dedup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(ddup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(!ddup_check_and_add(&ds, 0x0042, 1));
     return true;
 }
 
-static bool test_dedup_check_and_add_different_station(void) {
-    dedup_state_t ds;
+static bool test_ddup_check_and_add_different_station(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
     iotdata_mesh_dedup_init(&ring);
     ds.dedup_ring = &ring;
 
-    ASSERT(dedup_check_and_add(&ds, 0x0042, 1));
-    ASSERT(dedup_check_and_add(&ds, 0x0043, 1)); /* different station, same seq */
+    ASSERT(ddup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(ddup_check_and_add(&ds, 0x0043, 1)); /* different station, same seq */
     return true;
 }
 
-static bool test_dedup_check_and_add_different_seq(void) {
-    dedup_state_t ds;
+static bool test_ddup_check_and_add_different_seq(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
     iotdata_mesh_dedup_init(&ring);
     ds.dedup_ring = &ring;
 
-    ASSERT(dedup_check_and_add(&ds, 0x0042, 1));
-    ASSERT(dedup_check_and_add(&ds, 0x0042, 2)); /* same station, different seq */
+    ASSERT(ddup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(ddup_check_and_add(&ds, 0x0042, 2)); /* same station, different seq */
     return true;
 }
 
-static bool test_dedup_check_and_add_with_pending(void) {
-    dedup_state_t ds;
+static bool test_ddup_check_and_add_with_pending(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = true;
     iotdata_mesh_dedup_ring_t ring;
@@ -621,16 +621,16 @@ static bool test_dedup_check_and_add_with_pending(void) {
     ds.dedup_ring = &ring;
     pthread_mutex_init(&ds.mutex, NULL);
 
-    ASSERT(dedup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(ddup_check_and_add(&ds, 0x0042, 1));
     ASSERT_EQ_INT(ds.pending_count, 1);
     ASSERT_EQ_INT(ds.pending[0].station_id, 0x0042u);
     ASSERT_EQ_INT(ds.pending[0].sequence, 1u);
 
     /* duplicate not added to pending */
-    ASSERT(!dedup_check_and_add(&ds, 0x0042, 1));
+    ASSERT(!ddup_check_and_add(&ds, 0x0042, 1));
     ASSERT_EQ_INT(ds.pending_count, 1);
 
-    ASSERT(dedup_check_and_add(&ds, 0x0043, 2));
+    ASSERT(ddup_check_and_add(&ds, 0x0043, 2));
     ASSERT_EQ_INT(ds.pending_count, 2);
 
     pthread_mutex_destroy(&ds.mutex);
@@ -638,7 +638,7 @@ static bool test_dedup_check_and_add_with_pending(void) {
 }
 
 static bool test_dedup_ring_overflow(void) {
-    dedup_state_t ds;
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
@@ -647,34 +647,34 @@ static bool test_dedup_ring_overflow(void) {
 
     /* fill beyond capacity */
     for (int i = 0; i < IOTDATA_MESH_DEDUP_RING_SIZE + 10; i++)
-        dedup_check_and_add(&ds, (uint16_t)i, 1);
+        ddup_check_and_add(&ds, (uint16_t)i, 1);
 
     /* first entries evicted -- should appear new again */
-    ASSERT(dedup_check_and_add(&ds, 0, 1));
+    ASSERT(ddup_check_and_add(&ds, 0, 1));
 
     /* recent entries still present */
-    ASSERT(!dedup_check_and_add(&ds, (uint16_t)(IOTDATA_MESH_DEDUP_RING_SIZE + 9), 1));
+    ASSERT(!ddup_check_and_add(&ds, (uint16_t)(IOTDATA_MESH_DEDUP_RING_SIZE + 9), 1));
     return true;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
-// dedup_send_collect
+// ddup_send_collect
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_send_collect_empty(void) {
-    dedup_state_t ds;
+static bool test_ddup_send_collect_empty(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     pthread_mutex_init(&ds.mutex, NULL);
 
-    iotdata_mesh_dedup_entry_t entries[DEDUP_PENDING_MAX];
-    ASSERT_EQ_INT(dedup_send_collect(&ds, entries), 0);
+    iotdata_mesh_dedup_entry_t entries[DDUP_PENDING_MAX];
+    ASSERT_EQ_INT(ddup_send_collect(&ds, entries), 0);
 
     pthread_mutex_destroy(&ds.mutex);
     return true;
 }
 
-static bool test_dedup_send_collect_with_delay(void) {
-    dedup_state_t ds;
+static bool test_ddup_send_collect_with_delay(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = true;
     ds.delay_ms = 10;
@@ -683,18 +683,18 @@ static bool test_dedup_send_collect_with_delay(void) {
     ds.dedup_ring = &ring;
     pthread_mutex_init(&ds.mutex, NULL);
 
-    dedup_check_and_add(&ds, 0x0042, 1);
-    dedup_check_and_add(&ds, 0x0043, 2);
+    ddup_check_and_add(&ds, 0x0042, 1);
+    ddup_check_and_add(&ds, 0x0043, 2);
     ASSERT_EQ_INT(ds.pending_count, 2);
 
     /* collect immediately -- delay not elapsed */
-    iotdata_mesh_dedup_entry_t entries[DEDUP_PENDING_MAX];
-    ASSERT_EQ_INT(dedup_send_collect(&ds, entries), 0);
+    iotdata_mesh_dedup_entry_t entries[DDUP_PENDING_MAX];
+    ASSERT_EQ_INT(ddup_send_collect(&ds, entries), 0);
 
     /* wait for delay */
     usleep(15000);
 
-    int count = dedup_send_collect(&ds, entries);
+    int count = ddup_send_collect(&ds, entries);
     ASSERT_EQ_INT(count, 2);
     ASSERT_EQ_INT(entries[0].station_id, 0x0042u);
     ASSERT_EQ_INT(entries[0].sequence, 1u);
@@ -710,47 +710,47 @@ static bool test_dedup_send_collect_with_delay(void) {
 // dedup socket setup/teardown
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_recv_setup_and_teardown(void) {
-    dedup_state_t ds;
+static bool test_ddup_recv_setup_and_teardown(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.port = 19876;
 
-    int fd = dedup_recv_setup(&ds);
+    int fd = ddup_recv_setup(&ds);
     ASSERT(fd >= 0);
     close(fd);
     return true;
 }
 
-static bool test_dedup_send_setup_and_teardown(void) {
-    dedup_state_t ds;
+static bool test_ddup_send_setup_and_teardown(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
 
-    int fd = dedup_send_setup(&ds);
+    int fd = ddup_send_setup(&ds);
     ASSERT(fd >= 0);
     close(fd);
     return true;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
-// dedup_begin disabled
+// ddup_begin disabled
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_begin_disabled(void) {
-    dedup_state_t ds;
+static bool test_ddup_begin_disabled(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
 
-    ASSERT(dedup_begin(&ds, 0x0001, &ring, NULL));
+    ASSERT(ddup_begin(&ds, 0x0001, &ring, NULL));
     return true;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
-// dedup_send_to_peers batching
+// ddup_send_to_peers batching
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_send_to_peers_batching(void) {
-    dedup_state_t ds;
+static bool test_ddup_send_to_peers_batching(void) {
+    ddup_state_t ds;
     memset(&ds, 0, sizeof(ds));
     ds.enabled = true;
     ds.port = 19010;
@@ -759,8 +759,8 @@ static bool test_dedup_send_to_peers_batching(void) {
     iotdata_mesh_dedup_init(&ring);
     ds.dedup_ring = &ring;
 
-    dedup_peers_parse(&ds, "127.0.0.1:19011");
-    dedup_peers_resolve(&ds);
+    ddup_peers_parse(&ds, "127.0.0.1:19011");
+    ddup_peers_resolve(&ds);
     pthread_mutex_init(&ds.mutex, NULL);
 
     /* set up receiving socket */
@@ -775,18 +775,18 @@ static bool test_dedup_send_to_peers_batching(void) {
     bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     ASSERT(bind(recv_fd, (struct sockaddr *)&bind_addr, (socklen_t)sizeof(bind_addr)) == 0);
 
-    /* create entries exceeding DEDUP_BATCH_MAX */
-    int count = DEDUP_BATCH_MAX + 10;
-    iotdata_mesh_dedup_entry_t entries[DEDUP_BATCH_MAX + 10];
+    /* create entries exceeding DDUP_BATCH_MAX */
+    int count = DDUP_BATCH_MAX + 10;
+    iotdata_mesh_dedup_entry_t entries[DDUP_BATCH_MAX + 10];
     for (int i = 0; i < count; i++) {
         entries[i].station_id = (uint16_t)(i + 1);
         entries[i].sequence = (uint16_t)(i * 10);
     }
 
-    int send_fd = dedup_send_setup(&ds);
+    int send_fd = ddup_send_setup(&ds);
     ASSERT(send_fd >= 0);
 
-    dedup_send_to_peers(&ds, send_fd, entries, count);
+    ddup_send_to_peers(&ds, send_fd, entries, count);
 
     /* should have sent 2 batches */
     ASSERT_EQ_INT(ds.stat_send_cycles, 2u);
@@ -794,19 +794,19 @@ static bool test_dedup_send_to_peers_batching(void) {
 
     /* receive and verify first batch */
     struct pollfd pfd = { .fd = recv_fd, .events = POLLIN, .revents = 0 };
-    dedup_packet_t pkt;
+    ddup_packet_t pkt;
 
     ASSERT(poll(&pfd, 1, 100) > 0);
     ssize_t n = recv(recv_fd, pkt, sizeof(pkt), 0);
     ASSERT(n > 0);
-    ASSERT_EQ_INT(dedup_packet_get_gateway_id(pkt), 0x0001u);
-    ASSERT_EQ_INT(dedup_packet_get_entry_count(pkt), DEDUP_BATCH_MAX);
+    ASSERT_EQ_INT(ddup_packet_get_gateway_id(pkt), 0x0001u);
+    ASSERT_EQ_INT(ddup_packet_get_entry_count(pkt), DDUP_BATCH_MAX);
 
     /* second batch */
     ASSERT(poll(&pfd, 1, 100) > 0);
     n = recv(recv_fd, pkt, sizeof(pkt), 0);
     ASSERT(n > 0);
-    ASSERT_EQ_INT(dedup_packet_get_entry_count(pkt), 10);
+    ASSERT_EQ_INT(ddup_packet_get_entry_count(pkt), 10);
 
     close(send_fd);
     close(recv_fd);
@@ -818,11 +818,11 @@ static bool test_dedup_send_to_peers_batching(void) {
 // dedup peer-to-peer communication
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_peer_communication(void) {
+static bool test_ddup_peer_communication(void) {
     volatile bool test_running = true;
 
     /* instance A on port 19001 */
-    dedup_state_t sa;
+    ddup_state_t sa;
     memset(&sa, 0, sizeof(sa));
     sa.enabled = true;
     sa.port = 19001;
@@ -832,13 +832,13 @@ static bool test_dedup_peer_communication(void) {
     iotdata_mesh_dedup_ring_t ring_a;
     iotdata_mesh_dedup_init(&ring_a);
     sa.dedup_ring = &ring_a;
-    dedup_peers_parse(&sa, "127.0.0.1:19002");
-    dedup_peers_resolve(&sa);
+    ddup_peers_parse(&sa, "127.0.0.1:19002");
+    ddup_peers_resolve(&sa);
     ASSERT_EQ_INT(sa.peers_count, 1);
     ASSERT(sa.peers[0].resolved);
 
     /* instance B on port 19002 */
-    dedup_state_t sb;
+    ddup_state_t sb;
     memset(&sb, 0, sizeof(sb));
     sb.enabled = true;
     sb.port = 19002;
@@ -848,8 +848,8 @@ static bool test_dedup_peer_communication(void) {
     iotdata_mesh_dedup_ring_t ring_b;
     iotdata_mesh_dedup_init(&ring_b);
     sb.dedup_ring = &ring_b;
-    dedup_peers_parse(&sb, "127.0.0.1:19001");
-    dedup_peers_resolve(&sb);
+    ddup_peers_parse(&sb, "127.0.0.1:19001");
+    ddup_peers_resolve(&sb);
     ASSERT_EQ_INT(sb.peers_count, 1);
     ASSERT(sb.peers[0].resolved);
 
@@ -858,11 +858,11 @@ static bool test_dedup_peer_communication(void) {
     pthread_mutex_init(&sb.mutex, NULL);
 
     pthread_t ta, tb;
-    ASSERT(pthread_create(&ta, NULL, dedup_thread_func, &sa) == 0);
-    ASSERT(pthread_create(&tb, NULL, dedup_thread_func, &sb) == 0);
+    ASSERT(pthread_create(&ta, NULL, ddup_thread_func, &sa) == 0);
+    ASSERT(pthread_create(&tb, NULL, ddup_thread_func, &sb) == 0);
 
     /* A sees a packet */
-    dedup_check_and_add(&sa, 0x0042, 100);
+    ddup_check_and_add(&sa, 0x0042, 100);
 
     /* wait for propagation */
     usleep(100000);
@@ -888,10 +888,10 @@ static bool test_dedup_peer_communication(void) {
 // dedup bidirectional sync
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_bidirectional_sync(void) {
+static bool test_ddup_bidirectional_sync(void) {
     volatile bool test_running = true;
 
-    dedup_state_t sa;
+    ddup_state_t sa;
     memset(&sa, 0, sizeof(sa));
     sa.enabled = true;
     sa.port = 19003;
@@ -901,10 +901,10 @@ static bool test_dedup_bidirectional_sync(void) {
     iotdata_mesh_dedup_ring_t ring_a;
     iotdata_mesh_dedup_init(&ring_a);
     sa.dedup_ring = &ring_a;
-    dedup_peers_parse(&sa, "127.0.0.1:19004");
-    dedup_peers_resolve(&sa);
+    ddup_peers_parse(&sa, "127.0.0.1:19004");
+    ddup_peers_resolve(&sa);
 
-    dedup_state_t sb;
+    ddup_state_t sb;
     memset(&sb, 0, sizeof(sb));
     sb.enabled = true;
     sb.port = 19004;
@@ -914,19 +914,19 @@ static bool test_dedup_bidirectional_sync(void) {
     iotdata_mesh_dedup_ring_t ring_b;
     iotdata_mesh_dedup_init(&ring_b);
     sb.dedup_ring = &ring_b;
-    dedup_peers_parse(&sb, "127.0.0.1:19003");
-    dedup_peers_resolve(&sb);
+    ddup_peers_parse(&sb, "127.0.0.1:19003");
+    ddup_peers_resolve(&sb);
 
     pthread_mutex_init(&sa.mutex, NULL);
     pthread_mutex_init(&sb.mutex, NULL);
 
     pthread_t ta, tb;
-    ASSERT(pthread_create(&ta, NULL, dedup_thread_func, &sa) == 0);
-    ASSERT(pthread_create(&tb, NULL, dedup_thread_func, &sb) == 0);
+    ASSERT(pthread_create(&ta, NULL, ddup_thread_func, &sa) == 0);
+    ASSERT(pthread_create(&tb, NULL, ddup_thread_func, &sb) == 0);
 
     /* A sees packet X, B sees packet Y */
-    dedup_check_and_add(&sa, 0x0042, 100);
-    dedup_check_and_add(&sb, 0x0043, 200);
+    ddup_check_and_add(&sa, 0x0042, 100);
+    ddup_check_and_add(&sb, 0x0043, 200);
 
     usleep(100000);
 
@@ -956,11 +956,11 @@ static bool test_dedup_bidirectional_sync(void) {
 // dedup three-gateway sync
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static bool test_dedup_three_gateway_sync(void) {
+static bool test_ddup_three_gateway_sync(void) {
     volatile bool test_running = true;
     const uint16_t ports[3] = { 19005, 19006, 19007 };
 
-    dedup_state_t states[3];
+    ddup_state_t states[3];
     iotdata_mesh_dedup_ring_t rings[3];
     pthread_t threads[3];
 
@@ -985,15 +985,15 @@ static bool test_dedup_three_gateway_sync(void) {
             pi += snprintf(peers + pi, sizeof(peers) - (size_t)pi, "127.0.0.1:%d", ports[j]);
         }
         peers[pi] = '\0';
-        dedup_peers_parse(&states[i], peers);
-        dedup_peers_resolve(&states[i]);
+        ddup_peers_parse(&states[i], peers);
+        ddup_peers_resolve(&states[i]);
 
         pthread_mutex_init(&states[i].mutex, NULL);
-        ASSERT(pthread_create(&threads[i], NULL, dedup_thread_func, &states[i]) == 0);
+        ASSERT(pthread_create(&threads[i], NULL, ddup_thread_func, &states[i]) == 0);
     }
 
     /* gateway 0 sees a packet */
-    dedup_check_and_add(&states[0], 0x0042, 500);
+    ddup_check_and_add(&states[0], 0x0042, 500);
 
     usleep(150000);
 
@@ -1042,29 +1042,29 @@ int main(void) {
 
     printf("\n=== Dedup Tests ===\n\n");
 
-    RUN_TEST(dedup_packet_encoding);
-    RUN_TEST(dedup_packet_length);
-    RUN_TEST(dedup_packet_entry_count_clamped);
-    RUN_TEST(dedup_peers_parse_basic);
-    RUN_TEST(dedup_peers_parse_with_ports);
-    RUN_TEST(dedup_peers_parse_empty);
-    RUN_TEST(dedup_peers_parse_whitespace);
-    RUN_TEST(dedup_peers_parse_max);
-    RUN_TEST(dedup_check_and_add_new);
-    RUN_TEST(dedup_check_and_add_duplicate);
-    RUN_TEST(dedup_check_and_add_different_station);
-    RUN_TEST(dedup_check_and_add_different_seq);
-    RUN_TEST(dedup_check_and_add_with_pending);
+    RUN_TEST(ddup_packet_encoding);
+    RUN_TEST(ddup_packet_length);
+    RUN_TEST(ddup_packet_entry_count_clamped);
+    RUN_TEST(ddup_peers_parse_basic);
+    RUN_TEST(ddup_peers_parse_with_ports);
+    RUN_TEST(ddup_peers_parse_empty);
+    RUN_TEST(ddup_peers_parse_whitespace);
+    RUN_TEST(ddup_peers_parse_max);
+    RUN_TEST(ddup_check_and_add_new);
+    RUN_TEST(ddup_check_and_add_duplicate);
+    RUN_TEST(ddup_check_and_add_different_station);
+    RUN_TEST(ddup_check_and_add_different_seq);
+    RUN_TEST(ddup_check_and_add_with_pending);
     RUN_TEST(dedup_ring_overflow);
-    RUN_TEST(dedup_send_collect_empty);
-    RUN_TEST(dedup_send_collect_with_delay);
-    RUN_TEST(dedup_recv_setup_and_teardown);
-    RUN_TEST(dedup_send_setup_and_teardown);
-    RUN_TEST(dedup_begin_disabled);
-    RUN_TEST(dedup_send_to_peers_batching);
-    RUN_TEST(dedup_peer_communication);
-    RUN_TEST(dedup_bidirectional_sync);
-    RUN_TEST(dedup_three_gateway_sync);
+    RUN_TEST(ddup_send_collect_empty);
+    RUN_TEST(ddup_send_collect_with_delay);
+    RUN_TEST(ddup_recv_setup_and_teardown);
+    RUN_TEST(ddup_send_setup_and_teardown);
+    RUN_TEST(ddup_begin_disabled);
+    RUN_TEST(ddup_send_to_peers_batching);
+    RUN_TEST(ddup_peer_communication);
+    RUN_TEST(ddup_bidirectional_sync);
+    RUN_TEST(ddup_three_gateway_sync);
 
     printf("\n=== Results ===\n\n");
     printf("  Total: %d, Passed: %d, Failed: %d\n\n", tests_run, tests_passed, tests_run - tests_passed);

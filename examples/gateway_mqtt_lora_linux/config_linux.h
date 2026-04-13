@@ -126,6 +126,13 @@ typedef struct {
 
 void config_help(const char *program, const struct option *options_long, const config_option_help_t *help, int help_count) {
     printf("Usage: %s [OPTIONS]\n\nOptions:\n", program);
+    size_t name_width = 0;
+    for (int i = 0; options_long[i].name != NULL; i++) {
+        const size_t len = strlen(options_long[i].name);
+        if (len > name_width)
+            name_width = len;
+    }
+    name_width += 2;
     for (int i = 0; options_long[i].name != NULL; i++) {
         const char *desc = "";
         for (int j = 0; j < help_count; j++)
@@ -133,7 +140,7 @@ void config_help(const char *program, const struct option *options_long, const c
                 desc = help[j].description;
                 break;
             }
-        printf("  --%-28s %s\n", options_long[i].name, desc);
+        printf("  --%-*s %s\n", (int)name_width, options_long[i].name, desc);
     }
 }
 

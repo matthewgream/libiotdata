@@ -40,7 +40,7 @@ LIBS=-lcjson -lmosquitto -lm -lpthread
 TARGET=iotdata_gateway
 MAIN=iotdata_gateway.c
 SOURCES=\
-    iotdata_gateway_dedup.h iotdata_gateway_mesh.h iotdata_gateway_stats.h iotdata_gateway_process.h \
+    iotdata_gateway_ddup.h iotdata_gateway_mesh.h iotdata_gateway_stat.h iotdata_gateway_exec.h \
     config_linux.h serial_linux.h mqtt_linux.h \
     $(DIR_E22XXXTXX)/e22xxxtxx.h \
     $(DIR_IOTDATA_VARIANT)/iotdata_mesh.h \
@@ -54,7 +54,7 @@ TEST_MAIN=iotdata_gateway_test.c
 TEST_CFLAGS=$(CFLAGS_COMMON) $(CFLAGS_STRICT) $(CFLAGS_OPT) -I$(DIR_IOTDATA_VARIANT)
 TEST_LIBS=-lpthread
 TEST_SOURCES=\
-    iotdata_gateway_dedup.h iotdata_gateway_mesh.h \
+    iotdata_gateway_ddup.h iotdata_gateway_mesh.h \
     $(DIR_IOTDATA_VARIANT)/iotdata_mesh.h
 
 ##

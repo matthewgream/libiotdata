@@ -164,9 +164,9 @@ void __sleep_ms(const uint32_t ms) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 #include "iotdata_gateway_mesh.h"
-#include "iotdata_gateway_dedup.h"
-#include "iotdata_gateway_stats.h"
-#include "iotdata_gateway_process.h"
+#include "iotdata_gateway_ddup.h"
+#include "iotdata_gateway_stat.h"
+#include "iotdata_gateway_exec.h"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -185,7 +185,7 @@ void __sleep_ms(const uint32_t ms) {
 #define MQTT_RECONNECT_DELAY_DEFAULT     5
 #define MQTT_RECONNECT_DELAY_MAX_DEFAULT 60
 
-#define STATS_INTERVAL_DEFAULT           (5 * 60)
+#define STAT_INTERVAL_DEFAULT            (5 * 60)
 #define INTERVAL_RSSI_DEFAULT            (1 * 60)
 #define INTERVAL_BEACON_DEFAULT          60 /* seconds */
 
@@ -196,40 +196,49 @@ void __sleep_ms(const uint32_t ms) {
 // clang-format off
 const struct option config_options [] = {
     {"help",                            no_argument,       0, 'h'},
-    {"config",                          required_argument, 0, 0},
-    {"port",                            required_argument, 0, 0},
-    {"rate",                            required_argument, 0, 0},
-    {"bits",                            required_argument, 0, 0},
-    {"address",                         required_argument, 0, 0},
-    {"network",                         required_argument, 0, 0},
-    {"channel",                         required_argument, 0, 0},
-    {"packet-size",                     required_argument, 0, 0},
-    {"packet-rate",                     required_argument, 0, 0},
-    {"rssi-channel",                    required_argument, 0, 0},
-    {"rssi-packet",                     required_argument, 0, 0},
-    {"listen-before-transmit",          required_argument, 0, 0},
-    {"read-timeout-command",            required_argument, 0, 0},
-    {"read-timeout-packet",             required_argument, 0, 0},
-    {"interval-rssi",                   required_argument, 0, 0},
-    {"debug-e22",                       required_argument, 0, 0},
+    {"config",                          required_argument, 0, 'c'},
+    //
+    {"lora-serial-port",                required_argument, 0, 0},
+    {"lora-serial-rate",                required_argument, 0, 0},
+    {"lora-serial-bits",                required_argument, 0, 0},
+    {"lora-address",                    required_argument, 0, 0},
+    {"lora-network",                    required_argument, 0, 0},
+    {"lora-channel",                    required_argument, 0, 0},
+    {"lora-crypt",                      required_argument, 0, 0},
+    {"lora-packet-size",                required_argument, 0, 0},
+    {"lora-packet-rate",                required_argument, 0, 0},
+    {"lora-transmit-power",             required_argument, 0, 0},
+    {"lora-transmission-method",        required_argument, 0, 0},
+    {"lora-rssi-channel",               required_argument, 0, 0},
+    {"lora-rssi-packet",                required_argument, 0, 0},
+    {"lora-listen-before-transmit",     required_argument, 0, 0},
+    {"lora-read-timeout-command",       required_argument, 0, 0},
+    {"lora-read-timeout-packet",        required_argument, 0, 0},
+    {"lora-debug",                      required_argument, 0, 0},
+    //
     {"mqtt-client",                     required_argument, 0, 0},
     {"mqtt-server",                     required_argument, 0, 0},
     {"mqtt-topic-prefix",               required_argument, 0, 0},
     {"mqtt-tls-insecure",               required_argument, 0, 0},
     {"mqtt-reconnect-delay",            required_argument, 0, 0},
     {"mqtt-reconnect-delay-max",        required_argument, 0, 0},
+    {"mqtt-debug",                      required_argument, 0, 0},
+    //
     {"mesh-enable",                     required_argument, 0, 0},
     {"mesh-station-id",                 required_argument, 0, 0},
     {"mesh-beacon-interval",            required_argument, 0, 0},
-    {"debug-mesh",                      required_argument, 0, 0},
-    {"dedup-enable",                    required_argument, 0, 0},
-    {"dedup-port",                      required_argument, 0, 0},
-    {"dedup-peers",                     required_argument, 0, 0},
-    {"dedup-delay",                     required_argument, 0, 0},
-    {"debug-dedup",                     required_argument, 0, 0},
-    {"stats-display-interval",          required_argument, 0, 0},
-    {"stats-publish-interval",          required_argument, 0, 0},
-    {"stats-mqtt-topic",                required_argument, 0, 0},
+    {"mesh-debug",                      required_argument, 0, 0},
+    //
+    {"ddup-enable",                     required_argument, 0, 0},
+    {"ddup-port",                       required_argument, 0, 0},
+    {"ddup-peers",                      required_argument, 0, 0},
+    {"ddup-delay",                      required_argument, 0, 0},
+    {"ddup-debug",                      required_argument, 0, 0},
+    //
+    {"stat-display-interval",           required_argument, 0, 0},
+    {"stat-publish-interval",           required_argument, 0, 0},
+    {"stat-publish-mqtt-topic-prefix",  required_argument, 0, 0},
+    //
     {"debug",                           required_argument, 0, 0},
     {"debug-data",                      required_argument, 0, 0},
     {0, 0, 0, 0}
@@ -237,82 +246,88 @@ const struct option config_options [] = {
 
 const config_option_help_t config_options_help [] = {
     {"help",                            "Display this help message and exit"},
-    {"config",                          "Configuration file path (default: " CONFIG_FILE_DEFAULT ")"},
-    {"port",                            "Serial port device (default: " SERIAL_PORT_DEFAULT ")"},
-    {"rate",                            "Serial baud rate (default: 9600)"},
-    {"bits",                            "Serial data bits (default: 8N1)"},
-    {"address",                         "E22 module address (hex)"},
-    {"network",                         "E22 network ID (hex)"},
-    {"channel",                         "E22 radio channel"},
-    {"packet-size",                     "E22 packet size"},
-    {"packet-rate",                     "E22 packet rate"},
-    {"rssi-channel",                    "Enable channel RSSI capture (true/false)"},
-    {"rssi-packet",                     "Enable packet RSSI capture (true/false)"},
-    {"listen-before-transmit",          "Enable listen-before-transmit mode (true/false)"},
-    {"read-timeout-command",            "E22 command read timeout in ms"},
-    {"read-timeout-packet",             "E22 packet read timeout in ms"},
-    {"interval-rssi",                   "RSSI polling interval in seconds"},
-    {"debug-e22",                       "Enable E22 module debug output (true/false)"},
-    {"mqtt-client",                     "MQTT client ID (default: " MQTT_CLIENT_DEFAULT ")"},
-    {"mqtt-server",                     "MQTT server URL (default: " MQTT_SERVER_DEFAULT ")"},
-    {"mqtt-topic-prefix",               "MQTT topic prefix (default: " MQTT_TOPIC_PREFIX_DEFAULT ")"},
-    {"mqtt-tls-insecure",               "Disable MQTT TLS verification (true/false)"},
-    {"mqtt-reconnect-delay",            "MQTT reconnect delay in seconds"},
-    {"mqtt-reconnect-delay-max",        "MQTT max reconnect delay in seconds"},
-    {"mesh-enable",                     "Enable mesh network support (true/false)"},
-    {"mesh-station-id",                 "This gateway's mesh station ID"},
-    {"mesh-beacon-interval",            "Mesh beacon transmission interval in seconds"},
-    {"debug-mesh",                      "Enable mesh debug output (true/false)"},
-    {"dedup-enable",                    "Enable cross-gateway deduplication (true/false)"},
-    {"dedup-port",                      "UDP port for dedup peer communication"},
-    {"dedup-peers",                     "Comma-separated list of dedup peers (host:port)"},
-    {"dedup-delay",                     "Dedup batch send delay in ms"},
-    {"debug-dedup",                     "Enable dedup debug output (true/false)"},
-    {"stats-display-interval",          "Stats stdout display interval in seconds (0 disables)"},
-    {"stats-publish-interval",          "Stats MQTT publish interval in seconds (0 disables)"},
-    {"stats-mqtt-topic",                "MQTT stats topic prefix (default: iotdata/stats)"},
-    {"debug",                           "Enable general debug output (true/false)"},
-    {"crypt",                           "E22 encryption key (default: 0x0000)"},
-    {"transmit-power",                  "E22 transmit power level 0-3 (default: 0)"},
-    {"transmission-method",             "E22 transmission method 0=transparent, 1=fixed-point (default: 0)"},
-    {"debug-data",                      "Enable hex dump of received packet data (true/false)"},
+    {"config",                          "Config file path (default: '" CONFIG_FILE_DEFAULT "')"},
+    //
+    {"lora-serial-port",                "Lora E22 serial port device (default: '" SERIAL_PORT_DEFAULT "')"},
+    {"lora-serial-rate",                "Lora E22 serial baud rate (default: 9600)"},
+    {"lora-serial-bits",                "Lora E22 serial data bits (default: 8N1)"},
+    {"lora-address",                    "Lora E22 module address (hex) (default: 0x0000)"},
+    {"lora-network",                    "Lora E22 network ID (hex) (default: 0x00)"},
+    {"lora-channel",                    "Lora E22 radio channel (default: 0)"},
+    {"lora-crypt",                      "Lora E22 encryption key (default: 0x0000)"},
+    {"lora-packet-size",                "Lora E22 packet size (default: 0)"},
+    {"lora-packet-rate",                "Lora E22 packet rate (default: 0)"},
+    {"lora-transmit-power",             "Lora E22 transmit power level 0-3 (default: 0)"},
+    {"lora-transmission-method",        "Lora E22 transmission method 0=transparent, 1=fixed-point (default: 0)"},
+    {"lora-rssi-channel",               "Lora E22 enable channel RSSI capture in seconds (default: 60; 0 disables)"},
+    {"lora-rssi-packet",                "Lora E22 enable packet RSSI capture (default: true)"},
+    {"lora-listen-before-transmit",     "Lora E22 enable listen-before-transmit mode (default: true)"},
+    {"lora-read-timeout-command",       "Lora E22 command read timeout in milliseconds (default: 1000)"},
+    {"lora-read-timeout-packet",        "Lora E22 packet read timeout in milliseconds (default: 5000)"},
+    {"lora-debug",                      "Lora E22 debug output (true/false)"},
+    //
+    {"mqtt-client",                     "MQTT client ID (default: '" MQTT_CLIENT_DEFAULT "')"},
+    {"mqtt-server",                     "MQTT server URL (default: '" MQTT_SERVER_DEFAULT "')"},
+    {"mqtt-topic-prefix",               "MQTT topic prefix (default: '" MQTT_TOPIC_PREFIX_DEFAULT "')"},
+    {"mqtt-tls-insecure",               "MQTT disable TLS verification (default: false)"},
+    {"mqtt-reconnect-delay",            "MQTT reconnect delay in seconds (default: 5)"},
+    {"mqtt-reconnect-delay-max",        "MQTT max reconnect delay in seconds (default: 60)"},
+    {"mqtt-debug",                      "MQTT debug output (true/false)"},
+    //
+    {"mesh-enable",                     "Mesh enable (iotdata networking) (default: false)"},
+    {"mesh-station-id",                 "Mesh gateway (station) ID (default: 1)"},
+    {"mesh-beacon-interval",            "Mesh beacon transmission interval in seconds (default: 60)"},
+    {"mesh-debug",                      "Mesh debug output (true/false)"},
+    //
+    {"ddup-enable",                     "Ddup enable (cross-gateway deduplication) (default: false)"},
+    {"ddup-port",                       "Ddup UDP port for peer communication (default: 9876)"},
+    {"ddup-peers",                      "Ddup peers comma-separated list (host:port)"},
+    {"ddup-delay",                      "Ddup batch send delay in milliseconds (default: 20)"},
+    {"ddup-debug",                      "Ddup debug output (true/false)"},
+    //
+    {"stat-display-interval",           "Stat display stdout interval in seconds (default: 300; 0 disables)"},
+    {"stat-publish-interval",           "Stat publish MQTT interval in seconds (default: 300; 0 disables)"},
+    {"stat-publish-mqtt-topic-prefix",  "Stat publish MQTT topic prefix (default: 'iotdata/stats')"},
+    //
+    {"debug",                           "Debug output (true/false)"},
+    {"debug-data",                      "Debug data (hex dump of received packet data) output (true/false)"},
 };
 // clang-format on
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void e22_serial_config_populate(serial_config_t *cfg) {
+void lora_serial_config_populate(serial_config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
 
-    cfg->port = config_get_string("port", SERIAL_PORT_DEFAULT);
-    cfg->rate = config_get_integer("rate", SERIAL_RATE_DEFAULT);
-    cfg->bits = config_get_bits("bits", SERIAL_BITS_DEFAULT);
+    cfg->port = config_get_string("lora-serial-port", SERIAL_PORT_DEFAULT);
+    cfg->rate = config_get_integer("lora-serial-rate", SERIAL_RATE_DEFAULT);
+    cfg->bits = config_get_bits("lora-serial-bits", SERIAL_BITS_DEFAULT);
 
-    printf("config: e22-serial: port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
+    printf("config: lora-serial: port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
 }
 
-void e22_device_config_populate(e22900t22_config_t *cfg) {
+void lora_device_config_populate(e22900t22_config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
 
-    cfg->address = (uint16_t)config_get_integer("address", E22900T22_CONFIG_ADDRESS_DEFAULT);
-    cfg->network = (uint8_t)config_get_integer("network", E22900T22_CONFIG_NETWORK_DEFAULT);
-    cfg->channel = (uint8_t)config_get_integer("channel", E22900T22_CONFIG_CHANNEL_DEFAULT);
-    cfg->crypt = (uint16_t)config_get_integer("crypt", E22900T22_CONFIG_CRYPT_DEFAULT);
-    cfg->packet_size = (uint8_t)config_get_integer("packet-size", E22900T22_CONFIG_PACKET_SIZE_DEFAULT);          // index
-    cfg->packet_rate = (uint8_t)config_get_integer("packet-rate", E22900T22_CONFIG_PACKET_RATE_DEFAULT);          // index
-    cfg->transmit_power = (uint8_t)config_get_integer("transmit-power", E22900T22_CONFIG_TRANSMIT_POWER_DEFAULT); // index
-    cfg->transmission_method = (uint8_t)config_get_integer("transmission-method", E22900T22_CONFIG_TRANSMISSION_METHOD_DEFAULT);
+    cfg->address = (uint16_t)config_get_integer("lora-address", E22900T22_CONFIG_ADDRESS_DEFAULT);
+    cfg->network = (uint8_t)config_get_integer("lora-network", E22900T22_CONFIG_NETWORK_DEFAULT);
+    cfg->channel = (uint8_t)config_get_integer("lora-channel", E22900T22_CONFIG_CHANNEL_DEFAULT);
+    cfg->crypt = (uint16_t)config_get_integer("lora-crypt", E22900T22_CONFIG_CRYPT_DEFAULT);
+    cfg->packet_size = (uint8_t)config_get_integer("lora-packet-size", E22900T22_CONFIG_PACKET_SIZE_DEFAULT);          // index
+    cfg->packet_rate = (uint8_t)config_get_integer("lora-packet-rate", E22900T22_CONFIG_PACKET_RATE_DEFAULT);          // index
+    cfg->transmit_power = (uint8_t)config_get_integer("lora-transmit-power", E22900T22_CONFIG_TRANSMIT_POWER_DEFAULT); // index
+    cfg->transmission_method = (uint8_t)config_get_integer("lora-transmission-method", E22900T22_CONFIG_TRANSMISSION_METHOD_DEFAULT);
     cfg->relay_enabled = E22900T22_CONFIG_RELAY_ENABLED_DEFAULT;
-    cfg->listen_before_transmit = config_get_bool("listen-before-transmit", E22900T22_CONFIG_LISTEN_BEFORE_TRANSMIT);
-    cfg->rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
-    cfg->rssi_packet = config_get_bool("rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT);
-    cfg->read_timeout_command = (uint32_t)config_get_integer("read-timeout-command", E22900T22_CONFIG_READ_TIMEOUT_COMMAND_DEFAULT);
-    cfg->read_timeout_packet = (uint32_t)config_get_integer("read-timeout-packet", E22900T22_CONFIG_READ_TIMEOUT_PACKET_DEFAULT);
-    cfg->debug = config_get_bool("debug-e22", false);
+    cfg->listen_before_transmit = config_get_bool("lora-listen-before-transmit", E22900T22_CONFIG_LISTEN_BEFORE_TRANSMIT);
+    cfg->rssi_channel = config_get_integer("lora-rssi-channel", 1) > 0;                           // XXX
+    cfg->rssi_packet = config_get_bool("lora-rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT); // XXX
+    cfg->read_timeout_command = (uint32_t)config_get_integer("lora-read-timeout-command", E22900T22_CONFIG_READ_TIMEOUT_COMMAND_DEFAULT);
+    cfg->read_timeout_packet = (uint32_t)config_get_integer("lora-read-timeout-packet", E22900T22_CONFIG_READ_TIMEOUT_PACKET_DEFAULT);
+    cfg->debug = config_get_bool("lora-debug", false);
     e22_debug = cfg->debug;
 
-    printf("config: e22-device: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
+    printf("config: lora-device: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
            ", read-timeout-packet=%" PRIu32 ", crypt=0x%04" PRIX16 ", transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, debug=%s\n",
            cfg->address, cfg->network, cfg->channel, cfg->packet_size, cfg->packet_rate, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command,
            cfg->read_timeout_packet, cfg->crypt, cfg->transmit_power, cfg->transmission_method == E22900T22_CONFIG_TRANSMISSION_METHOD_TRANSPARENT ? "transparent" : "fixed-point", cfg->relay_enabled ? "on" : "off",
@@ -330,6 +345,7 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
     cfg->use_synchronous = MQTT_SYNCHRONOUS_DEFAULT;
     cfg->reconnect_delay = (unsigned int)config_get_integer("mqtt-reconnect-delay", MQTT_RECONNECT_DELAY_DEFAULT);
     cfg->reconnect_delay_max = (unsigned int)config_get_integer("mqtt-reconnect-delay-max", MQTT_RECONNECT_DELAY_MAX_DEFAULT);
+    // cfg->debug = config_get_bool("mqtt-debug", false);
 
     printf("config: mqtt: client=%s, server=%s, tls-insecure=%s, synchronous=%s, reconnect-delay=%d, reconnect-delay-max=%d\n", cfg->client, cfg->server, cfg->tls_insecure ? "on" : "off", cfg->use_synchronous ? "on" : "off",
            cfg->reconnect_delay, cfg->reconnect_delay_max);
@@ -337,34 +353,34 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void iotdata_dedup_config_populate(dedup_state_t *state) {
-    memset(state, 0, sizeof(*state));
-
-    state->enabled = config_get_bool("dedup-enable", false);
-    state->port = (uint16_t)config_get_integer("dedup-port", DEDUP_PORT_DEFAULT);
-    state->delay_ms = (uint32_t)config_get_integer("dedup-delay", DEDUP_DELAY_MS_DEFAULT);
-    const char *peers = config_get_string("dedup-peers", "");
-    dedup_peers_parse(state, peers);
-    state->debug = config_get_bool("debug-dedup", false);
-
-    printf("config: dedup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", state->enabled ? 'y' : 'n', state->port, peers, state->delay_ms, state->debug ? "on" : "off");
-}
-
 void iotdata_mesh_config_populate(mesh_state_t *state) {
     memset(state, 0, sizeof(*state));
 
     state->enabled = config_get_bool("mesh-enable", false);
     state->station_id = (uint16_t)config_get_integer("mesh-station-id", GATEWAY_STATION_ID_DEFAULT);
     state->beacon_interval = (time_t)config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
-    state->debug = config_get_bool("debug-mesh", false);
+    state->debug = config_get_bool("mesh-debug", false);
 
     printf("config: mesh: enabled=%c, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", state->enabled ? 'y' : 'n', state->station_id, (uint32_t)state->beacon_interval, state->debug ? "on" : "off");
 }
 
-void stats_config_populate(stats_state_t *state) {
+void iotdata_ddup_config_populate(ddup_state_t *state) {
     memset(state, 0, sizeof(*state));
 
-    const char *topic = config_get_string("stats-mqtt-topic", STATS_MQTT_TOPIC_DEFAULT);
+    state->enabled = config_get_bool("ddup-enable", false);
+    state->port = (uint16_t)config_get_integer("ddup-port", DDUP_PORT_DEFAULT);
+    state->delay_ms = (uint32_t)config_get_integer("ddup-delay", DDUP_DELAY_MS_DEFAULT);
+    const char *peers = config_get_string("ddup-peers", "");
+    ddup_peers_parse(state, peers);
+    state->debug = config_get_bool("ddup-debug", false);
+
+    printf("config: ddup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", state->enabled ? 'y' : 'n', state->port, peers, state->delay_ms, state->debug ? "on" : "off");
+}
+
+void stat_config_populate(stat_state_t *state) {
+    memset(state, 0, sizeof(*state));
+
+    const char *topic = config_get_string("stat-publish-mqtt-topic-prefix", STAT_MQTT_TOPIC_DEFAULT);
     strncpy(state->mqtt_topic, topic, sizeof(state->mqtt_topic) - 1);
     state->mqtt_topic[sizeof(state->mqtt_topic) - 1] = '\0';
     size_t len = strlen(state->mqtt_topic);
@@ -378,11 +394,11 @@ void process_config_populate(process_state_t *state) {
     memset(state, 0, sizeof(*state));
 
     state->mqtt_topic_prefix = config_get_string("mqtt-topic-prefix", MQTT_TOPIC_PREFIX_DEFAULT);
-    state->capture_rssi_channel = config_get_bool("rssi-channel", E22900T22_CONFIG_RSSI_CHANNEL_DEFAULT);
-    state->capture_rssi_packet = config_get_bool("rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT);
-    state->interval_rssi = config_get_integer("interval-rssi", INTERVAL_RSSI_DEFAULT);
-    state->stats_display_interval = config_get_integer("stats-display-interval", STATS_INTERVAL_DEFAULT);
-    state->stats_publish_interval = config_get_integer("stats-publish-interval", STATS_INTERVAL_DEFAULT);
+    state->interval_rssi_channel = config_get_integer("lora-rssi-channel", INTERVAL_RSSI_DEFAULT);          // XXX
+    state->capture_rssi_channel = (state->interval_rssi_channel > 0);                                       // XXX
+    state->capture_rssi_packet = config_get_bool("lora-rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT); // XXX
+    state->stat_display_interval = config_get_integer("stat-display-interval", STAT_INTERVAL_DEFAULT);
+    state->stat_publish_interval = config_get_integer("stat-publish-interval", STAT_INTERVAL_DEFAULT);
     state->debug = config_get_bool("debug", false);
     state->debug_data = config_get_bool("debug-data", false);
 }
@@ -391,12 +407,12 @@ void process_config_populate(process_state_t *state) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 typedef struct {
-    serial_config_t e22_serial_config;
-    e22900t22_config_t e22_device_config;
+    serial_config_t lora_serial_config;
+    e22900t22_config_t lora_device_config;
     mqtt_config_t mqtt_config;
     mesh_state_t mesh_state;
-    dedup_state_t dedup_state;
-    stats_state_t stats_state;
+    ddup_state_t ddup_state;
+    stat_state_t stat_state;
     process_state_t process_state;
     volatile bool running;
 } system_t;
@@ -416,12 +432,12 @@ bool system_config(system_t *state, const int argc, char *argv[]) {
     if (!config_load(CONFIG_FILE_DEFAULT, argc, argv, config_options))
         return false;
 
-    e22_serial_config_populate(&state->e22_serial_config);
-    e22_device_config_populate(&state->e22_device_config);
+    lora_serial_config_populate(&state->lora_serial_config);
+    lora_device_config_populate(&state->lora_device_config);
     mqtt_config_populate(&state->mqtt_config);
     iotdata_mesh_config_populate(&state->mesh_state);
-    iotdata_dedup_config_populate(&state->dedup_state);
-    stats_config_populate(&state->stats_state);
+    iotdata_ddup_config_populate(&state->ddup_state);
+    stat_config_populate(&state->stat_state);
     process_config_populate(&state->process_state);
 
     state->running = false;
@@ -455,15 +471,15 @@ int main(int argc, char *argv[]) {
         goto end_all;
 
     // DEVICE
-    if (!serial_begin(&state->e22_serial_config) || !serial_connect()) {
-        fprintf(stderr, "serial: connect failure (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
+    if (!serial_begin(&state->lora_serial_config) || !serial_connect()) {
+        fprintf(stderr, "device: serial connect failure (port=%s, rate=%d, bits=%s)\n", state->lora_serial_config.port, state->lora_serial_config.rate, serial_bits_str(state->lora_serial_config.bits));
         goto end_all;
     }
-    if (!device_connect(E22900T22_MODULE_USB, &state->e22_device_config)) {
-        fprintf(stderr, "device: connect failure (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
+    if (!device_connect(E22900T22_MODULE_USB, &state->lora_device_config)) {
+        fprintf(stderr, "device: module connect failure (port=%s, rate=%d, bits=%s)\n", state->lora_serial_config.port, state->lora_serial_config.rate, serial_bits_str(state->lora_serial_config.bits));
         goto end_serial;
     }
-    printf("device: connect success (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
+    printf("device: connect success (port=%s, rate=%d, bits=%s)\n", state->lora_serial_config.port, state->lora_serial_config.rate, serial_bits_str(state->lora_serial_config.bits));
     if (!(device_mode_config() && device_info_read() && device_config_read_and_update() && device_mode_transfer()))
         goto end_device;
 
@@ -474,17 +490,17 @@ int main(int argc, char *argv[]) {
     state->running = true;
 
     // IOTDATA
-    if (!mesh_begin(&state->mesh_state, device_packet_write, dedup_check_and_add_handler, (void *)state))
+    if (!mesh_begin(&state->mesh_state, device_packet_write, ddup_check_and_add_handler, (void *)state))
         goto end_mqtt;
-    if (!dedup_begin(&state->dedup_state, state->mesh_state.station_id, &state->mesh_state.dedup_ring, &state->running))
+    if (!ddup_begin(&state->ddup_state, state->mesh_state.station_id, &state->mesh_state.dedup_ring, &state->running))
         goto end_mesh;
 
     // PROCESS
-    stats_begin(&state->stats_state, state->mesh_state.station_id, &state->e22_device_config);
-    ret = process_run(&state->process_state, &state->mesh_state, &state->dedup_state, &state->stats_state, &state->running) ? EXIT_SUCCESS : EXIT_FAILURE;
-    stats_end(&state->stats_state);
+    stat_begin(&state->stat_state, state->mesh_state.station_id, &state->lora_device_config);
+    ret = process_run(&state->process_state, &state->mesh_state, &state->ddup_state, &state->stat_state, &state->running) ? EXIT_SUCCESS : EXIT_FAILURE;
+    stat_end(&state->stat_state);
 
-    dedup_end(&state->dedup_state);
+    ddup_end(&state->ddup_state);
 end_mesh:
     mesh_end(&state->mesh_state);
 end_mqtt:
