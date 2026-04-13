@@ -21,6 +21,7 @@ typedef struct {
     bool tls_insecure;
     unsigned int reconnect_delay;
     unsigned int reconnect_delay_max;
+    bool debug;
 } mqtt_config_t;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------

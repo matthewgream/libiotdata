@@ -304,7 +304,7 @@ void lora_serial_config_populate(serial_config_t *cfg) {
     cfg->rate = config_get_integer("lora-serial-rate", SERIAL_RATE_DEFAULT);
     cfg->bits = config_get_bits("lora-serial-bits", SERIAL_BITS_DEFAULT);
 
-    printf("config: lora-serial: port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
+    printf("config: lora: serial - port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
 }
 
 void lora_device_config_populate(e22900t22_config_t *cfg) {
@@ -327,7 +327,7 @@ void lora_device_config_populate(e22900t22_config_t *cfg) {
     cfg->debug = config_get_bool("lora-debug", false);
     e22_debug = cfg->debug;
 
-    printf("config: lora-device: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
+    printf("config: lora: device - address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
            ", read-timeout-packet=%" PRIu32 ", crypt=0x%04" PRIX16 ", transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, debug=%s\n",
            cfg->address, cfg->network, cfg->channel, cfg->packet_size, cfg->packet_rate, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command,
            cfg->read_timeout_packet, cfg->crypt, cfg->transmit_power, cfg->transmission_method == E22900T22_CONFIG_TRANSMISSION_METHOD_TRANSPARENT ? "transparent" : "fixed-point", cfg->relay_enabled ? "on" : "off",
@@ -345,7 +345,7 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
     cfg->use_synchronous = MQTT_SYNCHRONOUS_DEFAULT;
     cfg->reconnect_delay = (unsigned int)config_get_integer("mqtt-reconnect-delay", MQTT_RECONNECT_DELAY_DEFAULT);
     cfg->reconnect_delay_max = (unsigned int)config_get_integer("mqtt-reconnect-delay-max", MQTT_RECONNECT_DELAY_MAX_DEFAULT);
-    // cfg->debug = config_get_bool("mqtt-debug", false);
+    cfg->debug = config_get_bool("mqtt-debug", false);
 
     printf("config: mqtt: client=%s, server=%s, tls-insecure=%s, synchronous=%s, reconnect-delay=%d, reconnect-delay-max=%d\n", cfg->client, cfg->server, cfg->tls_insecure ? "on" : "off", cfg->use_synchronous ? "on" : "off",
            cfg->reconnect_delay, cfg->reconnect_delay_max);
@@ -353,54 +353,54 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void iotdata_mesh_config_populate(mesh_state_t *state) {
-    memset(state, 0, sizeof(*state));
+void iotdata_mesh_config_populate(mesh_state_t *cfg) {
+    memset(cfg, 0, sizeof(*cfg));
 
-    state->enabled = config_get_bool("mesh-enable", false);
-    state->station_id = (uint16_t)config_get_integer("mesh-station-id", GATEWAY_STATION_ID_DEFAULT);
-    state->beacon_interval = (time_t)config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
-    state->debug = config_get_bool("mesh-debug", false);
+    cfg->enabled = config_get_bool("mesh-enable", false);
+    cfg->station_id = (uint16_t)config_get_integer("mesh-station-id", GATEWAY_STATION_ID_DEFAULT);
+    cfg->beacon_interval = (time_t)config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
+    cfg->debug = config_get_bool("mesh-debug", false);
 
-    printf("config: mesh: enabled=%c, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", state->enabled ? 'y' : 'n', state->station_id, (uint32_t)state->beacon_interval, state->debug ? "on" : "off");
+    printf("config: mesh: enabled=%c, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", cfg->enabled ? 'y' : 'n', cfg->station_id, (uint32_t)cfg->beacon_interval, cfg->debug ? "on" : "off");
 }
 
-void iotdata_ddup_config_populate(ddup_state_t *state) {
-    memset(state, 0, sizeof(*state));
+void iotdata_ddup_config_populate(ddup_state_t *cfg) {
+    memset(cfg, 0, sizeof(*cfg));
 
-    state->enabled = config_get_bool("ddup-enable", false);
-    state->port = (uint16_t)config_get_integer("ddup-port", DDUP_PORT_DEFAULT);
-    state->delay_ms = (uint32_t)config_get_integer("ddup-delay", DDUP_DELAY_MS_DEFAULT);
+    cfg->enabled = config_get_bool("ddup-enable", false);
+    cfg->port = (uint16_t)config_get_integer("ddup-port", DDUP_PORT_DEFAULT);
+    cfg->delay_ms = (uint32_t)config_get_integer("ddup-delay", DDUP_DELAY_MS_DEFAULT);
     const char *peers = config_get_string("ddup-peers", "");
-    ddup_peers_parse(state, peers);
-    state->debug = config_get_bool("ddup-debug", false);
+    ddup_peers_parse(cfg, peers);
+    cfg->debug = config_get_bool("ddup-debug", false);
 
-    printf("config: ddup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", state->enabled ? 'y' : 'n', state->port, peers, state->delay_ms, state->debug ? "on" : "off");
+    printf("config: ddup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", cfg->enabled ? 'y' : 'n', cfg->port, peers, cfg->delay_ms, cfg->debug ? "on" : "off");
 }
 
-void stat_config_populate(stat_state_t *state) {
-    memset(state, 0, sizeof(*state));
+void stat_config_populate(stat_state_t *cfg) {
+    memset(cfg, 0, sizeof(*cfg));
 
     const char *topic = config_get_string("stat-publish-mqtt-topic-prefix", STAT_MQTT_TOPIC_DEFAULT);
-    strncpy(state->mqtt_topic, topic, sizeof(state->mqtt_topic) - 1);
-    state->mqtt_topic[sizeof(state->mqtt_topic) - 1] = '\0';
-    size_t len = strlen(state->mqtt_topic);
-    if (len > 0 && state->mqtt_topic[len - 1] == '/')
-        state->mqtt_topic[len - 1] = '\0';
+    strncpy(cfg->mqtt_topic, topic, sizeof(cfg->mqtt_topic) - 1);
+    cfg->mqtt_topic[sizeof(cfg->mqtt_topic) - 1] = '\0';
+    size_t len = strlen(cfg->mqtt_topic);
+    if (len > 0 && cfg->mqtt_topic[len - 1] == '/')
+        cfg->mqtt_topic[len - 1] = '\0';
 
-    printf("config: stats: mqtt-topic=%s\n", state->mqtt_topic);
+    printf("config: stat: mqtt-topic=%s\n", cfg->mqtt_topic);
 }
 
-void process_config_populate(process_state_t *state) {
-    memset(state, 0, sizeof(*state));
+void process_config_populate(process_state_t *cfg) {
+    memset(cfg, 0, sizeof(*cfg));
 
-    state->mqtt_topic_prefix = config_get_string("mqtt-topic-prefix", MQTT_TOPIC_PREFIX_DEFAULT);
-    state->interval_rssi_channel = config_get_integer("lora-rssi-channel", INTERVAL_RSSI_DEFAULT);          // XXX
-    state->capture_rssi_channel = (state->interval_rssi_channel > 0);                                       // XXX
-    state->capture_rssi_packet = config_get_bool("lora-rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT); // XXX
-    state->stat_display_interval = config_get_integer("stat-display-interval", STAT_INTERVAL_DEFAULT);
-    state->stat_publish_interval = config_get_integer("stat-publish-interval", STAT_INTERVAL_DEFAULT);
-    state->debug = config_get_bool("debug", false);
-    state->debug_data = config_get_bool("debug-data", false);
+    cfg->mqtt_topic_prefix = config_get_string("mqtt-topic-prefix", MQTT_TOPIC_PREFIX_DEFAULT);
+    cfg->interval_rssi_channel = config_get_integer("lora-rssi-channel", INTERVAL_RSSI_DEFAULT);          // XXX
+    cfg->capture_rssi_channel = (cfg->interval_rssi_channel > 0);                                         // XXX
+    cfg->capture_rssi_packet = config_get_bool("lora-rssi-packet", E22900T22_CONFIG_RSSI_PACKET_DEFAULT); // XXX
+    cfg->stat_display_interval = config_get_integer("stat-display-interval", STAT_INTERVAL_DEFAULT);
+    cfg->stat_publish_interval = config_get_integer("stat-publish-interval", STAT_INTERVAL_DEFAULT);
+    cfg->debug = config_get_bool("debug", false);
+    cfg->debug_data = config_get_bool("debug-data", false);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
