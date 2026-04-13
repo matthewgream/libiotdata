@@ -393,12 +393,17 @@ void process_config_populate(process_state_t *state) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-serial_config_t e22_serial_config;
-e22900t22_config_t e22_device_config;
-mqtt_config_t mqtt_config;
-process_state_t process_state;
+typedef struct {
+    serial_config_t e22_serial_config;
+    e22900t22_config_t e22_device_config;
+    mqtt_config_t mqtt_config;
+    mesh_state_t mesh_state;
+    dedup_state_t dedup_state;
+    stats_state_t stats_state;
+    process_state_t process_state;
+} system_t;
 
-bool config_setup(const int argc, char *argv[]) {
+bool config_setup(system_t* state, const int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++)
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -409,13 +414,13 @@ bool config_setup(const int argc, char *argv[]) {
     if (!config_load(CONFIG_FILE_DEFAULT, argc, argv, config_options))
         return false;
 
-    e22_serial_config_populate(&e22_serial_config);
-    e22_device_config_populate(&e22_device_config);
-    iotdata_mesh_config_populate(&process_state.mesh_state);
-    iotdata_dedup_config_populate(&process_state.dedup_state);
-    mqtt_config_populate(&mqtt_config);
-    stats_config_populate(&process_state.stats_state);
-    process_config_populate(&process_state);
+    e22_serial_config_populate(&state->e22_serial_config);
+    e22_device_config_populate(&state->e22_device_config);
+    mqtt_config_populate(&state->mqtt_config);
+    iotdata_mesh_config_populate(&state->mesh_state);
+    iotdata_dedup_config_populate(&state->dedup_state);
+    stats_config_populate(&state->stats_state);
+    process_config_populate(&state->process_state);
 
     return true;
 }
@@ -430,6 +435,8 @@ void signal_handler(const int sig __attribute__((unused))) {
     }
 }
 
+static system_t system_state;
+
 int main(int argc, char *argv[]) {
 
     int ret = EXIT_FAILURE;
@@ -439,35 +446,37 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    if (!config_setup(argc, argv))
+    system_t* state = &system_state;
+
+    if (!config_setup(state, argc, argv))
         goto end_all;
 
-    if (!serial_begin(&e22_serial_config) || !serial_connect()) {
-        fprintf(stderr, "device: connect failure (port=%s, rate=%d, bits=%s)\n", e22_serial_config.port, e22_serial_config.rate, serial_bits_str(e22_serial_config.bits));
+    if (!serial_begin(&state->e22_serial_config) || !serial_connect()) {
+        fprintf(stderr, "device: connect failure (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
         goto end_all;
     }
-    if (!device_connect(E22900T22_MODULE_USB, &e22_device_config))
+    if (!device_connect(E22900T22_MODULE_USB, &state->e22_device_config))
         goto end_serial;
-    printf("device: connect success (port=%s, rate=%d, bits=%s)\n", e22_serial_config.port, e22_serial_config.rate, serial_bits_str(e22_serial_config.bits));
+    printf("device: connect success (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
 
     if (!(device_mode_config() && device_info_read() && device_config_read_and_update() && device_mode_transfer()))
         goto end_device;
-    if (!mqtt_begin(&mqtt_config))
+    if (!mqtt_begin(&state->mqtt_config))
         goto end_device;
-    if (!mesh_begin(&process_state.mesh_state, device_packet_write, dedup_check_and_add_handler, (void *)&process_state))
+    if (!mesh_begin(&state->mesh_state, device_packet_write, dedup_check_and_add_handler, (void *)state))
         goto end_mqtt;
-    process_state.dedup_state.running = &running;
-    if (!dedup_begin(&process_state.dedup_state, process_state.mesh_state.station_id, &process_state.mesh_state.dedup_ring))
+    state->dedup_state.running = &running;
+    if (!dedup_begin(&state->dedup_state, state->mesh_state.station_id, &state->mesh_state.dedup_ring))
         goto end_mesh;
-    stats_begin(&process_state.stats_state, process_state.mesh_state.station_id, &e22_device_config);
+    stats_begin(&state->stats_state, state->mesh_state.station_id, &state->e22_device_config);
 
-    if (process_run(&process_state))
+    if (process_run(&state->process_state, &state->mesh_state, &state->dedup_state, &state->stats_state))
         ret = EXIT_SUCCESS;
 
-    stats_end(&process_state.stats_state);
-    dedup_end(&process_state.dedup_state);
+    stats_end(&state->stats_state);
+    dedup_end(&state->dedup_state);
 end_mesh:
-    mesh_end(&process_state.mesh_state);
+    mesh_end(&state->mesh_state);
 end_mqtt:
     mqtt_end();
 end_device:
