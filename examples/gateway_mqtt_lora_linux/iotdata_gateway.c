@@ -171,6 +171,8 @@ void __sleep_ms(const uint32_t ms) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
+#define IOTDATA_GATEWAY_VERSION          "1.0.0"
+
 #define CONFIG_FILE_DEFAULT              "iotdata_gateway.cfg"
 
 #define SERIAL_PORT_DEFAULT              "/dev/e22900t22u"
@@ -492,7 +494,7 @@ int main(int argc, char *argv[]) {
         goto end_mesh;
 
     // GATEWAY PROCESSOR
-    stat_begin(&state->stat_state, state->mesh_state.station_id, &state->lora_device_config);
+    stat_begin(&state->stat_state, IOTDATA_GATEWAY_VERSION, state->mesh_state.station_id, &state->lora_device_config);
     ret = process_run(&state->process_state, &state->mesh_state, &state->ddup_state, &state->stat_state, &state->running) ? EXIT_SUCCESS : EXIT_FAILURE;
     stat_end(&state->stat_state);
 

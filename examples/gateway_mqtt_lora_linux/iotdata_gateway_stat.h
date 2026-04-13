@@ -156,6 +156,7 @@ typedef struct {
 
 typedef struct {
     char mqtt_topic[STAT_TOPIC_STR_MAX];
+    const char *version;
     uint16_t gateway_id;
     time_t start_time;
     stat_link_t link; /* currently one */
@@ -166,8 +167,9 @@ typedef struct {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool stat_begin(stat_state_t *s, uint16_t gateway_id, const e22900t22_config_t *lora_config) {
+bool stat_begin(stat_state_t *s, const char *version, uint16_t gateway_id, const e22900t22_config_t *lora_config) {
 
+    s->version = version;
     s->gateway_id = gateway_id;
     s->start_time = time(NULL);
     s->link.name = "e22-900t22";
@@ -374,6 +376,7 @@ cJSON *stat_build_links_json(const stat_state_t *s, const mesh_state_t *mesh) {
         cJSON_AddNumberToObject(config, "packet_size_idx", (double)s->link.packet_size_idx);
         cJSON_AddNumberToObject(config, "packet_rate_idx", (double)s->link.packet_rate_idx);
         cJSON_AddNumberToObject(config, "transmit_power_idx", (double)s->link.transmit_power_idx);
+        cJSON_AddStringToObject(config, "transmit_power", get_transmit_power(s->link.transmit_power_idx));
         cJSON *rssi = cJSON_AddObjectToObject(link, "rssi");
         cJSON_AddNumberToObject(rssi, "packet_dbm", (double)get_rssi_dbm(s->link.rssi_packet_ema));
         cJSON_AddNumberToObject(rssi, "packet_samples", (double)s->link.rssi_packet_cnt);
@@ -534,6 +537,7 @@ cJSON *stat_build_stat_json(const stat_state_t *s, const mesh_state_t *mesh, con
     cJSON *root = cJSON_CreateObject();
     char buf[16];
     cJSON_AddStringToObject(root, "gateway_id", snprintf_inline(buf, sizeof(buf), "%04" PRIX16, s->gateway_id));
+    cJSON_AddStringToObject(root, "version", s->version ? s->version : "");
     cJSON_AddNumberToObject(root, "time", (double)now);
     cJSON_AddNumberToObject(root, "uptime_secs", (double)(now - s->start_time));
     cJSON_AddItemToObject(root, "links", stat_build_links_json(s, mesh));
