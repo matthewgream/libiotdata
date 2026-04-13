@@ -198,9 +198,9 @@ const struct option config_options [] = {
     {"help",                            no_argument,       0, 'h'},
     {"config",                          required_argument, 0, 'c'},
     //
-    {"lora-serial-port",                required_argument, 0, 0},
-    {"lora-serial-rate",                required_argument, 0, 0},
-    {"lora-serial-bits",                required_argument, 0, 0},
+    {"lora-port",                       required_argument, 0, 0},
+    {"lora-rate",                       required_argument, 0, 0},
+    {"lora-bits",                       required_argument, 0, 0},
     {"lora-address",                    required_argument, 0, 0},
     {"lora-network",                    required_argument, 0, 0},
     {"lora-channel",                    required_argument, 0, 0},
@@ -248,12 +248,12 @@ const config_option_help_t config_options_help [] = {
     {"help",                            "Display this help message and exit"},
     {"config",                          "Config file path (default: '" CONFIG_FILE_DEFAULT "')"},
     //
-    {"lora-serial-port",                "Lora E22 serial port device (default: '" SERIAL_PORT_DEFAULT "')"},
-    {"lora-serial-rate",                "Lora E22 serial baud rate (default: 9600)"},
-    {"lora-serial-bits",                "Lora E22 serial data bits (default: 8N1)"},
+    {"lora-port",                       "Lora E22 serial port device (default: '" SERIAL_PORT_DEFAULT "')"},
+    {"lora-rate",                       "Lora E22 serial baud rate (default: 9600)"},
+    {"lora-bits",                       "Lora E22 serial data bits (default: 8N1)"},
     {"lora-address",                    "Lora E22 module address (hex) (default: 0x0000)"},
-    {"lora-network",                    "Lora E22 network ID (hex) (default: 0x00)"},
-    {"lora-channel",                    "Lora E22 radio channel (default: 0)"},
+    {"lora-network",                    "Lora E22 module network ID (hex) (default: 0x00)"},
+    {"lora-channel",                    "Lora E22 module channel (default: 0)"},
     {"lora-crypt",                      "Lora E22 encryption key (default: 0x0000)"},
     {"lora-packet-size",                "Lora E22 packet size (default: 0)"},
     {"lora-packet-rate",                "Lora E22 packet rate (default: 0)"},
@@ -297,18 +297,13 @@ const config_option_help_t config_options_help [] = {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void lora_serial_config_populate(serial_config_t *cfg) {
+void lora_config_populate(serial_config_t *cfg_serial, e22900t22_config_t *cfg) {
+    memset(cfg_serial, 0, sizeof(*cfg_serial));
     memset(cfg, 0, sizeof(*cfg));
 
-    cfg->port = config_get_string("lora-serial-port", SERIAL_PORT_DEFAULT);
-    cfg->rate = config_get_integer("lora-serial-rate", SERIAL_RATE_DEFAULT);
-    cfg->bits = config_get_bits("lora-serial-bits", SERIAL_BITS_DEFAULT);
-
-    printf("config: lora: serial - port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
-}
-
-void lora_device_config_populate(e22900t22_config_t *cfg) {
-    memset(cfg, 0, sizeof(*cfg));
+    cfg_serial->port = config_get_string("lora-port", SERIAL_PORT_DEFAULT);
+    cfg_serial->rate = config_get_integer("lora-rate", SERIAL_RATE_DEFAULT);
+    cfg_serial->bits = config_get_bits("lora-bits", SERIAL_BITS_DEFAULT);
 
     cfg->address = (uint16_t)config_get_integer("lora-address", E22900T22_CONFIG_ADDRESS_DEFAULT);
     cfg->network = (uint8_t)config_get_integer("lora-network", E22900T22_CONFIG_NETWORK_DEFAULT);
@@ -327,11 +322,13 @@ void lora_device_config_populate(e22900t22_config_t *cfg) {
     cfg->debug = config_get_bool("lora-debug", false);
     e22_debug = cfg->debug;
 
-    printf("config: lora: device - address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
-           ", read-timeout-packet=%" PRIu32 ", crypt=0x%04" PRIX16 ", transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, debug=%s\n",
-           cfg->address, cfg->network, cfg->channel, cfg->packet_size, cfg->packet_rate, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command,
-           cfg->read_timeout_packet, cfg->crypt, cfg->transmit_power, cfg->transmission_method == E22900T22_CONFIG_TRANSMISSION_METHOD_TRANSPARENT ? "transparent" : "fixed-point", cfg->relay_enabled ? "on" : "off",
-           cfg->debug ? "on" : "off");
+    printf("config: lora: port=%s, rate=%d, bits=%s, "
+           "address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, crypt=0x%04" PRIX16 ", packet-size=%d, packet-rate=%d, "
+           "transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, mode-listen-before-transmit=%s, "
+           "rssi-channel=%s, rssi-packet=%s, read-timeout-command=%" PRIu32 "ms, read-timeout-packet=%" PRIu32 "ms, debug=%s\n",
+           cfg_serial->port, cfg_serial->rate, serial_bits_str(cfg_serial->bits), cfg->address, cfg->network, cfg->channel, cfg->crypt, cfg->packet_size, cfg->packet_rate, cfg->transmit_power,
+           cfg->transmission_method == E22900T22_CONFIG_TRANSMISSION_METHOD_TRANSPARENT ? "transparent" : "fixed-point", cfg->relay_enabled ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->rssi_channel ? "on" : "off",
+           cfg->rssi_packet ? "on" : "off", cfg->read_timeout_command, cfg->read_timeout_packet, cfg->debug ? "on" : "off");
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -347,7 +344,7 @@ void mqtt_config_populate(mqtt_config_t *cfg) {
     cfg->reconnect_delay_max = (unsigned int)config_get_integer("mqtt-reconnect-delay-max", MQTT_RECONNECT_DELAY_MAX_DEFAULT);
     cfg->debug = config_get_bool("mqtt-debug", false);
 
-    printf("config: mqtt: client=%s, server=%s, tls-insecure=%s, synchronous=%s, reconnect-delay=%d, reconnect-delay-max=%d\n", cfg->client, cfg->server, cfg->tls_insecure ? "on" : "off", cfg->use_synchronous ? "on" : "off",
+    printf("config: mqtt: client=%s, server=%s, tls-insecure=%s, synchronous=%s, reconnect-delay=%ds, reconnect-delay-max=%ds\n", cfg->client, cfg->server, cfg->tls_insecure ? "on" : "off", cfg->use_synchronous ? "on" : "off",
            cfg->reconnect_delay, cfg->reconnect_delay_max);
 }
 
@@ -361,7 +358,7 @@ void iotdata_mesh_config_populate(mesh_state_t *cfg) {
     cfg->beacon_interval = (time_t)config_get_integer("mesh-beacon-interval", INTERVAL_BEACON_DEFAULT);
     cfg->debug = config_get_bool("mesh-debug", false);
 
-    printf("config: mesh: enabled=%c, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 ", debug=%s\n", cfg->enabled ? 'y' : 'n', cfg->station_id, (uint32_t)cfg->beacon_interval, cfg->debug ? "on" : "off");
+    printf("config: mesh: enabled=%c, station-id=0x%04" PRIX16 ", beacon-interval=%" PRIu32 "s, debug=%s\n", cfg->enabled ? 'y' : 'n', cfg->station_id, (uint32_t)cfg->beacon_interval, cfg->debug ? "on" : "off");
 }
 
 void iotdata_ddup_config_populate(ddup_state_t *cfg) {
@@ -369,9 +366,9 @@ void iotdata_ddup_config_populate(ddup_state_t *cfg) {
 
     cfg->enabled = config_get_bool("ddup-enable", false);
     cfg->port = (uint16_t)config_get_integer("ddup-port", DDUP_PORT_DEFAULT);
-    cfg->delay_ms = (uint32_t)config_get_integer("ddup-delay", DDUP_DELAY_MS_DEFAULT);
     const char *peers = config_get_string("ddup-peers", "");
     ddup_peers_parse(cfg, peers);
+    cfg->delay_ms = (uint32_t)config_get_integer("ddup-delay", DDUP_DELAY_MS_DEFAULT);
     cfg->debug = config_get_bool("ddup-debug", false);
 
     printf("config: ddup: enabled=%c, port=%" PRIu16 ", peers=%s, delay=%" PRIu32 "ms, debug=%s\n", cfg->enabled ? 'y' : 'n', cfg->port, peers, cfg->delay_ms, cfg->debug ? "on" : "off");
@@ -432,8 +429,7 @@ bool system_config(system_t *state, const int argc, char *argv[]) {
     if (!config_load(CONFIG_FILE_DEFAULT, argc, argv, config_options))
         return false;
 
-    lora_serial_config_populate(&state->lora_serial_config);
-    lora_device_config_populate(&state->lora_device_config);
+    lora_config_populate(&state->lora_serial_config, &state->lora_device_config);
     mqtt_config_populate(&state->mqtt_config);
     iotdata_mesh_config_populate(&state->mesh_state);
     iotdata_ddup_config_populate(&state->ddup_state);
