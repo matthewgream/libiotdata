@@ -104,30 +104,30 @@ void debug_hexdump(const char *prefix, const uint8_t *data, size_t length) {
 
 #include "serial_linux.h"
 
-bool debug_e22 = false;
-void printf_debug_e22(const char *format, ...) {
-    if (!debug_e22)
+bool e22_debug = false;
+void e22_printf_debug(const char *format, ...) {
+    if (!e22_debug)
         return;
     va_list args;
     va_start(args, format);
     vfprintf(stdout, format, args);
     va_end(args);
 }
-void printf_stdout_e22(const char *format, ...) {
+void e22_printf_stdout(const char *format, ...) {
     va_list args;
     va_start(args, format);
     vfprintf(stdout, format, args);
     va_end(args);
 }
-void printf_stderr_e22(const char *format, ...) {
+void e22_printf_stderr(const char *format, ...) {
     va_list args;
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
 }
-#define PRINTF_DEBUG printf_debug_e22
-#define PRINTF_ERROR printf_stderr_e22
-#define PRINTF_INFO  printf_stdout_e22
+#define PRINTF_DEBUG e22_printf_debug
+#define PRINTF_ERROR e22_printf_stderr
+#define PRINTF_INFO  e22_printf_stdout
 #undef E22900T22_SUPPORT_MODULE_DIP
 #define E22900T22_SUPPORT_MODULE_USB
 #include "e22xxxtxx.h"
@@ -310,7 +310,7 @@ void e22_device_config_populate(e22900t22_config_t *cfg) {
     cfg->read_timeout_command = (uint32_t)config_get_integer("read-timeout-command", E22900T22_CONFIG_READ_TIMEOUT_COMMAND_DEFAULT);
     cfg->read_timeout_packet = (uint32_t)config_get_integer("read-timeout-packet", E22900T22_CONFIG_READ_TIMEOUT_PACKET_DEFAULT);
     cfg->debug = config_get_bool("debug-e22", false);
-    debug_e22 = cfg->debug;
+    e22_debug = cfg->debug;
 
     printf("config: e22-device: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
            ", read-timeout-packet=%" PRIu32 ", crypt=0x%04" PRIX16 ", transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, debug=%s\n",
