@@ -56,9 +56,7 @@ bool serial_connect(void) {
     memset(&tty, 0, sizeof(tty));
     if (tcgetattr(serial_fd, &tty) != 0) {
         fprintf(stderr, "serial: error getting port attributes: %s\n", strerror(errno));
-        close(serial_fd);
-        serial_fd = -1;
-        return false;
+        goto serial_failed;
     }
     speed_t baud;
     switch (_serial_cfg->rate) {
@@ -88,17 +86,13 @@ bool serial_connect(void) {
         break;
     default:
         fprintf(stderr, "serial: unsupported baud rate: %d\n", _serial_cfg->rate);
-        close(serial_fd);
-        serial_fd = -1;
-        return false;
+        goto serial_failed;
     }
     cfsetispeed(&tty, baud);
     cfsetospeed(&tty, baud);
     if (_serial_cfg->bits != SERIAL_8N1) {
         fprintf(stderr, "serial: unsupported bits: %s\n", serial_bits_str(_serial_cfg->bits));
-        close(serial_fd);
-        serial_fd = -1;
-        return false;
+        goto serial_failed;
     }
     tty.c_cflag |= (tcflag_t)(CLOCAL | CREAD);
     tty.c_cflag &= (tcflag_t)~CSIZE;
@@ -114,12 +108,15 @@ bool serial_connect(void) {
     tty.c_cc[VTIME] = 10;
     if (tcsetattr(serial_fd, TCSANOW, &tty) != 0) {
         fprintf(stderr, "serial: error setting port attributes: %s\n", strerror(errno));
-        close(serial_fd);
-        serial_fd = -1;
-        return false;
+        goto serial_failed;
     }
     tcflush(serial_fd, TCIOFLUSH);
     return true;
+
+serial_failed:
+    close(serial_fd);
+    serial_fd = -1;
+    return false;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -155,7 +152,7 @@ int serial_read(unsigned char *buffer, const int length, const unsigned long tim
         return -1;
     usleep(50 * 1000); // yuck
     struct pollfd pfd = { .fd = serial_fd, .events = POLLIN };
-    int poll_result = poll(&pfd, 1, (int)(timeout_ms > (unsigned long)INT_MAX ? INT_MAX : timeout_ms));
+    const int poll_result = poll(&pfd, 1, (int)(timeout_ms > (unsigned long)INT_MAX ? INT_MAX : timeout_ms));
     if (poll_result <= 0)
         return poll_result; // timeout or error
     int bytes_read = 0;

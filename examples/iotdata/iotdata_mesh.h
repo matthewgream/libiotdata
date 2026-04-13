@@ -256,8 +256,7 @@ typedef struct {
 
 typedef struct {
     iotdata_mesh_dedup_entry_t entries[IOTDATA_MESH_DEDUP_RING_SIZE];
-    int head;
-    int count;
+    int head, size;
 } iotdata_mesh_dedup_ring_t;
 
 static inline void iotdata_mesh_dedup_init(iotdata_mesh_dedup_ring_t *ring) {
@@ -267,18 +266,15 @@ static inline void iotdata_mesh_dedup_init(iotdata_mesh_dedup_ring_t *ring) {
 /* returns true if this is a NEW packet (not a duplicate) */
 static inline bool iotdata_mesh_dedup_check_and_add(iotdata_mesh_dedup_ring_t *ring, uint16_t station_id, uint16_t sequence) {
     /* scan for duplicate */
-    const int n = ring->count < IOTDATA_MESH_DEDUP_RING_SIZE ? ring->count : IOTDATA_MESH_DEDUP_RING_SIZE;
-    for (int i = 0; i < n; i++) {
-        const iotdata_mesh_dedup_entry_t *e = &ring->entries[i];
-        if (e->station_id == station_id && e->sequence == sequence)
+    for (int i = 0; i < (ring->size < IOTDATA_MESH_DEDUP_RING_SIZE ? ring->size : IOTDATA_MESH_DEDUP_RING_SIZE); i++)
+        if (ring->entries[i].station_id == station_id && ring->entries[i].sequence == sequence)
             return false; /* duplicate */
-    }
     /* new — add to ring */
     ring->entries[ring->head].station_id = station_id;
     ring->entries[ring->head].sequence = sequence;
     ring->head = (ring->head + 1) % IOTDATA_MESH_DEDUP_RING_SIZE;
-    if (ring->count < IOTDATA_MESH_DEDUP_RING_SIZE)
-        ring->count++;
+    if (ring->size < IOTDATA_MESH_DEDUP_RING_SIZE)
+        ring->size++;
     return true; /* new */
 }
 
@@ -298,12 +294,8 @@ static inline bool iotdata_mesh_generation_newer(uint16_t gen_a, uint16_t gen_b)
  * ----------------------------------------------------------------------- */
 
 static inline uint8_t iotdata_mesh_rssi_encode(int rssi_dbm) {
-    int q = (rssi_dbm + 120) / 5;
-    if (q < 0)
-        q = 0;
-    if (q > 15)
-        q = 15;
-    return (uint8_t)q;
+    const int q = (rssi_dbm + 120) / 5;
+    return (uint8_t)(q < 0 ? 0 : (q > 15 ? 15 : q));
 }
 
 static inline int iotdata_mesh_rssi_decode(uint8_t q) {
