@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 typedef bool (*mesh_packet_handler_t)(const uint8_t *packet, const int length);
-typedef bool (*mesh_dedup_handler_t)(uint16_t station_id, uint16_t sequence);
+typedef bool (*mesh_dedup_handler_t)(void *ctx, uint16_t station_id, uint16_t sequence);
 
 typedef struct {
     bool enabled;
@@ -17,6 +17,7 @@ typedef struct {
     /* handlers */
     mesh_packet_handler_t packet_handler;
     mesh_dedup_handler_t dedup_handler;
+    void *dedup_handler_ctx;
     /* statistics */
     uint32_t stat_beacons_tx;
     uint32_t stat_beacons_rx;
@@ -95,7 +96,7 @@ bool mesh_handle_forward(mesh_state_t *state, const uint8_t *buf, int len, const
     if (state->debug)
         printf("mesh: rx FORWARD from station=0x%04" PRIX16 ", sequence=%" PRIu16 ", ttl=%" PRIu8 ", origin={station=0x%04" PRIX16 ", sequence=%" PRIu16 "}, inner-length=%d\n", fwd.sender_station, fwd.sender_seq, fwd.ttl,
                fwd.origin_station, fwd.origin_sequence, fwd.inner_len);
-    if (state->dedup_handler && !state->dedup_handler(fwd.origin_station, fwd.origin_sequence)) {
+    if (state->dedup_handler && !state->dedup_handler(state->dedup_handler_ctx, fwd.origin_station, fwd.origin_sequence)) {
         state->stat_duplicates++;
         if (state->debug)
             printf("mesh: rx FORWARD duplicate suppressed origin={station=0x%04" PRIX16 ", sequence=%" PRIu16 "}, inner-length=%d\n", fwd.origin_station, fwd.origin_sequence, fwd.inner_len);
@@ -160,7 +161,7 @@ void mesh_handle_pong(mesh_state_t *state, const uint8_t *buf, int len) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool mesh_begin(mesh_state_t *state, mesh_packet_handler_t packet_handler, mesh_dedup_handler_t dedup_handler) {
+bool mesh_begin(mesh_state_t *state, mesh_packet_handler_t packet_handler, mesh_dedup_handler_t dedup_handler, void *dedup_handler_ctx) {
     if (!state->enabled) {
         printf("mesh: disabled, not starting\n");
         return true;
@@ -171,6 +172,7 @@ bool mesh_begin(mesh_state_t *state, mesh_packet_handler_t packet_handler, mesh_
     }
     state->packet_handler = packet_handler;
     state->dedup_handler = dedup_handler;
+    state->dedup_handler_ctx = dedup_handler_ctx;
     iotdata_mesh_dedup_init(&state->dedup_ring);
     printf("mesh: enabled, station=0x%04" PRIX16 ", beacon-interval=%" PRIu32 "s\n", state->station_id, (uint32_t)state->beacon_interval);
     return true;

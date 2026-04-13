@@ -40,7 +40,7 @@ LIBS=-lcjson -lmosquitto -lm -lpthread
 TARGET=iotdata_gateway
 MAIN=iotdata_gateway.c
 SOURCES=\
-    iotdata_gateway_dedup.h iotdata_gateway_mesh.h iotdata_gateway_stats.h \
+    iotdata_gateway_dedup.h iotdata_gateway_mesh.h iotdata_gateway_stats.h iotdata_gateway_process.h \
     config_linux.h serial_linux.h mqtt_linux.h \
     $(DIR_E22XXXTXX)/e22xxxtxx.h \
     $(DIR_IOTDATA_VARIANT)/iotdata_mesh.h \

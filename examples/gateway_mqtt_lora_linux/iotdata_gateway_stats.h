@@ -596,7 +596,8 @@ char *stats_build_stats_string(const stats_state_t *s, const mesh_state_t *mesh,
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_publish(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
+void stats_publish(time_t period_stat, const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
+    (void)period_stat;
     if (!mqtt_is_connected())
         return;
     cJSON *root = stats_build_stats_json(s, mesh, dedup);
