@@ -76,9 +76,10 @@ static bool test_packet_handler_fail(const uint8_t *packet, const int length) {
 static int dedup_handler_calls = 0;
 static bool dedup_handler_result = true;
 
-static bool test_dedup_handler(uint16_t station_id, uint16_t sequence) {
+static bool test_dedup_handler(void *ctx, uint16_t station_id, uint16_t sequence) {
     (void)station_id;
     (void)sequence;
+    (void)ctx;
     dedup_handler_calls++;
     return dedup_handler_result;
 }
@@ -103,7 +104,7 @@ static bool test_mesh_begin_disabled(void) {
     mesh_state_t ms;
     memset(&ms, 0, sizeof(ms));
     ms.enabled = false;
-    ASSERT(mesh_begin(&ms, test_packet_handler, test_dedup_handler));
+    ASSERT(mesh_begin(&ms, test_packet_handler, test_dedup_handler, NULL));
     ASSERT(ms.packet_handler == NULL);
     ASSERT(ms.dedup_handler == NULL);
     return true;
@@ -115,7 +116,7 @@ static bool test_mesh_begin_enabled(void) {
     ms.enabled = true;
     ms.station_id = 0x0042;
     ms.beacon_interval = 60;
-    ASSERT(mesh_begin(&ms, test_packet_handler, test_dedup_handler));
+    ASSERT(mesh_begin(&ms, test_packet_handler, test_dedup_handler, NULL));
     ASSERT(ms.packet_handler == test_packet_handler);
     ASSERT(ms.dedup_handler == test_dedup_handler);
     return true;
@@ -125,7 +126,7 @@ static bool test_mesh_begin_no_packet_handler(void) {
     mesh_state_t ms;
     memset(&ms, 0, sizeof(ms));
     ms.enabled = true;
-    ASSERT(mesh_begin(&ms, NULL, test_dedup_handler));
+    ASSERT(mesh_begin(&ms, NULL, test_dedup_handler, NULL));
     ASSERT(ms.packet_handler == NULL);
     return true;
 }
@@ -740,7 +741,7 @@ static bool test_dedup_begin_disabled(void) {
     ds.enabled = false;
     iotdata_mesh_dedup_ring_t ring;
 
-    ASSERT(dedup_begin(&ds, 0x0001, &ring));
+    ASSERT(dedup_begin(&ds, 0x0001, &ring, NULL));
     return true;
 }
 

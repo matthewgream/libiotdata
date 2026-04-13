@@ -55,8 +55,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-volatile bool running = true;
-
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -291,7 +289,7 @@ void e22_serial_config_populate(serial_config_t *cfg) {
     cfg->rate = config_get_integer("rate", SERIAL_RATE_DEFAULT);
     cfg->bits = config_get_bits("bits", SERIAL_BITS_DEFAULT);
 
-    printf("config: serial: port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
+    printf("config: e22-serial: port=%s, rate=%d, bits=%s\n", cfg->port, cfg->rate, serial_bits_str(cfg->bits));
 }
 
 void e22_device_config_populate(e22900t22_config_t *cfg) {
@@ -314,8 +312,8 @@ void e22_device_config_populate(e22900t22_config_t *cfg) {
     cfg->debug = config_get_bool("debug-e22", false);
     debug_e22 = cfg->debug;
 
-    printf("config: e22: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32 ", read-timeout-packet=%" PRIu32
-           ", crypt=0x%04" PRIX16 ", transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, debug=%s\n",
+    printf("config: e22-device: address=0x%04" PRIX16 ", network=0x%02" PRIX8 ", channel=%d, packet-size=%d, packet-rate=%d, rssi-channel=%s, rssi-packet=%s, mode-listen-before-tx=%s, read-timeout-command=%" PRIu32
+           ", read-timeout-packet=%" PRIu32 ", crypt=0x%04" PRIX16 ", transmit-power=%" PRIu8 ", transmission-method=%s, mode-relay=%s, debug=%s\n",
            cfg->address, cfg->network, cfg->channel, cfg->packet_size, cfg->packet_rate, cfg->rssi_channel ? "on" : "off", cfg->rssi_packet ? "on" : "off", cfg->listen_before_transmit ? "on" : "off", cfg->read_timeout_command,
            cfg->read_timeout_packet, cfg->crypt, cfg->transmit_power, cfg->transmission_method == E22900T22_CONFIG_TRANSMISSION_METHOD_TRANSPARENT ? "transparent" : "fixed-point", cfg->relay_enabled ? "on" : "off",
            cfg->debug ? "on" : "off");
@@ -369,7 +367,6 @@ void stats_config_populate(stats_state_t *state) {
     const char *topic = config_get_string("stats-mqtt-topic", STATS_MQTT_TOPIC_DEFAULT);
     strncpy(state->mqtt_topic, topic, sizeof(state->mqtt_topic) - 1);
     state->mqtt_topic[sizeof(state->mqtt_topic) - 1] = '\0';
-    /* strip trailing slash */
     size_t len = strlen(state->mqtt_topic);
     if (len > 0 && state->mqtt_topic[len - 1] == '/')
         state->mqtt_topic[len - 1] = '\0';
@@ -401,9 +398,14 @@ typedef struct {
     dedup_state_t dedup_state;
     stats_state_t stats_state;
     process_state_t process_state;
+    volatile bool running;
 } system_t;
 
-bool config_setup(system_t* state, const int argc, char *argv[]) {
+static system_t system_state;
+
+// -----------------------------------------------------------------------------------------------------------------------------------------
+
+bool system_config(system_t *state, const int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++)
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -422,58 +424,66 @@ bool config_setup(system_t* state, const int argc, char *argv[]) {
     stats_config_populate(&state->stats_state);
     process_config_populate(&state->process_state);
 
+    state->running = false;
+
     return true;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
-// -----------------------------------------------------------------------------------------------------------------------------------------
 
 void signal_handler(const int sig __attribute__((unused))) {
-    if (running) {
+    if (system_state.running) {
         printf("stopping\n");
-        running = false;
+        system_state.running = false;
     }
 }
 
-static system_t system_state;
+// -----------------------------------------------------------------------------------------------------------------------------------------
 
 int main(int argc, char *argv[]) {
 
     int ret = EXIT_FAILURE;
 
     setbuf(stdout, NULL);
-    printf("starting (iotdata gateway: variants=%d, features=mesh,dedup)\n", IOTDATA_VARIANT_MAPS_COUNT);
+    printf("starting (iotdata gateway: variants=%d, features=mesh,dedup,stats,mqtt)\n", IOTDATA_VARIANT_MAPS_COUNT);
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    system_t* state = &system_state;
+    system_t *state = &system_state;
 
-    if (!config_setup(state, argc, argv))
+    if (!system_config(state, argc, argv))
         goto end_all;
 
+    // DEVICE
     if (!serial_begin(&state->e22_serial_config) || !serial_connect()) {
-        fprintf(stderr, "device: connect failure (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
+        fprintf(stderr, "serial: connect failure (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
         goto end_all;
     }
-    if (!device_connect(E22900T22_MODULE_USB, &state->e22_device_config))
+    if (!device_connect(E22900T22_MODULE_USB, &state->e22_device_config)) {
+        fprintf(stderr, "device: connect failure (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
         goto end_serial;
+    }
     printf("device: connect success (port=%s, rate=%d, bits=%s)\n", state->e22_serial_config.port, state->e22_serial_config.rate, serial_bits_str(state->e22_serial_config.bits));
-
     if (!(device_mode_config() && device_info_read() && device_config_read_and_update() && device_mode_transfer()))
         goto end_device;
+
+    // MQTT
     if (!mqtt_begin(&state->mqtt_config))
         goto end_device;
+
+    state->running = true;
+
+    // IOTDATA
     if (!mesh_begin(&state->mesh_state, device_packet_write, dedup_check_and_add_handler, (void *)state))
         goto end_mqtt;
-    state->dedup_state.running = &running;
-    if (!dedup_begin(&state->dedup_state, state->mesh_state.station_id, &state->mesh_state.dedup_ring))
+    if (!dedup_begin(&state->dedup_state, state->mesh_state.station_id, &state->mesh_state.dedup_ring, &state->running))
         goto end_mesh;
+
+    // PROCESS
     stats_begin(&state->stats_state, state->mesh_state.station_id, &state->e22_device_config);
-
-    if (process_run(&state->process_state, &state->mesh_state, &state->dedup_state, &state->stats_state))
-        ret = EXIT_SUCCESS;
-
+    ret = process_run(&state->process_state, &state->mesh_state, &state->dedup_state, &state->stats_state, &state->running) ? EXIT_SUCCESS : EXIT_FAILURE;
     stats_end(&state->stats_state);
+
     dedup_end(&state->dedup_state);
 end_mesh:
     mesh_end(&state->mesh_state);

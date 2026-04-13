@@ -3,16 +3,22 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 #include <cjson/cJSON.h>
+
 #include <math.h>
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-// // 0.2 ≈ 51/256, 0.8 ≈ 205/256
-// #define EMA_ALPHA_NUM   51
-// #define EMA_ALPHA_DENOM 256
-// void ema_update(uint8_t value, uint8_t *value_ema, uint32_t *value_cnt) {
-//     *value_ema = ((*value_cnt)++ == 0) ? value : (uint8_t)((EMA_ALPHA_NUM * (uint16_t)value + (EMA_ALPHA_DENOM - EMA_ALPHA_NUM) * (uint16_t)(*value_ema)) / EMA_ALPHA_DENOM);
-// }
+#include <stdarg.h>
+
+__attribute__((format(printf, 3, 4))) static inline const char *snprintf_inline(char *buf, size_t size, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    (void)vsnprintf(buf, size, fmt, args);
+    va_end(args);
+    return buf;
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------
 
 /* Time-weighted EMA: alpha = 1 - exp(-dt / tau). First sample initialises. */
 #define EMA_TIMED_TAU_SECS_DEFAULT 300.0f
@@ -20,13 +26,11 @@ void ema_update_timed(uint8_t value, uint8_t *value_ema, uint32_t *value_cnt, ti
     if ((*value_cnt)++ == 0 || *value_last_time == 0) {
         *value_ema = value;
         *value_last_time = now;
-        return;
+    } else {
+        const float alpha = 1.0f - expf(-((float)(now - *value_last_time)) / tau_secs);
+        *value_ema = (uint8_t)((alpha * (float)value + (1.0f - alpha) * (float)(*value_ema)) + 0.5f);
+        *value_last_time = now;
     }
-    const float dt = (float)(now - *value_last_time);
-    *value_last_time = now;
-    const float alpha = 1.0f - expf(-dt / tau_secs);
-    const float updated = alpha * (float)value + (1.0f - alpha) * (float)(*value_ema);
-    *value_ema = (uint8_t)(updated + 0.5f);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -44,14 +48,13 @@ static const char *const stats_windows_names[STATS_WINDOW_COUNT] = { "5m", "15m"
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 typedef struct {
-    time_t ts[STATS_RING_SIZE];
-    uint16_t head;
-    uint16_t fill;
+    time_t time[STATS_RING_SIZE];
+    uint16_t head, fill;
     uint32_t total;
 } stats_ring_t;
 
 static inline void stats_ring_add(stats_ring_t *r, time_t now) {
-    r->ts[r->head] = now;
+    r->time[r->head] = now;
     r->head = (uint16_t)((r->head + 1U) % STATS_RING_SIZE);
     if (r->fill < STATS_RING_SIZE)
         r->fill++;
@@ -62,7 +65,7 @@ static inline void stats_ring_count_windows(const stats_ring_t *r, time_t now, u
     for (int i = 0; i < STATS_WINDOW_COUNT; i++)
         counts[i] = 0;
     for (uint16_t i = 0; i < r->fill; i++) {
-        const time_t age = now - r->ts[((unsigned)r->head + (unsigned)STATS_RING_SIZE - 1U - (unsigned)i) % (unsigned)STATS_RING_SIZE];
+        const time_t age = now - r->time[((unsigned)r->head + (unsigned)STATS_RING_SIZE - 1U - (unsigned)i) % (unsigned)STATS_RING_SIZE];
         for (int w = 0; w < STATS_WINDOW_COUNT; w++)
             if (age <= stats_windows_secs[w])
                 counts[w]++;
@@ -90,6 +93,7 @@ typedef struct {
     uint16_t last_sequence;
     bool last_sequence_valid;
     uint32_t stat_missed;
+    uint32_t stat_mesh_unexpected;
     uint32_t variant_count[IOTDATA_VARIANT_MAPS_COUNT];
     time_t variant_last[IOTDATA_VARIANT_MAPS_COUNT];
     stats_ring_t ring;
@@ -119,15 +123,18 @@ typedef struct {
     uint32_t rx_packets;
     uint64_t rx_bytes;
     uint32_t rx_errors;
-    uint32_t rx_drops; /* drops that cannot be attributed to a station/variant */
+    uint32_t rx_drops;           /* drops that cannot be attributed to a station/variant */
+    uint32_t rx_mesh_unexpected; /* mesh-variant packets received while mesh is disabled */
     uint16_t rx_size_min;
     uint16_t rx_size_max;
     /* rssi (raw e22 0-255, converted via get_rssi_dbm on read) */
     uint8_t rssi_packet_ema;
     uint32_t rssi_packet_cnt;
+    uint32_t rssi_packet_err;
     time_t rssi_packet_last_time;
     uint8_t rssi_channel_ema;
     uint32_t rssi_channel_cnt;
+    uint32_t rssi_channel_err;
     time_t rssi_channel_last_time;
     /* ring for window rates */
     stats_ring_t rx_ring;
@@ -159,19 +166,23 @@ typedef struct {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_begin(stats_state_t *s, uint16_t gateway_id, const e22900t22_config_t *e22_cfg) {
+bool stats_begin(stats_state_t *s, uint16_t gateway_id, const e22900t22_config_t *e22_config) {
+
     s->gateway_id = gateway_id;
     s->start_time = time(NULL);
     s->link.name = "e22-900t22";
     s->link.type = "lora";
-    s->link.address = e22_cfg->address;
-    s->link.network = e22_cfg->network;
-    s->link.channel = e22_cfg->channel;
-    s->link.frequency_khz = 850125U + (uint32_t)e22_cfg->channel * 1000U;
-    s->link.packet_size_idx = e22_cfg->packet_size;
-    s->link.packet_rate_idx = e22_cfg->packet_rate;
-    s->link.transmit_power_idx = e22_cfg->transmit_power;
+    s->link.address = e22_config->address;
+    s->link.network = e22_config->network;
+    s->link.channel = e22_config->channel;
+    s->link.frequency_khz = 850125U + (uint32_t)e22_config->channel * 1000U;
+    s->link.packet_size_idx = e22_config->packet_size;
+    s->link.packet_rate_idx = e22_config->packet_rate;
+    s->link.transmit_power_idx = e22_config->transmit_power;
+
     printf("stats: started (gateway=0x%04" PRIX16 ", link=%s, channel=%" PRIu8 ", freq=%" PRIu32 " kHz)\n", s->gateway_id, s->link.name, s->link.channel, s->link.frequency_khz);
+
+    return true;
 }
 
 void stats_end(stats_state_t *s) {
@@ -208,31 +219,39 @@ static inline stats_station_t *stats_station_find_or_create(stats_state_t *s, ui
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_on_link_rx_packet(stats_state_t *s, int length) {
+void stats_on_link_rx_packet(stats_state_t *s, uint16_t length) {
     const time_t now = time(NULL);
     s->link.rx_packets++;
     s->link.rx_bytes += (uint64_t)length;
-    const uint16_t len16 = (uint16_t)length;
-    if (s->link.rx_size_min == 0 || len16 < s->link.rx_size_min)
-        s->link.rx_size_min = len16;
-    if (len16 > s->link.rx_size_max)
-        s->link.rx_size_max = len16;
+    if (s->link.rx_size_min == 0 || length < s->link.rx_size_min)
+        s->link.rx_size_min = length;
+    if (length > s->link.rx_size_max)
+        s->link.rx_size_max = length;
     stats_ring_add(&s->link.rx_ring, now);
 }
-
 void stats_on_link_rx_error(stats_state_t *s) {
     s->link.rx_errors++;
 }
 void stats_on_link_rx_drop(stats_state_t *s) {
     s->link.rx_drops++;
 }
-
+void stats_on_link_rx_mesh_unexpected(stats_state_t *s, uint16_t station_id) {
+    s->link.rx_mesh_unexpected++;
+    stats_station_t *st = stats_station_find_or_create(s, station_id);
+    st->last_seen = time(NULL);
+    st->stat_mesh_unexpected++;
+}
 void stats_on_link_rssi_packet(stats_state_t *s, uint8_t raw) {
     ema_update_timed(raw, &s->link.rssi_packet_ema, &s->link.rssi_packet_cnt, &s->link.rssi_packet_last_time, time(NULL), EMA_TIMED_TAU_SECS_DEFAULT);
 }
-
+void stats_on_link_rssi_packet_error(stats_state_t *s) {
+    s->link.rssi_packet_err++;
+}
 void stats_on_link_rssi_channel(stats_state_t *s, uint8_t raw) {
     ema_update_timed(raw, &s->link.rssi_channel_ema, &s->link.rssi_channel_cnt, &s->link.rssi_channel_last_time, time(NULL), EMA_TIMED_TAU_SECS_DEFAULT);
+}
+void stats_on_link_rssi_channel_error(stats_state_t *s) {
+    s->link.rssi_channel_err++;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -249,7 +268,7 @@ void stats_get_totals(const stats_state_t *s, stats_totals_t *out) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_on_packet_decoded(stats_state_t *s, uint16_t station_id, uint16_t sequence, uint8_t variant_id, int length, const iotdata_decoded_t *dec) {
+void stats_on_packet_decoded(stats_state_t *s, uint16_t station_id, uint16_t sequence, uint8_t variant_id, uint16_t length, const iotdata_decoded_t *dec) {
     const time_t now = time(NULL);
     stats_station_t *st = stats_station_find_or_create(s, station_id);
     st->last_seen = now;
@@ -339,43 +358,45 @@ static cJSON *stats_json_windows(const stats_ring_t *r, time_t now) {
     return o;
 }
 
-cJSON *stats_build_link_json(const stats_state_t *s, const mesh_state_t *mesh) {
+cJSON *stats_build_links_json(const stats_state_t *s, const mesh_state_t *mesh) {
     const time_t now = time(NULL);
     cJSON *root = cJSON_CreateObject();
     cJSON *links = cJSON_AddArrayToObject(root, "links");
-    cJSON *link = cJSON_CreateObject();
-    cJSON_AddStringToObject(link, "name", s->link.name ? s->link.name : "");
-    cJSON_AddStringToObject(link, "type", s->link.type ? s->link.type : "");
-    cJSON *cfg = cJSON_AddObjectToObject(link, "config");
-    cJSON_AddNumberToObject(cfg, "address", (double)s->link.address);
-    cJSON_AddNumberToObject(cfg, "network", (double)s->link.network);
-    cJSON_AddNumberToObject(cfg, "channel", (double)s->link.channel);
-    cJSON_AddNumberToObject(cfg, "frequency_khz", (double)s->link.frequency_khz);
-    cJSON_AddNumberToObject(cfg, "packet_size_idx", (double)s->link.packet_size_idx);
-    cJSON_AddNumberToObject(cfg, "packet_rate_idx", (double)s->link.packet_rate_idx);
-    cJSON_AddNumberToObject(cfg, "transmit_power_idx", (double)s->link.transmit_power_idx);
-    cJSON *rssi = cJSON_AddObjectToObject(link, "rssi");
-    cJSON_AddNumberToObject(rssi, "packet_dbm", (double)get_rssi_dbm(s->link.rssi_packet_ema));
-    cJSON_AddNumberToObject(rssi, "packet_samples", (double)s->link.rssi_packet_cnt);
-    cJSON_AddNumberToObject(rssi, "channel_dbm", (double)get_rssi_dbm(s->link.rssi_channel_ema));
-    cJSON_AddNumberToObject(rssi, "channel_samples", (double)s->link.rssi_channel_cnt);
-    cJSON *rx = cJSON_AddObjectToObject(link, "rx");
-    cJSON_AddNumberToObject(rx, "packets", (double)s->link.rx_packets);
-    cJSON_AddNumberToObject(rx, "bytes", (double)s->link.rx_bytes);
-    cJSON_AddNumberToObject(rx, "errors", (double)s->link.rx_errors);
-    cJSON_AddNumberToObject(rx, "drops", (double)s->link.rx_drops);
-    cJSON_AddNumberToObject(rx, "size_min", (double)s->link.rx_size_min);
-    cJSON_AddNumberToObject(rx, "size_max", (double)s->link.rx_size_max);
-    cJSON_AddNumberToObject(rx, "size_mean", s->link.rx_packets > 0 ? (double)s->link.rx_bytes / (double)s->link.rx_packets : 0.0);
-    cJSON_AddItemToObject(rx, "windows", stats_json_windows(&s->link.rx_ring, now));
-    cJSON *tx = cJSON_AddObjectToObject(link, "tx");
-    const uint32_t tx_packets = mesh ? (mesh->stat_beacons_tx + mesh->stat_acks_tx) : 0;
-    const uint64_t tx_bytes = mesh ? mesh->stat_bytes_tx : 0;
-    const uint32_t tx_errors = mesh ? mesh->stat_errors_tx : 0;
-    cJSON_AddNumberToObject(tx, "packets", (double)tx_packets);
-    cJSON_AddNumberToObject(tx, "bytes", (double)tx_bytes);
-    cJSON_AddNumberToObject(tx, "errors", (double)tx_errors);
-    cJSON_AddItemToArray(links, link);
+    {
+        cJSON *link = cJSON_CreateObject();
+        cJSON_AddStringToObject(link, "name", s->link.name ? s->link.name : "");
+        cJSON_AddStringToObject(link, "type", s->link.type ? s->link.type : "");
+        cJSON *config = cJSON_AddObjectToObject(link, "config");
+        cJSON_AddNumberToObject(config, "address", (double)s->link.address);
+        cJSON_AddNumberToObject(config, "network", (double)s->link.network);
+        cJSON_AddNumberToObject(config, "channel", (double)s->link.channel);
+        cJSON_AddNumberToObject(config, "frequency_khz", (double)s->link.frequency_khz);
+        cJSON_AddNumberToObject(config, "packet_size_idx", (double)s->link.packet_size_idx);
+        cJSON_AddNumberToObject(config, "packet_rate_idx", (double)s->link.packet_rate_idx);
+        cJSON_AddNumberToObject(config, "transmit_power_idx", (double)s->link.transmit_power_idx);
+        cJSON *rssi = cJSON_AddObjectToObject(link, "rssi");
+        cJSON_AddNumberToObject(rssi, "packet_dbm", (double)get_rssi_dbm(s->link.rssi_packet_ema));
+        cJSON_AddNumberToObject(rssi, "packet_samples", (double)s->link.rssi_packet_cnt);
+        cJSON_AddNumberToObject(rssi, "packet_errors", (double)s->link.rssi_packet_err);
+        cJSON_AddNumberToObject(rssi, "channel_dbm", (double)get_rssi_dbm(s->link.rssi_channel_ema));
+        cJSON_AddNumberToObject(rssi, "channel_samples", (double)s->link.rssi_channel_cnt);
+        cJSON_AddNumberToObject(rssi, "channel_errors", (double)s->link.rssi_channel_err);
+        cJSON *rx = cJSON_AddObjectToObject(link, "rx");
+        cJSON_AddNumberToObject(rx, "packets", (double)s->link.rx_packets);
+        cJSON_AddNumberToObject(rx, "bytes", (double)s->link.rx_bytes);
+        cJSON_AddNumberToObject(rx, "errors", (double)s->link.rx_errors);
+        cJSON_AddNumberToObject(rx, "drops", (double)s->link.rx_drops);
+        cJSON_AddNumberToObject(rx, "mesh_unexpected", (double)s->link.rx_mesh_unexpected);
+        cJSON_AddNumberToObject(rx, "size_min", (double)s->link.rx_size_min);
+        cJSON_AddNumberToObject(rx, "size_max", (double)s->link.rx_size_max);
+        cJSON_AddNumberToObject(rx, "size_mean", s->link.rx_packets > 0 ? (double)s->link.rx_bytes / (double)s->link.rx_packets : 0.0);
+        cJSON_AddItemToObject(rx, "windows", stats_json_windows(&s->link.rx_ring, now));
+        cJSON *tx = cJSON_AddObjectToObject(link, "tx");
+        cJSON_AddNumberToObject(tx, "packets", (double)(mesh ? (mesh->stat_beacons_tx + mesh->stat_acks_tx) : 0));
+        cJSON_AddNumberToObject(tx, "bytes", (double)(mesh ? mesh->stat_bytes_tx : 0));
+        cJSON_AddNumberToObject(tx, "errors", (double)(mesh ? mesh->stat_errors_tx : 0));
+        cJSON_AddItemToArray(links, link);
+    }
     return root;
 }
 
@@ -386,21 +407,21 @@ cJSON *stats_build_stations_json(const stats_state_t *s, const mesh_state_t *mes
     for (int i = 0; i < STATS_MAX_STATIONS; i++)
         if (s->stations[i].in_use)
             active++;
+    char buf[16];
     cJSON_AddNumberToObject(root, "count", (double)active);
     cJSON *arr = cJSON_AddArrayToObject(root, "stations");
     for (int i = 0; i < STATS_MAX_STATIONS; i++)
         if (s->stations[i].in_use) {
             const stats_station_t *st = &s->stations[i];
             cJSON *o = cJSON_CreateObject();
-            char id[8];
-            snprintf(id, sizeof(id), "%04" PRIX16, st->station_id);
-            cJSON_AddStringToObject(o, "id", id);
+            cJSON_AddStringToObject(o, "id", snprintf_inline(buf, sizeof(buf), "%04" PRIX16, st->station_id));
             cJSON_AddNumberToObject(o, "first_seen", (double)st->first_seen);
             cJSON_AddNumberToObject(o, "last_seen", (double)st->last_seen);
             cJSON_AddNumberToObject(o, "age_secs", (double)(now - st->last_seen));
             cJSON_AddNumberToObject(o, "packets", (double)st->packet_count);
             cJSON_AddNumberToObject(o, "bytes", (double)st->bytes_rx);
             cJSON_AddNumberToObject(o, "missed", (double)st->stat_missed);
+            cJSON_AddNumberToObject(o, "mesh_unexpected", (double)st->stat_mesh_unexpected);
             cJSON_AddNumberToObject(o, "decode_errors", (double)st->decode_errors);
             cJSON_AddNumberToObject(o, "process_errors", (double)st->process_errors);
             if (st->last_link_valid)
@@ -426,9 +447,7 @@ cJSON *stats_build_stations_json(const stats_state_t *s, const mesh_state_t *mes
     if (mesh) {
         cJSON *m = cJSON_AddObjectToObject(root, "mesh");
         cJSON_AddBoolToObject(m, "enabled", mesh->enabled);
-        char gid[8];
-        snprintf(gid, sizeof(gid), "%04" PRIX16, mesh->station_id);
-        cJSON_AddStringToObject(m, "station_id", gid);
+        cJSON_AddStringToObject(m, "station_id", snprintf_inline(buf, sizeof(buf), "%04" PRIX16, mesh->station_id));
         cJSON_AddNumberToObject(m, "beacons_tx", (double)mesh->stat_beacons_tx);
         cJSON_AddNumberToObject(m, "beacons_rx", (double)mesh->stat_beacons_rx);
         cJSON_AddNumberToObject(m, "forwards_rx", (double)mesh->stat_forwards_rx);
@@ -448,9 +467,7 @@ cJSON *stats_build_stations_json(const stats_state_t *s, const mesh_state_t *mes
         for (int i = 0; i < STATS_MESH_PEERS_MAX; i++)
             if (s->mesh_peers[i].in_use) {
                 cJSON *p = cJSON_CreateObject();
-                char pgid[8];
-                snprintf(pgid, sizeof(pgid), "%04" PRIX16, s->mesh_peers[i].gateway_id);
-                cJSON_AddStringToObject(p, "gateway_id", pgid);
+                cJSON_AddStringToObject(p, "gateway_id", snprintf_inline(buf, sizeof(buf), "%04" PRIX16, s->mesh_peers[i].gateway_id));
                 cJSON_AddNumberToObject(p, "generation", (double)s->mesh_peers[i].generation);
                 cJSON_AddNumberToObject(p, "cost", (double)s->mesh_peers[i].cost);
                 cJSON_AddNumberToObject(p, "flags", (double)s->mesh_peers[i].flags);
@@ -501,26 +518,25 @@ cJSON *stats_build_variants_json(const stats_state_t *s) {
 
 cJSON *stats_build_mqtt_json(void) {
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddBoolToObject(root, "connected", mqtt_is_connected());
-    cJSON_AddNumberToObject(root, "connects", (double)mqtt_stat_connects);
-    cJSON_AddNumberToObject(root, "disconnects", (double)mqtt_stat_disconnects);
-    cJSON_AddNumberToObject(root, "reconnects", (double)mqtt_stat_reconnects);
-    cJSON_AddNumberToObject(root, "last_connect_time", (double)mqtt_stat_last_connect_time);
-    cJSON_AddNumberToObject(root, "publishes", (double)mqtt_stat_publishes);
-    cJSON_AddNumberToObject(root, "publish_bytes", (double)mqtt_stat_publish_bytes);
-    cJSON_AddNumberToObject(root, "publish_errors", (double)mqtt_stat_publish_errors);
+    cJSON_AddBoolToObject(root, "connected_state", mqtt_is_connected());
+    cJSON_AddNumberToObject(root, "connected_time", (double)mqtt_stat_last_connect_time);
+    cJSON_AddNumberToObject(root, "connected", (double)mqtt_stat_connects);
+    cJSON_AddNumberToObject(root, "disconnected", (double)mqtt_stat_disconnects);
+    cJSON_AddNumberToObject(root, "reconnected", (double)mqtt_stat_reconnects);
+    cJSON_AddNumberToObject(root, "published", (double)mqtt_stat_publishes);
+    cJSON_AddNumberToObject(root, "published_bytes", (double)mqtt_stat_publish_bytes);
+    cJSON_AddNumberToObject(root, "published_errors", (double)mqtt_stat_publish_errors);
     return root;
 }
 
 cJSON *stats_build_stats_json(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
     const time_t now = time(NULL);
     cJSON *root = cJSON_CreateObject();
-    char gid[8];
-    snprintf(gid, sizeof(gid), "%04" PRIX16, s->gateway_id);
-    cJSON_AddStringToObject(root, "gateway_id", gid);
+    char buf[16];
+    cJSON_AddStringToObject(root, "gateway_id", snprintf_inline(buf, sizeof(buf), "%04" PRIX16, s->gateway_id));
     cJSON_AddNumberToObject(root, "time", (double)now);
     cJSON_AddNumberToObject(root, "uptime_secs", (double)(now - s->start_time));
-    cJSON_AddItemToObject(root, "link", stats_build_link_json(s, mesh));
+    cJSON_AddItemToObject(root, "links", stats_build_links_json(s, mesh));
     cJSON_AddItemToObject(root, "stations", stats_build_stations_json(s, mesh, dedup));
     cJSON_AddItemToObject(root, "variants", stats_build_variants_json(s));
     cJSON_AddItemToObject(root, "mqtt", stats_build_mqtt_json());
@@ -529,7 +545,7 @@ cJSON *stats_build_stats_json(const stats_state_t *s, const mesh_state_t *mesh, 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-char *stats_build_stats_string(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup, time_t period_stat) {
+char *stats_build_stats_string(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
     char buf[2048];
     size_t off = 0;
     int n;
@@ -543,13 +559,17 @@ char *stats_build_stats_string(const stats_state_t *s, const mesh_state_t *mesh,
         } \
     } while (0)
 
+    const time_t now = time(NULL);
+    static time_t last_time = 0;
     static stats_totals_t last_totals = { 0, 0 };
     stats_totals_t cur_totals;
     stats_get_totals(s, &cur_totals);
-    const uint32_t delta_okay = cur_totals.rx_ok - last_totals.rx_ok;
-    const uint32_t delta_drop = cur_totals.rx_drop - last_totals.rx_drop;
+    const uint32_t period_stat = (last_time > 0 && now > last_time) ? (uint32_t)(now - last_time) : 1U;
+    const uint32_t delta_okay = (last_time > 0) ? (cur_totals.rx_ok - last_totals.rx_ok) : 0U;
+    const uint32_t delta_drop = (last_time > 0) ? (cur_totals.rx_drop - last_totals.rx_drop) : 0U;
     last_totals = cur_totals;
-    const uint32_t rate_okay = (delta_okay * 6000) / (uint32_t)period_stat, rate_drop = (delta_drop * 6000) / (uint32_t)period_stat;
+    last_time = now;
+    const uint32_t rate_okay = (delta_okay * 6000U) / period_stat, rate_drop = (delta_drop * 6000U) / period_stat;
     STATS_APPEND("packets{okay=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min), drop=%" PRIu32 " (%" PRIu32 ".%02" PRIu32 "/min)}", delta_okay, rate_okay / 100, rate_okay % 100, delta_drop, rate_drop / 100, rate_drop % 100);
     if (s->link.rssi_channel_cnt > 0 || s->link.rssi_packet_cnt > 0) {
         STATS_APPEND(", rssi{");
@@ -596,8 +616,7 @@ char *stats_build_stats_string(const stats_state_t *s, const mesh_state_t *mesh,
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_publish(time_t period_stat, const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
-    (void)period_stat;
+void stats_publish(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
     if (!mqtt_is_connected())
         return;
     cJSON *root = stats_build_stats_json(s, mesh, dedup);
@@ -608,15 +627,14 @@ void stats_publish(time_t period_stat, const stats_state_t *s, const mesh_state_
     if (!json)
         return;
     char topic[STATS_TOPIC_STR_MAX + 8];
-    snprintf(topic, sizeof(topic), "%s/%04" PRIX16, s->mqtt_topic, s->gateway_id);
-    (void)mqtt_send(topic, json, (int)strlen(json));
+    (void)mqtt_send(snprintf_inline(topic, sizeof(topic), "%s/%04" PRIX16, s->mqtt_topic, s->gateway_id), json, (int)strlen(json));
     free(json);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stats_display(time_t period_stat, const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
-    char *str = stats_build_stats_string(s, mesh, dedup, period_stat);
+void stats_display(const stats_state_t *s, const mesh_state_t *mesh, const dedup_state_t *dedup) {
+    char *str = stats_build_stats_string(s, mesh, dedup);
     if (!str)
         return;
     printf("%s\n", str);
