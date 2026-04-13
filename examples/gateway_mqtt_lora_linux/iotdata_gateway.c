@@ -466,7 +466,7 @@ int main(int argc, char *argv[]) {
     if (!system_config(state, argc, argv))
         goto end_all;
 
-    // DEVICE
+    // LORA SERIAL/DEVICE
     if (!serial_begin(&state->lora_serial_config) || !serial_connect()) {
         fprintf(stderr, "device: serial connect failure (port=%s, rate=%d, bits=%s)\n", state->lora_serial_config.port, state->lora_serial_config.rate, serial_bits_str(state->lora_serial_config.bits));
         goto end_all;
@@ -479,19 +479,19 @@ int main(int argc, char *argv[]) {
     if (!(device_mode_config() && device_info_read() && device_config_read_and_update() && device_mode_transfer()))
         goto end_device;
 
-    // MQTT
+    // MQTT BROKER
     if (!mqtt_begin(&state->mqtt_config))
         goto end_device;
 
     state->running = true;
 
-    // IOTDATA
+    // IOTDATA MESH/DDUP
     if (!mesh_begin(&state->mesh_state, device_packet_write, ddup_check_and_add_handler, (void *)state))
         goto end_mqtt;
     if (!ddup_begin(&state->ddup_state, state->mesh_state.station_id, &state->mesh_state.dedup_ring, &state->running))
         goto end_mesh;
 
-    // PROCESS
+    // GATEWAY PROCESSOR
     stat_begin(&state->stat_state, state->mesh_state.station_id, &state->lora_device_config);
     ret = process_run(&state->process_state, &state->mesh_state, &state->ddup_state, &state->stat_state, &state->running) ? EXIT_SUCCESS : EXIT_FAILURE;
     stat_end(&state->stat_state);

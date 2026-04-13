@@ -88,7 +88,7 @@ typedef uint8_t ddup_packet_t[DDUP_PKT_SIZE];
 void ddup_peers_parse(ddup_state_t *state, const char *peers_str) {
     if (!peers_str || !*peers_str)
         return;
-    char buf[512];
+    char buf[1024];
     strncpy(buf, peers_str, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     char *save = NULL, *tok = strtok_r(buf, ",", &save);
@@ -271,9 +271,8 @@ ddup_end_all:
 bool ddup_check_and_add(ddup_state_t *state, uint16_t station_id, uint16_t sequence) {
     if (!state->enabled)
         return iotdata_mesh_dedup_check_and_add(state->dedup_ring, station_id, sequence);
-    bool is_new;
     pthread_mutex_lock(&state->mutex);
-    is_new = iotdata_mesh_dedup_check_and_add(state->dedup_ring, station_id, sequence);
+    const bool is_new = iotdata_mesh_dedup_check_and_add(state->dedup_ring, station_id, sequence);
     if (is_new) {
         if (state->pending_count < DDUP_PENDING_MAX) {
             state->pending[state->pending_count].station_id = station_id;
