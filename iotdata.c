@@ -963,7 +963,7 @@ static int dump_humidity(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_HUMIDITY_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 "%%", dequantise_humidity(r));
-    n = dump_add(dump, n, s, IOTDATA_HUMIDITY_BITS, r, dump->_dec_buf, "0..100%%", "humidity");
+    n = dump_add(dump, n, s, IOTDATA_HUMIDITY_BITS, r, dump->_dec_buf, "0..100%", "humidity");
     return n;
 }
 #endif
