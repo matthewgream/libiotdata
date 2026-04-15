@@ -410,6 +410,16 @@ static int fmt_scaled(char *buf, size_t sz, int32_t val, int32_t divisor, const 
 #endif
 #endif
 
+#if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE) && !defined(IOTDATA_NO_FLOATING)
+// cJSON prints doubles with %1.15g/%1.17g, so rounding the double isn't enough.
+// Format at the field's quantisation precision and insert as a raw JSON number.
+static void json_add_number_fixed(cJSON *obj, const char *name, double v, int decimals) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.*f", decimals, v);
+    cJSON_AddRawToObject(obj, name, buf);
+}
+#endif
+
 /* =========================================================================
  * Field BATTERY
  * ========================================================================= */
@@ -489,7 +499,7 @@ static int dump_battery(const uint8_t *buf, size_t bb, size_t *bp, iotdata_dump_
     size_t s = *bp;
     uint32_t r = bits_read(buf, bb, bp, IOTDATA_BATTERY_LEVEL_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%" PRIu8 "%%", dequantise_battery_level(r));
-    n = dump_add(dump, n, s, IOTDATA_BATTERY_LEVEL_BITS, r, dump->_dec_buf, "0..100%%, 5b quant", "battery_level");
+    n = dump_add(dump, n, s, IOTDATA_BATTERY_LEVEL_BITS, r, dump->_dec_buf, "0..100%, 5b quant", "battery_level");
     s = *bp;
     r = bits_read(buf, bb, bp, IOTDATA_BATTERY_CHARGE_BITS);
     snprintf(dump->_dec_buf, sizeof(dump->_dec_buf), "%s", dequantise_battery_state(r) ? "charging" : "discharging");
@@ -612,7 +622,11 @@ static void json_set_link(cJSON *root, const iotdata_decoded_t *dec, const char 
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
     cJSON_AddNumberToObject(obj, "rssi", dec->link_rssi);
+#if !defined(IOTDATA_NO_FLOATING)
+    json_add_number_fixed(obj, "snr", (double)dec->link_snr, 0);
+#else
     cJSON_AddNumberToObject(obj, "snr", dec->link_snr);
+#endif
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -737,7 +751,11 @@ static iotdata_status_t json_get_temperature(cJSON *root, iotdata_encoder_t *enc
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
 static void json_set_temperature(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
+#if !defined(IOTDATA_NO_FLOATING)
+    json_add_number_fixed(root, label, (double)dec->temperature, 2);
+#else
     cJSON_AddNumberToObject(root, label, dec->temperature);
+#endif
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -1136,7 +1154,11 @@ static iotdata_status_t json_get_wind_speed(cJSON *root, iotdata_encoder_t *enc,
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
 static void json_set_wind_speed(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
+#if !defined(IOTDATA_NO_FLOATING)
+    json_add_number_fixed(root, label, (double)dec->wind_speed, 1);
+#else
     cJSON_AddNumberToObject(root, label, dec->wind_speed);
+#endif
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -1332,7 +1354,11 @@ static iotdata_status_t json_get_wind_gust(cJSON *root, iotdata_encoder_t *enc, 
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
 static void json_set_wind_gust(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
+#if !defined(IOTDATA_NO_FLOATING)
+    json_add_number_fixed(root, label, (double)dec->wind_gust, 1);
+#else
     cJSON_AddNumberToObject(root, label, dec->wind_gust);
+#endif
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -2591,7 +2617,11 @@ static iotdata_status_t json_get_radiation_dose(cJSON *root, iotdata_encoder_t *
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
 static void json_set_radiation_dose(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
+#if !defined(IOTDATA_NO_FLOATING)
+    json_add_number_fixed(root, label, (double)dec->radiation_dose, 2);
+#else
     cJSON_AddNumberToObject(root, label, dec->radiation_dose);
+#endif
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
@@ -2918,8 +2948,13 @@ static iotdata_status_t json_get_position(cJSON *root, iotdata_encoder_t *enc, c
 static void json_set_position(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     (void)scratch;
     cJSON *obj = cJSON_AddObjectToObject(root, label);
+#if !defined(IOTDATA_NO_FLOATING)
+    json_add_number_fixed(obj, "latitude", (double)dec->position_lat, 6);
+    json_add_number_fixed(obj, "longitude", (double)dec->position_lon, 6);
+#else
     cJSON_AddNumberToObject(obj, "latitude", dec->position_lat);
     cJSON_AddNumberToObject(obj, "longitude", dec->position_lon);
+#endif
 }
 #endif
 #if !defined(IOTDATA_NO_DUMP)
