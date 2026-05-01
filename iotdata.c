@@ -410,11 +410,11 @@ static void json_add_number_fixed(cJSON *obj, const char *name, double v, int de
 
 // clang-format off
 
-#define _IOTDATA_FIELD_OPS_VISIT(NAME, DEF) [IOTDATA_FIELD_##NAME] = &DEF,
 static const iotdata_field_ops_t *_iotdata_field_ops[IOTDATA_FIELD_COUNT] = {
-    IOTDATA_VISIT_FIELD_OPS(_IOTDATA_FIELD_OPS_VISIT)
+#define IOTDATA_FIELDS_OPS_VISITOR_(NAME, DEF) [IOTDATA_FIELD_##NAME] = &DEF,
+    IOTDATA_FIELDS_OPS(IOTDATA_FIELDS_OPS_VISITOR_)
+#undef IOTDATA_FIELDS_OPS_VISITOR_
 };
-#undef _IOTDATA_FIELD_OPS_VISIT
 
 // clang-format on
 
@@ -1021,11 +1021,11 @@ const char *iotdata_strerror(iotdata_status_t status) {
         _IOTDATA_ERR_PRINT
         _IOTDATA_ERR_JSON
 
-#define _IOTDATA_ERR_DESC_VISIT(CODE, MSG) \
+#define _IOTDATA_FIELDS_ERR_VISITOR_(CODE, MSG) \
     case CODE: \
         return MSG;
-        IOTDATA_VISIT_ERR_DESCRIPTIONS(_IOTDATA_ERR_DESC_VISIT)
-#undef _IOTDATA_ERR_DESC_VISIT
+        IOTDATA_FIELDS_ERR(_IOTDATA_FIELDS_ERR_VISITOR_)
+#undef _IOTDATA_FIELDS_ERR_VISITOR_
 
     default:
         return "Unknown error";

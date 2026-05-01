@@ -64,7 +64,7 @@ typedef float iotdata_float_t;
 #endif
 
 /* ---------------------------------------------------------------------------
- * Fields`
+ * Fields
  * -------------------------------------------------------------------------*/
 
 #if defined(IOTDATA_VARIANT_MAPS_DEFAULT)
@@ -175,13 +175,13 @@ struct iotdata_decoded_t_;
 
 typedef enum {
     IOTDATA_FIELD_NONE = -1,
-#define IOTDATA_FIELD_VISIT_(name) IOTDATA_FIELD_##name,
-    IOTDATA_VISIT_FIELDS(IOTDATA_FIELD_VISIT_)
-#undef IOTDATA_FIELD_VISIT_
+#define IOTDATA_FIELDS_SELECTED_VISITOR_(name) IOTDATA_FIELD_##name,
+    IOTDATA_FIELDS_SELECTED(IOTDATA_FIELDS_SELECTED_VISITOR_)
+#undef IOTDATA_FIELDS_SELECTED_VISITOR_
         IOTDATA_FIELD_COUNT,
-#define IOTDATA_FIELD_VISIT_RESERVED_(name, value) IOTDATA_FIELD_##name = value,
-    IOTDATA_VISIT_FIELDS_RESERVED(IOTDATA_FIELD_VISIT_RESERVED_)
-#undef IOTDATA_FIELD_VISIT_RESERVED_
+#define IOTDATA_FIELDS_RESERVED_VISITOR_(name, value) IOTDATA_FIELD_##name = value,
+    IOTDATA_FIELDS_RESERVED(IOTDATA_FIELDS_RESERVED_VISITOR_)
+#undef IOTDATA_FIELDS_RESERVED_VISITOR_
 } iotdata_field_type_t;
 
 _Static_assert(IOTDATA_FIELD_COUNT <= 32, "fields overflow");
@@ -222,7 +222,6 @@ const iotdata_variant_def_t *iotdata_get_variant(uint8_t variant);
 
 typedef enum iotdata_status_t_ {
     IOTDATA_OK = 0,
-
 #if !defined(IOTDATA_NO_ENCODE)
     IOTDATA_ERR_CTX_NULL,
     IOTDATA_ERR_CTX_NOT_BEGUN,
@@ -236,7 +235,6 @@ typedef enum iotdata_status_t_ {
     IOTDATA_ERR_CTX_NULL,
     IOTDATA_ERR_BUF_NULL,
 #endif
-
 #if !defined(IOTDATA_NO_DECODE)
     IOTDATA_ERR_DECODE_SHORT,
     IOTDATA_ERR_DECODE_TRUNCATED,
@@ -245,30 +243,24 @@ typedef enum iotdata_status_t_ {
     IOTDATA_ERR_DECODE_SHORT,
     IOTDATA_ERR_DECODE_TRUNCATED,
 #endif
-
 #if !defined(IOTDATA_NO_DUMP)
     IOTDATA_ERR_DUMP_ALLOC,
 #endif
-
 #if !defined(IOTDATA_NO_PRINT)
     IOTDATA_ERR_PRINT_ALLOC,
 #endif
-
 #if !defined(IOTDATA_NO_JSON)
     IOTDATA_ERR_JSON_PARSE,
     IOTDATA_ERR_JSON_ALLOC,
     IOTDATA_ERR_JSON_MISSING_FIELD,
 #endif
-
     IOTDATA_ERR_HDR_VARIANT_HIGH,
     IOTDATA_ERR_HDR_VARIANT_RESERVED,
     IOTDATA_ERR_HDR_VARIANT_UNKNOWN,
     IOTDATA_ERR_HDR_STATION_HIGH,
-
-#define IOTDATA_STATUS_VISIT_(name) name,
-    IOTDATA_VISIT_STATUSES(IOTDATA_STATUS_VISIT_)
-#undef IOTDATA_STATUS_VISIT_
-
+#define IOTDATA_FIELDS_STATUS_VISITOR_(name) name,
+    IOTDATA_FIELDS_STATUS(IOTDATA_FIELDS_STATUS_VISITOR_)
+#undef IOTDATA_FIELDS_STATUS_VISITOR_
 } iotdata_status_t;
 
 typedef enum {
@@ -297,7 +289,8 @@ typedef struct iotdata_encoder_t_ {
     uint16_t sequence;
     iotdata_field_t fields;
 
-    IOTDATA_VISIT_ENCODER_FIELDS
+    IOTDATA_FIELDS_ENCODER
+
 } iotdata_encoder_t;
 #endif /* !IOTDATA_NO_ENCODE */
 
@@ -315,7 +308,8 @@ typedef struct iotdata_decoded_t_ {
     uint16_t sequence;
     iotdata_field_t fields;
 
-    IOTDATA_VISIT_DECODER_FIELDS
+    IOTDATA_FIELDS_DECODER
+
 } iotdata_decoded_t;
 #endif /* !IOTDATA_NO_DECODE */
 
@@ -388,7 +382,7 @@ typedef struct {
     iotdata_decoded_t dec;
     union {
         bool _dummy;
-        IOTDATA_VISIT_JSON_SCRATCH_TO_JSON
+        IOTDATA_FIELDS_DECODE_TO_JSON_SCRATCH
     };
 } iotdata_decode_to_json_scratch_t;
 iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **json_out, iotdata_decode_to_json_scratch_t *scratch);
@@ -398,7 +392,7 @@ typedef struct {
     iotdata_encoder_t enc;
     union {
         bool _dummy;
-        IOTDATA_VISIT_JSON_SCRATCH_FROM_JSON
+        IOTDATA_FIELDS_ENCODE_FROM_JSON_SCRATCH
     };
 } iotdata_encode_from_json_scratch_t;
 iotdata_status_t iotdata_encode_from_json(const char *json, uint8_t *buf, size_t buf_size, size_t *out_bytes, iotdata_encode_from_json_scratch_t *scratch);
