@@ -320,7 +320,7 @@ static bool _encode_sensor(iotsim_t *sim, iotsim_sensor_t *s, iotsim_packet_t *o
 
     /* Battery + link always present */
     iotdata_encode_battery(&enc, s->battery, 0);
-    iotdata_encode_link(&enc, (int16_t)_rng_range(sim, -100, -60), _to_snr((int16_t)_rng_range(sim, -100, 80)));
+    iotdata_encode_link(&enc, (int8_t)_rng_range(sim, -100, -60), _to_snr((int16_t)_rng_range(sim, -100, 80)));
 
     switch (s->variant) {
 
