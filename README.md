@@ -2559,9 +2559,9 @@ illustrates per-function stack frames; nested calls accumulate.
 | -------------------------- | ------------- | ------------------------------ |
 | `iotdata_dump_to_string`   | 5872          | `iotdata_dump_t` on stack      |
 | `iotdata_dump_to_file`     | 5872          | `iotdata_dump_t` on stack      |
-| `iotdata_decode_to_json`   | 2768          | `iotdata_decoded_t` + cJSON    |
-| `iotdata_print_to_string`  | 2224          | `iotdata_decoded_t` on stack   |
-| `iotdata_print_to_file`    | 2208          | `iotdata_decoded_t` on stack   |
+| `iotdata_decode_to_json`   | 2768          | `iotdata_decoder_t` + cJSON    |
+| `iotdata_print_to_string`  | 2224          | `iotdata_decoder_t` on stack   |
+| `iotdata_print_to_file`    | 2208          | `iotdata_decoder_t` on stack   |
 | `iotdata_encode_from_json` | 416           | Encoder context + JSON parsing |
 | `iotdata_dump_build`       | 192           | Dynamic, bounded               |
 | `iotdata_encode_begin`     | < 64          | —                              |
@@ -2569,10 +2569,10 @@ illustrates per-function stack frames; nested calls accumulate.
 | `iotdata_decode`           | < 128         | —                              |
 
 The dump and print functions dominate because they allocate `iotdata_dump_t`
-(5.8 KB) or `iotdata_decoded_t` (2.2 KB) on the stack. These are
+(5.8 KB) or `iotdata_decoder_t` (2.2 KB) on the stack. These are
 gateway/diagnostic functions not intended for constrained devices. The macro
 `IOTDATA_MAX_DUMP_ENTRIES` defaults to 48, and may be reduced to tune down this
-size. Note that `iotdata_decoded_t` contains a complete set of all decoded
+size. Note that `iotdata_decoder_t` contains a complete set of all decoded
 variables, which in this example is the weather station variant with expensive
 TLV entries.
 
@@ -2581,7 +2581,7 @@ The encode path — `encode_begin`, field calls, `encode_end` — peaks well und
 ample room for the RTOS stack, radio driver, and application logic.
 
 To reduce stack usage on memory-constrained targets, allocate `iotdata_dump_t`
-or `iotdata_decoded_t` as a static or global rather than calling the convenience
+or `iotdata_decoder_t` as a static or global rather than calling the convenience
 wrappers which declare them locally.
 
 ### 13.5. Variant Table Extension
@@ -2926,7 +2926,7 @@ Decoding on the receiver side:
 
 ```c
 /* Decode and inspect */
-iotdata_decoded_t dec;
+iotdata_decoder_t dec;
 iotdata_decode(buf, len, &dec);
 
 printf("Station %u: %.2f°C, %u hPa, wind %.1f m/s @ %u°\n",
@@ -3207,7 +3207,7 @@ size):
 | Structure           | Size    | Purpose                                     |
 | ------------------- | ------- | ------------------------------------------- |
 | `iotdata_encoder_t` | ~300 B  | Encoder context (all fields + TLV pointers) |
-| `iotdata_decoded_t` | ~2000 B | Decoded packet (includes TLV data buffers)  |
+| `iotdata_decoder_t` | ~2000 B | Decoded packet (includes TLV data buffers)  |
 
 The encoder context (~300 bytes) is dominated by the TLV pointer array (8
 entries × 2 pointers × 8 bytes = 128 bytes on 64-bit). The core sensor fields
