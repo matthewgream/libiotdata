@@ -294,7 +294,7 @@ int main(void) {
 
 #if !defined(IOTDATA_NO_DECODE)
     {
-        iotdata_decoded_t decoded;
+        iotdata_decoder_t decoded;
         iotdata_status_t rc;
         rc = iotdata_decode(buf, len, &decoded);
         CHECK(rc == IOTDATA_OK, "decode");

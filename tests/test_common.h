@@ -107,7 +107,7 @@ static int tests_failed = 0;
 static iotdata_encoder_t enc;
 static uint8_t pkt[256];
 static size_t pkt_len;
-static iotdata_decoded_t dec;
+static iotdata_decoder_t dec;
 
 static void begin(uint8_t variant, uint16_t station, uint16_t seq) {
     assert(iotdata_encode_begin(&enc, pkt, sizeof(pkt), variant, station, seq) == IOTDATA_OK);

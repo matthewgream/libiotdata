@@ -119,7 +119,7 @@ typedef float iotdata_float_t;
 #pragma GCC diagnostic ignored "-Wpedantic"
 enum iotdata_status_t_;
 struct iotdata_encoder_t_;
-struct iotdata_decoded_t_;
+struct iotdata_decoder_t_;
 #include "iotdata_fields.h"
 #pragma GCC diagnostic pop
 
@@ -258,9 +258,9 @@ typedef enum iotdata_status_t_ {
     IOTDATA_ERR_HDR_VARIANT_RESERVED,
     IOTDATA_ERR_HDR_VARIANT_UNKNOWN,
     IOTDATA_ERR_HDR_STATION_HIGH,
-#define IOTDATA_FIELDS_STATUS_VISITOR_(name) name,
-    IOTDATA_FIELDS_STATUS(IOTDATA_FIELDS_STATUS_VISITOR_)
-#undef IOTDATA_FIELDS_STATUS_VISITOR_
+#define IOTDATA_FIELDS_ERR_IDENTS_VISITOR_(name) name,
+    IOTDATA_FIELDS_ERR_IDENTS(IOTDATA_FIELDS_ERR_IDENTS_VISITOR_)
+#undef IOTDATA_FIELDS_ERR_IDENTS_VISITOR_
 } iotdata_status_t;
 
 typedef enum {
@@ -299,7 +299,7 @@ typedef struct iotdata_encoder_t_ {
  * -------------------------------------------------------------------------*/
 
 #if !defined(IOTDATA_NO_DECODE)
-typedef struct iotdata_decoded_t_ {
+typedef struct iotdata_decoder_t_ {
     size_t packed_bits;
     size_t packed_bytes;
 
@@ -310,7 +310,7 @@ typedef struct iotdata_decoded_t_ {
 
     IOTDATA_FIELDS_DECODER
 
-} iotdata_decoded_t;
+} iotdata_decoder_t;
 #endif /* !IOTDATA_NO_DECODE */
 
 /* ---------------------------------------------------------------------------
@@ -324,7 +324,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes);
 
 #if !defined(IOTDATA_NO_DECODE)
 iotdata_status_t iotdata_peek(const uint8_t *buf, size_t len, uint8_t *variant, uint16_t *station, uint16_t *sequence);
-iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_t *out);
+iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoder_t *out);
 #endif /* !IOTDATA_NO_DECODE */
 
 /* ---------------------------------------------------------------------------
@@ -368,9 +368,9 @@ iotdata_status_t iotdata_dump_to_string(iotdata_dump_t *dump, const uint8_t *buf
 
 #if !defined(IOTDATA_NO_PRINT)
 #if !defined(IOTDATA_NO_DECODE)
-iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, char *out, size_t out_size);
+iotdata_status_t iotdata_print_decoder_to_string(const iotdata_decoder_t *dec, char *out, size_t out_size);
 typedef struct {
-    iotdata_decoded_t dec;
+    iotdata_decoder_t dec;
 } iotdata_print_scratch_t;
 iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *out, size_t out_size, iotdata_print_scratch_t *scratch);
 #endif
@@ -379,7 +379,7 @@ iotdata_status_t iotdata_print_to_string(const uint8_t *buf, size_t len, char *o
 #if !defined(IOTDATA_NO_JSON)
 #if !defined(IOTDATA_NO_DECODE)
 typedef struct {
-    iotdata_decoded_t dec;
+    iotdata_decoder_t dec;
     union {
         bool _dummy;
         IOTDATA_FIELDS_DECODE_TO_JSON_SCRATCH

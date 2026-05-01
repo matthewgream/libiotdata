@@ -270,7 +270,7 @@ void stat_get_totals(const stat_state_t *s, stat_totals_t *out) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void stat_on_packet_decoded(stat_state_t *s, uint16_t station_id, uint16_t sequence, uint8_t variant_id, uint16_t length, const iotdata_decoded_t *dec) {
+void stat_on_packet_decoded(stat_state_t *s, uint16_t station_id, uint16_t sequence, uint8_t variant_id, uint16_t length, const iotdata_decoder_t *dec) {
     const time_t now = time(NULL);
     stat_station_t *st = stat_station_find_or_create(s, station_id);
     st->last_seen = now;

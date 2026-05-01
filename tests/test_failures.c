@@ -745,7 +745,7 @@ static void test_image_max_data(void) {
     ASSERT_OK(iotdata_encode_image(&big_enc, 0, 0, 0, 0, big, 254), "encode 254");
     assert(iotdata_encode_end(&big_enc, &big_len) == IOTDATA_OK);
 
-    iotdata_decoded_t big_dec;
+    iotdata_decoder_t big_dec;
     assert(iotdata_decode(big_pkt, big_len, &big_dec) == IOTDATA_OK);
     ASSERT_EQ(big_dec.image_data_len, 254, "len 254");
     ASSERT_EQ(big_dec.image_data[0], 0x00, "first");
@@ -814,7 +814,7 @@ static void test_tlv_max_data_length(void) {
     ASSERT_OK(iotdata_encode_tlv(&big_enc, 0x20, data, 255), "encode 255");
     assert(iotdata_encode_end(&big_enc, &big_len) == IOTDATA_OK);
 
-    iotdata_decoded_t big_dec;
+    iotdata_decoder_t big_dec;
     assert(iotdata_decode(big_pkt, big_len, &big_dec) == IOTDATA_OK);
     ASSERT_EQ(big_dec.tlv_count, 1, "count");
     ASSERT_EQ(big_dec.tlv[0].length, 255, "len");

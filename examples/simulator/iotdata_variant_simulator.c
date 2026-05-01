@@ -11,6 +11,9 @@
  * -DTEST_MAIN).
  */
 
+#ifdef TEST_MAIN
+#define IOTDATA_NO_JSON
+#endif
 #include "iotdata_variant_simulator.h"
 
 #include <stdio.h>
@@ -510,7 +513,7 @@ const iotsim_sensor_t *iotsim_sensor(const iotsim_t *sim, int index) {
 #include "iotdata.c"
 #pragma GCC diagnostic pop
 
-static void _print_decoded(const iotdata_decoded_t *d, uint8_t variant) {
+static void _print_decoded(const iotdata_decoder_t *d, uint8_t variant) {
     /* Common fields */
     if (IOTDATA_FIELD_PRESENT(d->fields, IOTDATA_FIELD_BATTERY))
         printf("  bat=%" PRIu8 "%%%s", d->battery_level, d->battery_charging ? "(chg)" : "");
@@ -602,7 +605,7 @@ int main(int argc, char *argv[]) {
         iotsim_packet_t pkt;
         while (iotsim_poll(&sim, t, &pkt)) {
             packets++;
-            iotdata_decoded_t dec;
+            iotdata_decoder_t dec;
             iotdata_status_t rc = iotdata_decode(pkt.buf, pkt.len, &dec);
             printf("[%5" PRIu32 ".%" PRIu32 "s] #%-4d stn=%3" PRIu16 " %-18s seq=%-3" PRIu16 " bytes=%-2" PRIu32 " [", t / 1000, (t % 1000) / 100, packets, pkt.station_id, iotdata_vsuite_name(pkt.variant), pkt.sequence, (uint32_t)pkt.len);
             for (size_t i = 0; i < pkt.len; i++)

@@ -106,7 +106,7 @@ typedef bool (*iotdata_pack_fn)(uint8_t *buf, size_t bb, size_t *bp, const iotda
 #endif
 
 #if !defined(IOTDATA_NO_DECODE)
-typedef bool (*iotdata_unpack_fn)(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *dec);
+typedef bool (*iotdata_unpack_fn)(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoder_t *dec);
 #define _IOTDATA_FIELD_OP_UNPACK iotdata_unpack_fn unpack;
 #define _IOTDATA_OP_UNPACK(fn)   .unpack = (fn),
 #else
@@ -147,7 +147,7 @@ bprintf(iotdata_buf_t *b, const char *fmt, ...) {
 #endif
 
 #if !defined(IOTDATA_NO_PRINT) && !defined(IOTDATA_NO_DECODE)
-typedef void (*iotdata_print_fn)(const iotdata_decoded_t *dec, iotdata_buf_t *bp, const char *label);
+typedef void (*iotdata_print_fn)(const iotdata_decoder_t *dec, iotdata_buf_t *bp, const char *label);
 #define _IOTDATA_FIELD_OP_PRINT iotdata_print_fn print;
 #define _IOTDATA_OP_PRINT(fn)   .print = (fn),
 #else
@@ -156,7 +156,7 @@ typedef void (*iotdata_print_fn)(const iotdata_decoded_t *dec, iotdata_buf_t *bp
 #endif
 
 #if !defined(IOTDATA_NO_JSON) && !defined(IOTDATA_NO_DECODE)
-typedef void (*iotdata_json_set_fn)(cJSON *root, const iotdata_decoded_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch);
+typedef void (*iotdata_json_set_fn)(cJSON *root, const iotdata_decoder_t *dec, const char *label, iotdata_decode_to_json_scratch_t *scratch);
 #define _IOTDATA_FIELD_OP_JSON_SET iotdata_json_set_fn json_set;
 #define _IOTDATA_OP_JSON_SET(fn)   .json_set = (iotdata_json_set_fn)(fn),
 #else
@@ -575,7 +575,7 @@ iotdata_status_t iotdata_encode_end(iotdata_encoder_t *enc, size_t *out_bytes) {
 
 #if !defined(IOTDATA_NO_DECODE)
 
-static bool _iotdata_decode_unpack_field(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoded_t *out, iotdata_field_type_t type) {
+static bool _iotdata_decode_unpack_field(const uint8_t *buf, size_t bb, size_t *bp, iotdata_decoder_t *out, iotdata_field_type_t type) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->unpack)
         return ops->unpack(buf, bb, bp, out);
@@ -609,7 +609,7 @@ iotdata_status_t iotdata_peek(const uint8_t *buf, size_t len, uint8_t *variant, 
     return IOTDATA_OK;
 }
 
-iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_t *dec) {
+iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoder_t *dec) {
 #if !defined(IOTDATA_NO_CHECKS_STATE)
     if (!buf || !dec)
         return IOTDATA_ERR_CTX_NULL;
@@ -680,7 +680,7 @@ iotdata_status_t iotdata_decode(const uint8_t *buf, size_t len, iotdata_decoded_
 #if !defined(IOTDATA_NO_JSON)
 #if !defined(IOTDATA_NO_DECODE)
 
-static void _iotdata_decode_to_json_set_field(cJSON *root, const iotdata_decoded_t *dec, iotdata_field_type_t type, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
+static void _iotdata_decode_to_json_set_field(cJSON *root, const iotdata_decoder_t *dec, iotdata_field_type_t type, const char *label, iotdata_decode_to_json_scratch_t *scratch) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->json_set)
         ops->json_set(root, dec, label, scratch);
@@ -694,7 +694,7 @@ iotdata_status_t iotdata_decode_to_json(const uint8_t *buf, size_t len, char **j
         return IOTDATA_ERR_BUF_NULL;
 #endif
 
-    iotdata_decoded_t *dec = &scratch->dec;
+    iotdata_decoder_t *dec = &scratch->dec;
     iotdata_status_t rc;
     if ((rc = iotdata_decode(buf, len, dec)) != IOTDATA_OK)
         return rc;
@@ -947,13 +947,13 @@ iotdata_status_t iotdata_dump_to_string(iotdata_dump_t *dump, const uint8_t *buf
 #if !defined(IOTDATA_NO_PRINT)
 #if !defined(IOTDATA_NO_DECODE)
 
-static void _iotdata_print_field(const iotdata_decoded_t *dec, iotdata_buf_t *bp, iotdata_field_type_t type, const char *label) {
+static void _iotdata_print_field(const iotdata_decoder_t *dec, iotdata_buf_t *bp, iotdata_field_type_t type, const char *label) {
     const iotdata_field_ops_t *ops = (type >= 0 && type < IOTDATA_FIELD_COUNT) ? _iotdata_field_ops[type] : NULL;
     if (ops && ops->print)
         ops->print(dec, bp, label);
 }
 
-static iotdata_status_t _iotdata_print_decoded(const iotdata_decoded_t *dec, iotdata_buf_t *bp) {
+static iotdata_status_t _iotdata_print_decoded(const iotdata_decoder_t *dec, iotdata_buf_t *bp) {
     const iotdata_variant_def_t *vdef = iotdata_get_variant(dec->variant);
     if (vdef == NULL)
         return IOTDATA_ERR_HDR_VARIANT_UNKNOWN;
@@ -968,7 +968,7 @@ static iotdata_status_t _iotdata_print_decoded(const iotdata_decoded_t *dec, iot
     return IOTDATA_OK;
 }
 
-iotdata_status_t iotdata_print_decoded_to_string(const iotdata_decoded_t *dec, char *out, size_t out_size) {
+iotdata_status_t iotdata_print_decoder_to_string(const iotdata_decoder_t *dec, char *out, size_t out_size) {
     iotdata_buf_t bp = { out, out_size, 0 };
     iotdata_status_t rc = _iotdata_print_decoded(dec, &bp);
     if (bp.pos < bp.size)
@@ -1021,11 +1021,11 @@ const char *iotdata_strerror(iotdata_status_t status) {
         _IOTDATA_ERR_PRINT
         _IOTDATA_ERR_JSON
 
-#define _IOTDATA_FIELDS_ERR_VISITOR_(CODE, MSG) \
+#define _IOTDATA_FIELDS_ERR_STRINGS_VISITOR_(CODE, MSG) \
     case CODE: \
         return MSG;
-        IOTDATA_FIELDS_ERR(_IOTDATA_FIELDS_ERR_VISITOR_)
-#undef _IOTDATA_FIELDS_ERR_VISITOR_
+        IOTDATA_FIELDS_ERR_STRINGS(_IOTDATA_FIELDS_ERR_STRINGS_VISITOR_)
+#undef _IOTDATA_FIELDS_ERR_STRINGS_VISITOR_
 
     default:
         return "Unknown error";
