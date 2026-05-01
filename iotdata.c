@@ -189,7 +189,7 @@ typedef struct {
  * ========================================================================= */
 
 #if !defined(IOTDATA_NO_ENCODE) || !defined(IOTDATA_NO_DECODE) || !defined(IOTDATA_NO_DUMP)
-static size_t bits_to_bytes(size_t bits) {
+static inline size_t bits_to_bytes(size_t bits) {
     return (bits + 7) / 8;
 }
 #endif
@@ -409,32 +409,30 @@ static void json_add_number_fixed(cJSON *obj, const char *name, double v, int de
  * ========================================================================= */
 
 // clang-format off
-
 static const iotdata_field_ops_t *_iotdata_field_ops[IOTDATA_FIELD_COUNT] = {
 #define IOTDATA_FIELDS_OPS_VISITOR_(NAME, DEF) [IOTDATA_FIELD_##NAME] = &DEF,
     IOTDATA_FIELDS_OPS(IOTDATA_FIELDS_OPS_VISITOR_)
 #undef IOTDATA_FIELDS_OPS_VISITOR_
 };
-
 // clang-format on
 
 /* =========================================================================
  * Internal header
  * ========================================================================= */
 
-static int _iotdata_field_count(int num_pres_bytes) {
+static inline int _iotdata_field_count(int num_pres_bytes) {
     if (num_pres_bytes <= 0)
         return 0;
     return IOTDATA_PRES0_DATA_FIELDS + IOTDATA_PRESN_DATA_FIELDS * (num_pres_bytes - 1);
 }
 
-static int _iotdata_field_pres_byte(int field_idx) {
+static inline int _iotdata_field_pres_byte(int field_idx) {
     if (field_idx < IOTDATA_PRES0_DATA_FIELDS)
         return 0;
     return 1 + (field_idx - IOTDATA_PRES0_DATA_FIELDS) / IOTDATA_PRESN_DATA_FIELDS;
 }
 
-static int _iotdata_field_pres_bit(int field_idx) {
+static inline int _iotdata_field_pres_bit(int field_idx) {
     if (field_idx < IOTDATA_PRES0_DATA_FIELDS)
         return 5 - field_idx;                                                       /* pres0: bits 5..0 */
     return 6 - (field_idx - IOTDATA_PRES0_DATA_FIELDS) % IOTDATA_PRESN_DATA_FIELDS; /* presN: bits 6..0 */
@@ -1017,9 +1015,9 @@ const char *iotdata_strerror(iotdata_status_t status) {
         _IOTDATA_ERR_HDR
         _IOTDATA_ERR_ENCODE
         _IOTDATA_ERR_DECODE
+        _IOTDATA_ERR_JSON
         _IOTDATA_ERR_DUMP
         _IOTDATA_ERR_PRINT
-        _IOTDATA_ERR_JSON
 
 #define _IOTDATA_FIELDS_ERR_STRINGS_VISITOR_(CODE, MSG) \
     case CODE: \
