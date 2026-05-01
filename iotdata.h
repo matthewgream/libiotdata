@@ -289,7 +289,7 @@ typedef struct iotdata_encoder_t_ {
     uint16_t sequence;
     iotdata_field_t fields;
 
-    IOTDATA_FIELDS_ENCODER
+    IOTDATA_FIELDS_DAT_ENCODER
 
 } iotdata_encoder_t;
 #endif /* !IOTDATA_NO_ENCODE */
@@ -308,7 +308,7 @@ typedef struct iotdata_decoder_t_ {
     uint16_t sequence;
     iotdata_field_t fields;
 
-    IOTDATA_FIELDS_DECODER
+    IOTDATA_FIELDS_DAT_DECODER
 
 } iotdata_decoder_t;
 #endif /* !IOTDATA_NO_DECODE */
