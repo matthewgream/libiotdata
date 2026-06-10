@@ -37,17 +37,39 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_random.h"
-#include "esp_rom_sys.h"
+#include "esp_cpu.h"
+#include "rom/ets_sys.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #pragma GCC diagnostic pop
 
+#define __SLEEP_MS(ms) \
+    do { \
+        vTaskDelay(pdMS_TO_TICKS(ms)); \
+    } while (0)
+
+#define __MILLIS() ((uint32_t)(esp_timer_get_time() / 1000))
+
+static inline uint32_t __JITTER(void) {
+    uint32_t acc = 0;
+    for (int i = 0; i < 256; i++) {
+        const uint32_t a = esp_cpu_get_cycle_count();
+        ets_delay_us(1);
+        const uint32_t b = esp_cpu_get_cycle_count();
+        acc ^= (b - a);
+        acc = (acc << 1) | (acc >> 31); // rotate
+    }
+    return acc;
+}
+
+#define __RANDOM()        (__JITTER() ^ (uint32_t)esp_timer_get_time() ^ (uint32_t)esp_random())
+
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define STARTUP_DELAY_MS  (3 * 1000)
+#define STARTUP_DELAY_MS  (0 * 1000)
 #define RSSI_INTERVAL_MS  (5 * 1000)
 #define POLL_INTERVAL_MS  100 /* simulator poll granularity */
 #define STATUS_EVERY_N_TX 50  /* print status every N transmissions */
@@ -70,11 +92,7 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-static const char *TAG = "app";
-
-static inline uint32_t millis(void) {
-    return (uint32_t)(esp_timer_get_time() / 1000);
-}
+static const char *__tag_app = "app";
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -92,7 +110,6 @@ static bool debug_e22 = false;
 #define PRINTF_INFO  printf
 #define PRINTF_ERROR printf
 
-static bool serial_installed = false;
 bool serial_connect(void) {
     const uart_config_t uart_config = {
         .baud_rate = 9600,
@@ -104,37 +121,33 @@ bool serial_connect(void) {
     };
     esp_err_t err;
     if ((err = uart_driver_install(E22_UART, E22_UART_BUF_SIZE, E22_UART_BUF_SIZE, 0, NULL, 0)) != ESP_OK) {
-        ESP_LOGE(TAG, "uart_driver_install: %s", esp_err_to_name(err));
+        ESP_LOGE(__tag_app, "uart_driver_install: %s", esp_err_to_name(err));
         return false;
     }
-    serial_installed = true;
     if ((err = uart_param_config(E22_UART, &uart_config)) != ESP_OK) {
-        ESP_LOGE(TAG, "uart_param_config: %s", esp_err_to_name(err));
-        uart_driver_delete(E22_UART);
+        ESP_LOGE(__tag_app, "uart_param_config: %s", esp_err_to_name(err));
+        (void)uart_driver_delete(E22_UART);
         return false;
     }
     if ((err = uart_set_pin(E22_UART, PIN_E22_RXD, PIN_E22_TXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE)) != ESP_OK) {
-        ESP_LOGE(TAG, "uart_set_pin: %s", esp_err_to_name(err));
-        uart_driver_delete(E22_UART);
+        ESP_LOGE(__tag_app, "uart_set_pin: %s", esp_err_to_name(err));
+        (void)uart_driver_delete(E22_UART);
         return false;
     }
     return true;
 }
 void serial_disconnect(void) {
-    if (serial_installed) {
-        uart_driver_delete(E22_UART);
-        serial_installed = false;
-    }
+    (void)uart_driver_delete(E22_UART);
 }
 void serial_flush(void) {
-    uart_flush(E22_UART);
+    (void)uart_flush(E22_UART);
 }
 int serial_write(const uint8_t *buffer, const int length) {
-    vTaskDelay(pdMS_TO_TICKS(50));
+    __SLEEP_MS(50);
     return uart_write_bytes(E22_UART, buffer, (size_t)length);
 }
 int serial_read(uint8_t *buffer, const int length, const uint32_t timeout_ms) {
-    vTaskDelay(pdMS_TO_TICKS(50));
+    __SLEEP_MS(50);
     return uart_read_bytes(E22_UART, buffer, (size_t)length, pdMS_TO_TICKS(timeout_ms));
 }
 
@@ -146,20 +159,20 @@ int serial_read(uint8_t *buffer, const int length, const uint32_t timeout_ms) {
 #undef E22900T22_SUPPORT_MODULE_USB
 #include "e22xxxtxx.h"
 inline void __sleep_ms(const uint32_t ms) {
-    vTaskDelay(pdMS_TO_TICKS(ms));
+    __SLEEP_MS(ms);
 }
 
 static void e22_gpio_init(void) {
-    gpio_set_direction(PIN_E22_M0, GPIO_MODE_OUTPUT);
-    gpio_set_level(PIN_E22_M0, 1);
-    gpio_set_direction(PIN_E22_M1, GPIO_MODE_OUTPUT);
-    gpio_set_level(PIN_E22_M1, 1);
-    gpio_set_direction(PIN_E22_AUX, GPIO_MODE_INPUT);
-    gpio_pullup_en(PIN_E22_AUX);
+    (void)gpio_set_direction(PIN_E22_M0, GPIO_MODE_OUTPUT);
+    (void)gpio_set_level(PIN_E22_M0, 1);
+    (void)gpio_set_direction(PIN_E22_M1, GPIO_MODE_OUTPUT);
+    (void)gpio_set_level(PIN_E22_M1, 1);
+    (void)gpio_set_direction(PIN_E22_AUX, GPIO_MODE_INPUT);
+    (void)gpio_pullup_en(PIN_E22_AUX);
 }
 static void e22_set_pin_mx(const bool pin_m0, const bool pin_m1) {
-    gpio_set_level(PIN_E22_M0, pin_m0 ? 1 : 0);
-    gpio_set_level(PIN_E22_M1, pin_m1 ? 1 : 0);
+    (void)gpio_set_level(PIN_E22_M0, pin_m0 ? 1 : 0);
+    (void)gpio_set_level(PIN_E22_M1, pin_m1 ? 1 : 0);
 }
 static bool e22_get_pin_aux(void) {
     return gpio_get_level(PIN_E22_AUX) == 1;
@@ -202,6 +215,8 @@ static e22900t22_config_t e22_config = {
  * conversion from internal centi-units to iotdata_float_t correctly
  * under NO_FLOATING (they pass centi-values directly).
  */
+#define IOTSIM_TX_MIN_MS 2500  /* (2.5s) 5s  minimum interval  */
+#define IOTSIM_TX_MAX_MS 10000 /* (10s) 15s maximum interval  */
 #define IOTDATA_NO_DECODE
 #define IOTDATA_NO_JSON
 #define IOTDATA_NO_DUMP
@@ -218,90 +233,87 @@ static uint32_t tx_count = 0, tx_errors = 0;
 
 static void transmit_packet(const iotsim_packet_t *pkt) {
 
-    printf("device: e22 tx #%06" PRIu32 ": stn=%-4" PRIu16 " %-18s seq=%06" PRIu16 " bytes=%-2" PRIu32 "  hex:", tx_count, pkt->station_id, iotdata_vsuite_name(pkt->variant), pkt->sequence, (uint32_t)pkt->len);
-    for (size_t i = 0; i < pkt->len; i++)
-        printf(" %02" PRIX8, pkt->buf[i]);
-    printf("\n");
+    static char hex[512];
+    hex[0] = '\0';
+    for (size_t i = 0, o = 0; i < pkt->len && o < (sizeof(hex) - 1); i++)
+        o += (size_t)snprintf(&hex[o], (sizeof(hex) - o) - 1, "%02" PRIX8, pkt->buf[i]);
+    ESP_LOGI(__tag_app, "device: e22 tx #%06" PRIu32 ": stn=%-4" PRIu16 " %-18s seq=%06" PRIu16 " len=%-2" PRIu16 " hex=%s", tx_count, pkt->station_id, iotdata_vsuite_name(pkt->variant), pkt->sequence, (uint16_t)pkt->len, hex);
 
     if (device_packet_write((const unsigned char *)pkt->buf, (int)pkt->len))
         tx_count++;
     else {
         tx_errors++;
-        ESP_LOGE(TAG, "device: e22 tx device_packet_write failed (errors=%" PRIu32 ")", tx_errors);
+        ESP_LOGE(__tag_app, "device: e22 tx device_packet_write failed (errors=%" PRIu32 ")", tx_errors);
     }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-void app_halt(void) {
-    ESP_LOGE(TAG, "halted");
-    for (;;)
-        vTaskDelay(pdMS_TO_TICKS(1000));
-}
+bool app_exec(void) {
 
-void app_main(void) {
+    ESP_LOGI(__tag_app, "iotdata multi-sensor simulator transmitter");
 
-    /* let UART0 (console) settle */
-    setbuf(stdout, NULL);
-    vTaskDelay(pdMS_TO_TICKS(STARTUP_DELAY_MS));
-    ESP_LOGI(TAG, "iotdata multi-sensor simulator transmitter");
-
+    /* --- Hardware init --- */
     e22_gpio_init();
     if (!serial_connect()) {
-        ESP_LOGE(TAG, "serial_connect failed");
-        app_halt();
+        ESP_LOGE(__tag_app, "serial_connect failed");
+        return false;
     }
     if (!device_connect(E22900T22_MODULE_DIP, &e22_config)) {
-        ESP_LOGE(TAG, "device_connect failed");
-        app_halt();
+        ESP_LOGE(__tag_app, "device_connect failed");
+        return false;
     }
-    ESP_LOGI(TAG, "device: e22 connected");
-
+    ESP_LOGI(__tag_app, "device: e22 connected");
     if (!(device_mode_config() && device_info_read() && device_config_read_and_update() && device_mode_transfer())) {
-        ESP_LOGE(TAG, "device: e22 mode/info/config failed");
-        app_halt();
+        ESP_LOGE(__tag_app, "device_mode/info/config/mode failed");
+        return false;
     }
-    ESP_LOGI(TAG, "device: e22 configured, transfer mode active");
+    ESP_LOGI(__tag_app, "device: e22 configured, transfer mode active");
 
     /* --- Simulator init (hardware RNG seed for unique run each boot) --- */
-    const uint32_t seed = esp_random();
-    const uint32_t t0 = millis();
-
+    const uint32_t seed = __RANDOM(), t0 = __MILLIS();
     static iotsim_t sim; // too large for stack
     iotsim_init(&sim, seed, t0);
-
-    ESP_LOGI(TAG, "simulator: %d sensors, seed=0x%08" PRIX32, IOTSIM_NUM_SENSORS, seed);
+    ESP_LOGI(__tag_app, "simulator: sensors=%d, seed=%08" PRIX32 ", tx_min=%fs, tx_max=%fs", IOTSIM_NUM_SENSORS, seed, IOTSIM_TX_MIN_MS / 1000, IOTSIM_TX_MAX_MS / 1000);
     for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
         const iotsim_sensor_t *s = iotsim_sensor(&sim, i);
-        ESP_LOGI(TAG, "  [%2d] %-18s stn=%-4" PRIu16 " bat=%" PRIu8 "%%", i, iotdata_vsuite_name(s->variant), s->station_id, s->battery);
+        ESP_LOGI(__tag_app, "  [%2d] %-18s stn=%-4" PRIu16 " bat=%" PRIu8 "%%", i, iotdata_vsuite_name(s->variant), s->station_id, s->battery);
     }
 
-    /* --- Main loop — poll simulator, transmit when ready --- */
-    uint32_t rssi_last = 0;
+    /* --- Application loop — poll simulator, transmit when ready --- */
     int rssi_channel_dbm = -100;
-    uint32_t last_status_tx = 0;
-
+    uint32_t rssi_time_last = 0, tx_count_last = 0;
     for (;;) {
-        const uint32_t now = millis();
-
-        if (now - rssi_last >= RSSI_INTERVAL_MS) {
-            rssi_last = now;
+        if (__MILLIS() >= rssi_time_last + RSSI_INTERVAL_MS) {
+            rssi_time_last = __MILLIS();
             unsigned char rssi_raw;
             if (device_channel_rssi_read(&rssi_raw))
                 rssi_channel_dbm = get_rssi_dbm(rssi_raw);
         }
-
         iotsim_packet_t pkt;
-        while (iotsim_poll(&sim, now, &pkt))
+        while (iotsim_poll(&sim, __MILLIS(), &pkt)) {
             transmit_packet(&pkt);
-
-        if (tx_count >= last_status_tx + STATUS_EVERY_N_TX) {
-            last_status_tx = tx_count;
-            ESP_LOGI(TAG, "status: tx=%" PRIu32 " errors=%" PRIu32 " rssi=%d dBm uptime=%" PRIu32 "s", tx_count, tx_errors, rssi_channel_dbm, (now - t0) / 1000);
+            __SLEEP_MS(5);
         }
+        if (tx_count >= tx_count_last + STATUS_EVERY_N_TX) {
+            tx_count_last = tx_count;
+            ESP_LOGI(__tag_app, "status: tx=%" PRIu32 " errors=%" PRIu32 " rssi=%d dBm uptime=%" PRIu32 "s", tx_count, tx_errors, rssi_channel_dbm, (__MILLIS() - t0) / 1000);
+        }
+        __SLEEP_MS(POLL_INTERVAL_MS);
+    }
 
-        vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
+    return true;
+}
+
+void app_main(void) {
+
+    setbuf(stdout, NULL);
+    __SLEEP_MS(STARTUP_DELAY_MS);
+    if (!app_exec()) {
+        ESP_LOGE(__tag_app, "failed");
+        __SLEEP_MS(30 * 1000);
+        esp_restart();
     }
 }
 

@@ -33,8 +33,12 @@
  * -------------------------------------------------------------------------*/
 
 #define IOTSIM_NUM_SENSORS        16
+#ifndef IOTSIM_TX_MIN_MS
 #define IOTSIM_TX_MIN_MS          5000  /* 5s  minimum interval  */
+#endif
+#ifndef IOTSIM_TX_MAX_MS
 #define IOTSIM_TX_MAX_MS          15000 /* 15s maximum interval  */
+#endif
 #define IOTSIM_EXTRA_FIELDS_EVERY 10    /* every ~10th TX, add extras */
 #define IOTSIM_MAX_PACKET         128
 
