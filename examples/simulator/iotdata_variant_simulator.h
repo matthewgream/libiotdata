@@ -32,14 +32,14 @@
  * Configuration
  * -------------------------------------------------------------------------*/
 
-#define IOTSIM_NUM_SENSORS        16
+#define IOTSIM_NUM_SENSORS 16
 #ifndef IOTSIM_TX_MIN_MS
-#define IOTSIM_TX_MIN_MS          5000  /* 5s  minimum interval  */
+#define IOTSIM_TX_MIN_MS 5000 /* 5s  minimum interval  */
 #endif
 #ifndef IOTSIM_TX_MAX_MS
-#define IOTSIM_TX_MAX_MS          15000 /* 15s maximum interval  */
+#define IOTSIM_TX_MAX_MS 15000 /* 15s maximum interval  */
 #endif
-#define IOTSIM_EXTRA_FIELDS_EVERY 10    /* every ~10th TX, add extras */
+#define IOTSIM_EXTRA_FIELDS_EVERY 10 /* every ~10th TX, add extras */
 #define IOTSIM_MAX_PACKET         128
 
 /* ---------------------------------------------------------------------------
@@ -121,5 +121,51 @@ bool iotsim_poll(iotsim_t *sim, uint32_t time_now_ms, iotsim_packet_t *out);
 
 /* Get sensor info (for debug/display) */
 const iotsim_sensor_t *iotsim_sensor(const iotsim_t *sim, int index);
+
+/* ---------------------------------------------------------------------------
+ * Persistence — reboot-safe sequence numbers
+ *
+ * Only the per-station sequence counters are persisted; everything else in
+ * the simulator (readings, RNG, timing) is regenerated fresh on each boot.
+ * The bundle is a portable, NUL-terminated ASCII string ("station:sequence"
+ * pairs) so the storage backend is decoupled from the simulator — the target
+ * (e.g. ESP32 NVS/flash) just stores and returns the opaque string.
+ *
+ * Usage (after iotsim_init):
+ *   char buf[IOTSIM_SAVE_SIZE];
+ *   if (flash_load(buf, sizeof(buf)))   // returns the stored string
+ *       iotsim_save_import(&sim, buf);  // restore sequence numbers
+ *   ...
+ *   // periodically, and/or before reboot:
+ *   if (iotsim_save_export(&sim, buf, sizeof(buf)))
+ *       flash_save(buf);
+ * -------------------------------------------------------------------------*/
+
+/* Magic/version prefix.  Bump the trailing digit if the format changes;
+ * iotsim_save_import() rejects any string that does not start with it, so
+ * old or absent/garbage data simply falls back to fresh sequence numbers. */
+#define IOTSIM_SAVE_MAGIC "IOTSIMSEQ1"
+
+/* Worst-case bundle size in bytes, including the NUL terminator.  Each entry
+ * is " 65535:65535" (12 chars); sizeof(magic) already accounts for the NUL.
+ * Suitable for sizing a static buffer with no malloc. */
+#define IOTSIM_SAVE_SIZE  (sizeof(IOTSIM_SAVE_MAGIC) + IOTSIM_NUM_SENSORS * 12)
+
+/* Maximum buffer size (including NUL) needed for export, and the size the
+ * import buffer should be able to hold.  Returns IOTSIM_SAVE_SIZE; provided
+ * for callers that prefer to query the size at runtime. */
+size_t iotsim_save_size(void);
+
+/* Export the persistable sequence numbers as a portable NUL-terminated
+ * string.  bufsize must be >= iotsim_save_size().  Returns false on bad
+ * arguments or if the buffer is too small. */
+bool iotsim_save_export(const iotsim_t *sim, char *buf, size_t bufsize);
+
+/* Import sequence numbers previously produced by iotsim_save_export, matching
+ * by station_id (sensors absent from the string keep their current sequence).
+ * Call AFTER iotsim_init.  Returns true if the string was a valid bundle,
+ * false if it was malformed or foreign — in which case sim is left unchanged.
+ * Backwards compatible: only sequence numbers are touched. */
+bool iotsim_save_import(iotsim_t *sim, const char *buf);
 
 #endif /* IOTDATA_SIMULATOR_H */

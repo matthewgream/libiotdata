@@ -499,6 +499,82 @@ const iotsim_sensor_t *iotsim_sensor(const iotsim_t *sim, int index) {
 }
 
 /* =========================================================================
+ * Persistence — export/import reboot-safe sequence numbers as a string
+ *
+ * Format:  "IOTSIMSEQ1 <station>:<sequence> <station>:<sequence> ..."
+ * Only sequence numbers are carried; everything else regenerates on boot.
+ * No malloc — caller provides the buffer (size >= iotsim_save_size()).
+ * ========================================================================= */
+
+size_t iotsim_save_size(void) {
+    return IOTSIM_SAVE_SIZE;
+}
+
+bool iotsim_save_export(const iotsim_t *sim, char *buf, size_t bufsize) {
+    if (sim == NULL || buf == NULL || bufsize < IOTSIM_SAVE_SIZE)
+        return false;
+
+    size_t off = 0;
+    int n = snprintf(buf, bufsize, "%s", IOTSIM_SAVE_MAGIC);
+    if (n < 0 || (size_t)n >= bufsize)
+        return false;
+    off = (size_t)n;
+
+    for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
+        const iotsim_sensor_t *s = &sim->sensors[i];
+        n = snprintf(buf + off, bufsize - off, " %u:%u", (unsigned)s->station_id, (unsigned)s->sequence);
+        if (n < 0 || (size_t)n >= bufsize - off)
+            return false;
+        off += (size_t)n;
+    }
+    return true;
+}
+
+bool iotsim_save_import(iotsim_t *sim, const char *buf) {
+    if (sim == NULL || buf == NULL)
+        return false;
+
+    const size_t mlen = strlen(IOTSIM_SAVE_MAGIC);
+    if (strncmp(buf, IOTSIM_SAVE_MAGIC, mlen) != 0)
+        return false;
+
+    /* Parse into a staging area first so a malformed string leaves sim
+     * untouched (all-or-nothing). */
+    uint16_t station[IOTSIM_NUM_SENSORS];
+    uint16_t sequence[IOTSIM_NUM_SENSORS];
+    int count = 0;
+
+    const char *p = buf + mlen;
+    while (*p != '\0' && count < IOTSIM_NUM_SENSORS) {
+        while (*p == ' ')
+            p++;
+        if (*p == '\0')
+            break;
+        char *end;
+        const unsigned long st = strtoul(p, &end, 10);
+        if (end == p || *end != ':')
+            return false;
+        p = end + 1;
+        const unsigned long sq = strtoul(p, &end, 10);
+        if (end == p)
+            return false;
+        p = end;
+        station[count] = (uint16_t)st;
+        sequence[count] = (uint16_t)sq;
+        count++;
+    }
+
+    /* Apply: match each parsed entry to a sensor by station_id. */
+    for (int e = 0; e < count; e++)
+        for (int i = 0; i < IOTSIM_NUM_SENSORS; i++)
+            if (sim->sensors[i].station_id == station[e]) {
+                sim->sensors[i].sequence = sequence[e];
+                break;
+            }
+    return true;
+}
+
+/* =========================================================================
  * TEST_MAIN — standalone Linux test
  *
  * Runs simulation, decodes each packet and dumps fields.

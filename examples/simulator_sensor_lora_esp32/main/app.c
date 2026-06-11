@@ -39,6 +39,8 @@
 #include "esp_random.h"
 #include "esp_cpu.h"
 #include "esp_system.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include "rom/ets_sys.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -65,30 +67,35 @@ static inline uint32_t __JITTER(void) {
     return acc;
 }
 
-#define __RANDOM()        (__JITTER() ^ (uint32_t)esp_timer_get_time() ^ (uint32_t)esp_random())
+#define __RANDOM()          (__JITTER() ^ (uint32_t)esp_timer_get_time() ^ (uint32_t)esp_random())
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define STARTUP_DELAY_MS  (5 * 1000)
-#define RSSI_INTERVAL_MS  (5 * 1000)
-#define POLL_INTERVAL_MS  100 /* simulator poll granularity */
-#define STATUS_EVERY_N_TX 50  /* print status every N transmissions */
+#define STARTUP_DELAY_MS    (1 * 1000)
+#define RSSI_INTERVAL_MS    (5 * 1000)
+#define POLL_INTERVAL_MS    100 /* simulator poll granularity */
+#define STATUS_EVERY_N_TX   50  /* print status every N transmissions */
+#define SEQ_SAVE_EVERY_N_TX 5   /* persist sequence numbers every N transmissions */
+
+/* NVS namespace/key for the reboot-safe sequence-number bundle */
+#define SEQ_NVS_NAMESPACE   "iotsim"
+#define SEQ_NVS_KEY         "seqbundle"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // EBYTE E22-xxxTxx DIP module GPIO and UART configuration
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define PIN_E22_M0        GPIO_NUM_5 /* E22 pin (1) */
-#define PIN_E22_M1        GPIO_NUM_6 /* E22 pin (2) */
-#define PIN_E22_RXD       GPIO_NUM_7 /* E22 pin (3) ESP TX -> module RXD */
-#define PIN_E22_TXD       GPIO_NUM_8 /* E22 pin (4) module TXD -> ESP RX */
-#define PIN_E22_AUX       GPIO_NUM_9 /* E22 pin (5) */
-#define PIN_E22_VCC                  /* E22 pin (6) */
-#define PIN_E22_GND                  /* E22 pin (7) */
+#define PIN_E22_M0          GPIO_NUM_5 /* E22 pin (1) */
+#define PIN_E22_M1          GPIO_NUM_6 /* E22 pin (2) */
+#define PIN_E22_RXD         GPIO_NUM_7 /* E22 pin (3) ESP TX -> module RXD */
+#define PIN_E22_TXD         GPIO_NUM_8 /* E22 pin (4) module TXD -> ESP RX */
+#define PIN_E22_AUX         GPIO_NUM_9 /* E22 pin (5) */
+#define PIN_E22_VCC                    /* E22 pin (6) */
+#define PIN_E22_GND                    /* E22 pin (7) */
 
-#define E22_UART          UART_NUM_1
-#define E22_UART_BUF_SIZE 512
+#define E22_UART            UART_NUM_1
+#define E22_UART_BUF_SIZE   512
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -180,8 +187,8 @@ static bool e22_get_pin_aux(void) {
 }
 static e22900t22_config_t e22_config = {
     .address = 0x0008,
-    .network = 0x00,
-    .channel = 0x17, /* 850.125 + 23 = 873.125 MHz */
+    .network = 0x08,
+    .channel = 0x0A, /* 850.125 + 23 = 873.125 MHz */
     .packet_size = E22900T22_CONFIG_PACKET_SIZE_DEFAULT,
     .packet_rate = E22900T22_CONFIG_PACKET_RATE_DEFAULT,
     .crypt = E22900T22_CONFIG_CRYPT_DEFAULT,
@@ -228,6 +235,58 @@ static e22900t22_config_t e22_config = {
 #include "iotdata.c"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
+// Reboot-safe sequence-number persistence (ESP32-C3 NVS / flash)
+// -----------------------------------------------------------------------------------------------------------------------------------------
+
+static bool seq_store_init(void) {
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(__tag_app, "seq: nvs needs erase (%s), reinitialising", esp_err_to_name(err));
+        if ((err = nvs_flash_erase()) == ESP_OK)
+            err = nvs_flash_init();
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(__tag_app, "seq: nvs_flash_init: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
+
+static bool seq_store_load(char *buf, size_t bufsize) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SEQ_NVS_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK)
+        return false; /* namespace absent on first ever boot */
+    size_t len = bufsize;
+    err = nvs_get_str(h, SEQ_NVS_KEY, buf, &len);
+    nvs_close(h);
+    if (err != ESP_OK) {
+        if (err != ESP_ERR_NVS_NOT_FOUND)
+            ESP_LOGW(__tag_app, "seq: nvs_get_str: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
+
+static bool seq_store_save(const char *buf) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SEQ_NVS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) {
+        ESP_LOGW(__tag_app, "seq: nvs_open(rw): %s", esp_err_to_name(err));
+        return false;
+    }
+    err = nvs_set_str(h, SEQ_NVS_KEY, buf);
+    if (err == ESP_OK)
+        err = nvs_commit(h);
+    nvs_close(h);
+    if (err != ESP_OK) {
+        ESP_LOGW(__tag_app, "seq: nvs save: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 static uint32_t tx_count = 0, tx_errors = 0;
@@ -253,19 +312,32 @@ static void transmit_packet(const iotsim_packet_t *pkt) {
 
 static const char *reset_reason_str(esp_reset_reason_t r) {
     switch (r) {
-    case ESP_RST_POWERON:   return "POWERON (cold boot / power cycle)";
-    case ESP_RST_EXT:       return "EXT (external reset pin)";
-    case ESP_RST_SW:        return "SW (esp_restart / software)";
-    case ESP_RST_PANIC:     return "PANIC (exception/abort crash)";
-    case ESP_RST_INT_WDT:   return "INT_WDT (interrupt watchdog)";
-    case ESP_RST_TASK_WDT:  return "TASK_WDT (task watchdog)";
-    case ESP_RST_WDT:       return "WDT (other watchdog)";
-    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP (wake from deep sleep)";
-    case ESP_RST_BROWNOUT:  return "BROWNOUT (power dip — check USB/cable/supply)";
-    case ESP_RST_SDIO:      return "SDIO";
-    case ESP_RST_USB:       return "USB (reset over USB peripheral)";
-    case ESP_RST_JTAG:      return "JTAG";
-    default:                return "UNKNOWN";
+    case ESP_RST_POWERON:
+        return "POWERON (cold boot / power cycle)";
+    case ESP_RST_EXT:
+        return "EXT (external reset pin)";
+    case ESP_RST_SW:
+        return "SW (esp_restart / software)";
+    case ESP_RST_PANIC:
+        return "PANIC (exception/abort crash)";
+    case ESP_RST_INT_WDT:
+        return "INT_WDT (interrupt watchdog)";
+    case ESP_RST_TASK_WDT:
+        return "TASK_WDT (task watchdog)";
+    case ESP_RST_WDT:
+        return "WDT (other watchdog)";
+    case ESP_RST_DEEPSLEEP:
+        return "DEEPSLEEP (wake from deep sleep)";
+    case ESP_RST_BROWNOUT:
+        return "BROWNOUT (power dip — check USB/cable/supply)";
+    case ESP_RST_SDIO:
+        return "SDIO";
+    case ESP_RST_USB:
+        return "USB (reset over USB peripheral)";
+    case ESP_RST_JTAG:
+        return "JTAG";
+    default:
+        return "UNKNOWN";
     }
 }
 
@@ -297,6 +369,17 @@ bool app_exec(void) {
     const uint32_t seed = __RANDOM(), t0 = __MILLIS();
     static iotsim_t sim; // too large for stack
     iotsim_init(&sim, seed, t0);
+
+    /* --- Restore reboot-safe sequence numbers from flash (if any) --- */
+    static char seq_buf[IOTSIM_SAVE_SIZE]; // static: keep off the stack
+    if (seq_store_init() && seq_store_load(seq_buf, sizeof(seq_buf))) {
+        if (iotsim_save_import(&sim, seq_buf))
+            ESP_LOGI(__tag_app, "seq: stored sequence numbers reloaded from flash");
+        else
+            ESP_LOGW(__tag_app, "seq: stored sequence numbers invalid, starting fresh");
+    } else
+        ESP_LOGI(__tag_app, "seq: stored sequence numbers non-existent, starting fresh");
+
     ESP_LOGI(__tag_app, "simulator: sensors=%d, seed=%08" PRIX32 ", tx_min=%fs, tx_max=%fs", IOTSIM_NUM_SENSORS, seed, IOTSIM_TX_MIN_MS / 1000, IOTSIM_TX_MAX_MS / 1000);
     for (int i = 0; i < IOTSIM_NUM_SENSORS; i++) {
         const iotsim_sensor_t *s = iotsim_sensor(&sim, i);
@@ -305,7 +388,7 @@ bool app_exec(void) {
 
     /* --- Application loop — poll simulator, transmit when ready --- */
     int rssi_channel_dbm = -100;
-    uint32_t rssi_time_last = 0, tx_count_last = 0;
+    uint32_t rssi_time_last = 0, tx_count_last = 0, tx_count_save = 0;
     for (;;) {
         if (__MILLIS() >= rssi_time_last + RSSI_INTERVAL_MS) {
             rssi_time_last = __MILLIS();
@@ -317,6 +400,11 @@ bool app_exec(void) {
         while (iotsim_poll(&sim, __MILLIS(), &pkt)) {
             transmit_packet(&pkt);
             __SLEEP_MS(5);
+        }
+        if (tx_count >= tx_count_save + SEQ_SAVE_EVERY_N_TX) {
+            tx_count_save = tx_count;
+            if (iotsim_save_export(&sim, seq_buf, sizeof(seq_buf)))
+                (void)seq_store_save(seq_buf);
         }
         if (tx_count >= tx_count_last + STATUS_EVERY_N_TX) {
             tx_count_last = tx_count;
