@@ -38,6 +38,7 @@
 #include "esp_timer.h"
 #include "esp_random.h"
 #include "esp_cpu.h"
+#include "esp_system.h"
 #include "rom/ets_sys.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -69,7 +70,7 @@ static inline uint32_t __JITTER(void) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-#define STARTUP_DELAY_MS  (0 * 1000)
+#define STARTUP_DELAY_MS  (5 * 1000)
 #define RSSI_INTERVAL_MS  (5 * 1000)
 #define POLL_INTERVAL_MS  100 /* simulator poll granularity */
 #define STATUS_EVERY_N_TX 50  /* print status every N transmissions */
@@ -215,8 +216,8 @@ static e22900t22_config_t e22_config = {
  * conversion from internal centi-units to iotdata_float_t correctly
  * under NO_FLOATING (they pass centi-values directly).
  */
-#define IOTSIM_TX_MIN_MS 2500  /* (2.5s) 5s  minimum interval  */
-#define IOTSIM_TX_MAX_MS 10000 /* (10s) 15s maximum interval  */
+#define IOTSIM_TX_MIN_MS 10000 /* 10s minimum interval  */
+#define IOTSIM_TX_MAX_MS 20000 /* 20s maximum interval  */
 #define IOTDATA_NO_DECODE
 #define IOTDATA_NO_JSON
 #define IOTDATA_NO_DUMP
@@ -250,9 +251,30 @@ static void transmit_packet(const iotsim_packet_t *pkt) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
+static const char *reset_reason_str(esp_reset_reason_t r) {
+    switch (r) {
+    case ESP_RST_POWERON:   return "POWERON (cold boot / power cycle)";
+    case ESP_RST_EXT:       return "EXT (external reset pin)";
+    case ESP_RST_SW:        return "SW (esp_restart / software)";
+    case ESP_RST_PANIC:     return "PANIC (exception/abort crash)";
+    case ESP_RST_INT_WDT:   return "INT_WDT (interrupt watchdog)";
+    case ESP_RST_TASK_WDT:  return "TASK_WDT (task watchdog)";
+    case ESP_RST_WDT:       return "WDT (other watchdog)";
+    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP (wake from deep sleep)";
+    case ESP_RST_BROWNOUT:  return "BROWNOUT (power dip — check USB/cable/supply)";
+    case ESP_RST_SDIO:      return "SDIO";
+    case ESP_RST_USB:       return "USB (reset over USB peripheral)";
+    case ESP_RST_JTAG:      return "JTAG";
+    default:                return "UNKNOWN";
+    }
+}
+
 bool app_exec(void) {
 
     ESP_LOGI(__tag_app, "iotdata multi-sensor simulator transmitter");
+
+    const esp_reset_reason_t reset_reason = esp_reset_reason();
+    ESP_LOGI(__tag_app, "boot: reset_reason=%d %s", (int)reset_reason, reset_reason_str(reset_reason));
 
     /* --- Hardware init --- */
     e22_gpio_init();
