@@ -64,8 +64,12 @@
 #define IOTDATA_MESH_PING_SIZE          8
 #define IOTDATA_MESH_PONG_SIZE          8
 
-/* Dedup ring default size */
-#define IOTDATA_MESH_DEDUP_RING_SIZE    64
+/* Dedup set: CAPACITY = in-flight (station,sequence) pairs remembered; HASH_SIZE = bucket count
+ * (power of two, > capacity so the load factor stays low). Lookup is O(1) via an intrusive hash
+ * chain with FIFO eviction of the oldest entry when full — so the set can be large (memory is cheap)
+ * without the per-packet linear scan the old fixed ring did. ~128KB for the sizes below. */
+#define IOTDATA_MESH_DEDUP_RING_SIZE    8192
+#define IOTDATA_MESH_DEDUP_HASH_SIZE    16384 /* MUST be a power of two */
 
 /* -------------------------------------------------------------------------
  * iotdata header peek — extract fields from the standard 4-byte header
@@ -256,22 +260,43 @@ typedef struct {
 
 typedef struct {
     iotdata_mesh_dedup_entry_t entries[IOTDATA_MESH_DEDUP_RING_SIZE];
+    int32_t hnext[IOTDATA_MESH_DEDUP_RING_SIZE];  /* intrusive bucket chain: next entry slot, or -1 */
+    int32_t bucket[IOTDATA_MESH_DEDUP_HASH_SIZE]; /* head entry slot per bucket, or -1 */
     int head, size;
 } iotdata_mesh_dedup_ring_t;
 
-static inline void iotdata_mesh_dedup_init(iotdata_mesh_dedup_ring_t *ring) {
-    memset(ring, 0, sizeof(*ring));
+static inline uint32_t iotdata_mesh_dedup_hash(uint16_t station_id, uint16_t sequence) {
+    uint32_t key = ((uint32_t)station_id << 16) | (uint32_t)sequence;
+    key *= 2654435761u; /* Knuth multiplicative mix */
+    return (key >> 16) & (IOTDATA_MESH_DEDUP_HASH_SIZE - 1);
 }
 
-/* returns true if this is a NEW packet (not a duplicate) */
+static inline void iotdata_mesh_dedup_init(iotdata_mesh_dedup_ring_t *ring) {
+    memset(ring, 0, sizeof(*ring));
+    memset(ring->bucket, 0xFF, sizeof(ring->bucket)); /* 0xFF.. = -1 = empty bucket */
+}
+
+/* returns true if this is a NEW (station,sequence) — not already in the set. O(1): hash-chain lookup,
+ * then FIFO-evict the oldest entry (unlink it from its bucket) when the set is full. */
 static inline bool iotdata_mesh_dedup_check_and_add(iotdata_mesh_dedup_ring_t *ring, uint16_t station_id, uint16_t sequence) {
-    /* scan for duplicate */
-    for (int i = 0; i < (ring->size < IOTDATA_MESH_DEDUP_RING_SIZE ? ring->size : IOTDATA_MESH_DEDUP_RING_SIZE); i++)
+    const uint32_t h = iotdata_mesh_dedup_hash(station_id, sequence);
+    for (int32_t i = ring->bucket[h]; i >= 0; i = ring->hnext[i])
         if (ring->entries[i].station_id == station_id && ring->entries[i].sequence == sequence)
             return false; /* duplicate */
-    /* new — add to ring */
-    ring->entries[ring->head].station_id = station_id;
-    ring->entries[ring->head].sequence = sequence;
+    const int slot = ring->head;
+    if (ring->size == IOTDATA_MESH_DEDUP_RING_SIZE) {
+        /* full -> the oldest entry (entries[slot]) is being overwritten: unlink its old key first */
+        const uint32_t oh = iotdata_mesh_dedup_hash(ring->entries[slot].station_id, ring->entries[slot].sequence);
+        int32_t *pp = &ring->bucket[oh];
+        while (*pp >= 0 && *pp != slot)
+            pp = &ring->hnext[*pp];
+        if (*pp == slot)
+            *pp = ring->hnext[slot];
+    }
+    ring->entries[slot].station_id = station_id;
+    ring->entries[slot].sequence = sequence;
+    ring->hnext[slot] = ring->bucket[h]; /* push onto the new bucket's chain */
+    ring->bucket[h] = (int32_t)slot;
     ring->head = (ring->head + 1) % IOTDATA_MESH_DEDUP_RING_SIZE;
     if (ring->size < IOTDATA_MESH_DEDUP_RING_SIZE)
         ring->size++;
