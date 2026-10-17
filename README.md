@@ -1,5 +1,9 @@
 # IoT Sensor Telemetry Protocol (iotdata)
 
+> [!WARNING]
+> **Obsolete.** This repository is archived and no longer maintained. It has been replaced by
+> the repositories at [iotdata-network](https://github.com/iotdata-network).
+
 ## Specification
 
 ```text
